@@ -8,35 +8,28 @@ source "${SCRIPT_DIR}/lib.sh"
 # Read the tool-call payload from stdin (Claude Code passes JSON for PostToolUse hooks)
 payload=$(cat)
 
-# Extract fields via three small python3 invocations — robust against tabs/newlines in
-# the command string. Each invocation is silent on malformed JSON (returns empty / 0).
-tool_name=$(printf '%s' "$payload" | python3 -c '
+# Single python3 fork: parse the JSON once, emit all needed fields tab-separated.
+# On parse failure, returns empty tool_name so the next short-circuit fires safely.
+fields=$(printf '%s' "$payload" | python3 -c '
 import json, sys
 try:
     d = json.loads(sys.stdin.read())
 except Exception:
-    print(""); sys.exit(0)
-print(d.get("tool_name", ""))
-')
-
-cmd=$(printf '%s' "$payload" | python3 -c '
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-except Exception:
-    print(""); sys.exit(0)
-print(d.get("tool_input", {}).get("command", ""))
-')
-
-exit_code=$(printf '%s' "$payload" | python3 -c '
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-except Exception:
-    print("0"); sys.exit(0)
+    print("\t\t0")  # tool_name="", cmd="", exit_code="0" — will short-circuit on tool_name filter
+    sys.exit(0)
+tool_name = d.get("tool_name", "")
+cmd = d.get("tool_input", {}).get("command", "")
 ec = d.get("exit_code", d.get("tool_response", {}).get("exit_code", 0))
-print(ec)
+# Tab-separate. cmd may contain newlines but the join order means tool_name is first
+# field and exit_code is last; cmd in the middle absorbs any embedded tabs.
+print(f"{tool_name}\t{cmd}\t{ec}")
 ')
+
+# Split: tool_name = first field, exit_code = last field, cmd = everything between
+tool_name="${fields%%$'\t'*}"
+exit_code="${fields##*$'\t'}"
+cmd_tmp="${fields#*$'\t'}"
+cmd="${cmd_tmp%$'\t'*}"
 
 # Filter: only successful Bash git-commit calls
 [ "$tool_name" = "Bash" ] || { echo '{}'; exit 0; }
