@@ -84,4 +84,8 @@ rm .super-manus/active
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"},"tool_response":{"stdout":"[main abc1234] foo","stderr":"","interrupted":false},"exit_code":0}')
 assert_noop "$out" "Case 9 (no active feature)"
 
+# Case 10: malformed JSON payload → no-op (don't crash)
+out=$(printf '%s' '{not valid json' | bash hooks/post-commit.sh)
+assert_noop "$out" "Case 10 (malformed JSON)"
+
 echo OK

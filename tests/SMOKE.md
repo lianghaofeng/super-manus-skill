@@ -64,6 +64,8 @@ Expected: Claude re-loads the plan into context.
 
 After Phase 7 lands: make a `git commit -m "feat: smoketest commit"` from a Bash tool call within a Claude Code session. Expected: Claude sees a system reminder telling it to update `progress.md ## Completed commits`, and does so before proceeding.
 
+Note: the post-commit hook only triggers on the literal command prefix `git commit ...`. Aliases like `git ci` are not detected. Use full `git commit` from Claude Code's Bash tool calls.
+
 ### 5. Session log via Stop hook (Phase 8+)
 
 After Phase 8 lands: end the Claude Code session. Expected: Claude writes a session log entry to `progress.md ## Session log` before stopping.
