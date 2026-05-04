@@ -1,0 +1,4 @@
+.DS_Store
+.super-manus/
+*.swp
+node_modules/
