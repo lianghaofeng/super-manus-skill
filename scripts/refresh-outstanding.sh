@@ -21,10 +21,10 @@ phase_lines=$(awk -F'|' '
     f2=$2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", f2)
     if (f2 == "" || f2 ~ /^-+$/) next
     if (f2 == "#") next
+    if (NF < 5) { print "refresh-outstanding: skipping malformed row at line " NR ": " $0 > "/dev/stderr"; next }
     f3=$3; gsub(/^[[:space:]]+|[[:space:]]+$/, "", f3)
     f4=$4; gsub(/^[[:space:]]+|[[:space:]]+$/, "", f4)
     if (f4 == "closed") next
-    if (f4 == "") next
     printf "- [P%s] %s (%s)\n", f2, f3, f4
   }
 ' "$FOLDER/task_plan.md")
