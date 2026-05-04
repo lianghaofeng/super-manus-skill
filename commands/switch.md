@@ -12,4 +12,4 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/sm-switch.sh" "$ARGUMENTS"
 
 If the script exits non-zero, surface its stderr to the user verbatim and stop.
 
-If it exits zero, run `/sm catchup` immediately to re-inject the new feature's task_plan.md into context.
+If it exits zero, immediately perform the `/sm catchup` flow inline: run `bash "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"` and read the resulting `hookSpecificOutput.additionalContext` to re-inject the new feature's plan into context.

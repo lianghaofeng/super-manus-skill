@@ -31,14 +31,20 @@ if [ -e "$folder" ]; then
   exit 1
 fi
 
+cleanup_partial() {
+  rm -rf "$folder"
+}
+trap cleanup_partial ERR
+
 mkdir -p "$folder" .super-manus
 for f in task_plan.md findings.md progress.md; do
   src="$ROOT/templates/$f"
-  [ -f "$src" ] || { echo "sm-start: template missing: $src" >&2; exit 1; }
+  [ -f "$src" ] || { echo "sm-start: template missing: $src" >&2; cleanup_partial; exit 1; }
   # Substitute <feature title> placeholder. Use sed with a delimiter unlikely to collide.
   sed "s|<feature title>|${name}|g" "$src" > "$folder/$f"
 done
 
+trap - ERR
 echo "$basename" > .super-manus/active
 
 # Print the resolved folder path for the caller (Claude reads this and confirms to user)

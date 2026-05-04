@@ -49,4 +49,18 @@ echo "$out" | grep -q "$FOLDER" || { echo "FAIL: success output should mention f
 # Case F: re-running with the same name → exit non-zero (folder exists)
 if sm_start "demo" 2>/dev/null; then echo "FAIL: duplicate name should be rejected"; exit 1; fi
 
+# Case G: partial template set → script must clean up the half-created folder
+TMP_BAD_ROOT=$(mktemp -d)
+mkdir -p "$TMP_BAD_ROOT/templates"
+cp "$REPO_ROOT/templates/task_plan.md" "$TMP_BAD_ROOT/templates/"
+cp "$REPO_ROOT/templates/findings.md" "$TMP_BAD_ROOT/templates/"
+# Deliberately omit progress.md
+TODAY2=$(date +%F)
+TARGET="docs/super-manus/${TODAY2}-cleanup-test"
+if SUPER_MANUS_ROOT="$TMP_BAD_ROOT" bash "$REPO_ROOT/scripts/sm-start.sh" "cleanup-test" 2>/dev/null; then
+  echo "FAIL: missing template should have caused exit non-zero"; exit 1
+fi
+[ ! -d "$TARGET" ] || { echo "FAIL: partial folder should have been cleaned up, but still exists at $TARGET"; exit 1; }
+rm -rf "$TMP_BAD_ROOT"
+
 echo OK
