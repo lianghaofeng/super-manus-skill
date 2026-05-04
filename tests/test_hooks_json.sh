@@ -20,6 +20,11 @@ matcher = ss.get("matcher", "")
 for kw in ("startup", "clear", "compact"):
     assert kw in matcher, f"SessionStart matcher missing keyword '{kw}': {matcher!r}"
 
+# SessionStart entry should preserve async: false (blocks session until reminder injected)
+ss_hooks = ss.get("hooks", [])
+assert ss_hooks, "SessionStart hooks list empty"
+assert ss_hooks[0].get("async") is False, f"SessionStart hook should set async=false, got: {ss_hooks[0].get('async')!r}"
+
 # PostToolUse matcher must be exactly "Bash"
 pt = hooks["PostToolUse"][0]
 assert pt.get("matcher") == "Bash", f"PostToolUse matcher must be 'Bash', got: {pt.get('matcher')!r}"

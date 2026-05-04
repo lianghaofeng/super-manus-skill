@@ -31,6 +31,21 @@ got=$(sm_active_folder)
 got=$(sm_active_folder || true)
 [ -z "$got" ] || { echo "FAIL: empty active file should yield empty, got: $got"; exit 1; }
 
+# Case E: active file names a folder that doesn't exist on disk → still returns the path (caller checks)
+echo "2026-05-04-ghost" > .super-manus/active
+got=$(sm_active_folder)
+[ "$got" = "docs/super-manus/2026-05-04-ghost" ] || { echo "FAIL: should return path even when folder absent, got: $got"; exit 1; }
+
+# Case F: active file with embedded slash (path-traversal attempt) → empty result
+echo "2026-05-04-foo/extra" > .super-manus/active
+got=$(sm_active_folder || true)
+[ -z "$got" ] || { echo "FAIL: path-traversal name should yield empty, got: $got"; exit 1; }
+
+# Case G: active file with .. (path-traversal attempt) → empty result
+echo "../../etc/passwd" > .super-manus/active
+got=$(sm_active_folder || true)
+[ -z "$got" ] || { echo "FAIL: parent-dir name should yield empty, got: $got"; exit 1; }
+
 # Exercise emit_context: takes hook event name + text, prints valid JSON to stdout
 out=$(emit_context "SessionStart" "hello world")
 printf '%s' "$out" | python3 -c '
