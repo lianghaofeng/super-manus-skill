@@ -12,7 +12,10 @@
   "plugins": [
     {
       "name": "super-manus",
-      "source": ".",
+      "source": {
+        "source": "github",
+        "repo": "lianghaofeng/super-manus-skill"
+      },
       "description": "Persistent feature-state for Claude Code: survives /clear, generates progress journals from git history",
       "version": "0.1.0",
       "author": {
