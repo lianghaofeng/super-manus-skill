@@ -14,11 +14,13 @@ super-manus targets the gap: persistent state that survives session boundaries, 
 
 ## Install
 
-super-manus is a static plugin distributed by `git clone` into your Claude Code plugins directory:
+super-manus is a static plugin. Either clone it directly, or point a local marketplace at it.
+
+**Direct clone:**
 
 ```bash
 cd ~/.claude/plugins
-git clone <repo-url> super-manus
+git clone https://github.com/lianghaofeng/super-manus-skill.git super-manus
 ```
 
 Then reload plugins inside Claude Code:
@@ -27,21 +29,27 @@ Then reload plugins inside Claude Code:
 /plugin
 ```
 
-On first install, you may need to restart your Claude Code session for hooks to register.
+**Local marketplace** (recommended if you're hacking on super-manus): add the parent directory containing `super-manus/` to your project's `.claude/settings.json` under `extraKnownMarketplaces`, then `/plugin` → install `super-manus`.
+
+On first install, restart your Claude Code session so hooks and slash commands register.
 
 ## Quickstart
 
 ```
-/super-manus:start my-feature       # creates docs/super-manus/<date>-my-feature/
-                           # with task_plan.md / findings.md / progress.md
+/super-manus:start my-feature   # creates docs/super-manus/<date>-my-feature/
+                                # with task_plan.md / findings.md / progress.md
 ... work, edit files, take notes in findings.md ...
-/super-manus:phase 1                # when phase 1 needs an impl plan; seeds tasks/p1_impl.md
-git commit -m "..."        # post-commit hook prompts agent to log the commit
-/clear                     # safe — state is on disk
-... next session ...       # SessionStart hook restores task_plan.md automatically
+/super-manus:phase 1            # seed an impl plan for phase 1: tasks/p1_impl.md
+git commit -m "..."             # post-commit hook prompts agent to log the commit
+/clear                          # safe — state is on disk
+... next session ...            # SessionStart hook restores task_plan.md automatically
 ```
 
-That's the loop. Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>_impl.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
+Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-manus:catchup` to re-inject the plan mid-session.
+
+Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>_impl.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
+
+**Heads-up on session end**: when you stop a session with an active feature, the Stop hook makes the agent write one paragraph to `progress.md ## Session log` before actually stopping — so you'll see one extra agent turn at the end. If that's intrusive, remove the `Stop` entry from `hooks/hooks.json`.
 
 ## What it does NOT do
 
@@ -81,7 +89,7 @@ The on-disk layout super-manus creates inside a project that uses it:
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
         └── tasks/
-            └── p<n>_impl.md                         # per-phase implementation plan (lazy, /super-manus:phase <n>)
+            └── p<n>_impl.md                     # per-phase implementation plan (lazy, /super-manus:phase <n>)
 ```
 
 ## Status
