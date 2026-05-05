@@ -48,35 +48,50 @@ PY
 out=$(bash hooks/session-end.sh </dev/null)
 assert_noop "$out" "Case A (no active feature)"
 
-# Case B: active feature exists with progress.md → emits Stop reminder
+# Case B setup: active feature with progress.md
 mkdir -p .super-manus
 SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
 TODAY=$(date +%F)
 FOLDER="docs/super-manus/${TODAY}-demo"
-out=$(bash hooks/session-end.sh </dev/null)
-assert_reminder "$out" "Case B (active feature with progress.md, empty stdin)"
 
-# Case B2: same feature but Claude Code passes a payload without stop_hook_active → still emits
-# (use a fresh sentinel state — remove any leftover from prior cases)
-rm -f "$FOLDER/.session-logged"
-out=$(printf '{"session_id":"abc"}' | bash hooks/session-end.sh)
-assert_reminder "$out" "Case B2 (payload without stop_hook_active flag)"
+# Case B: with default threshold (10), the first 9 turns are no-op; turn 10 blocks.
+rm -f "$FOLDER/.session-state"
+for i in 1 2 3 4 5 6 7 8 9; do
+  out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
+  assert_noop "$out" "Case B (turn $i, below default threshold 10)"
+done
+out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
+assert_reminder "$out" "Case B (turn 10 hits threshold, blocks)"
 
-# Case B3: stop_hook_active=true (re-stop after block) → no-op AND records session_id as logged
-rm -f "$FOLDER/.session-logged"
-out=$(printf '{"stop_hook_active": true, "session_id": "abc"}' | bash hooks/session-end.sh)
-assert_noop "$out" "Case B3 (stop_hook_active=true → break the block loop)"
-[ -f "$FOLDER/.session-logged" ] || { echo "FAIL: Case B3 should have written sentinel"; exit 1; }
-[ "$(cat "$FOLDER/.session-logged")" = "abc" ] || { echo "FAIL: Case B3 sentinel content wrong: $(cat "$FOLDER/.session-logged")"; exit 1; }
+# Case B2: stop_hook_active=true (agent done writing) → no-op AND counter reset to 0
+out=$(printf '{"stop_hook_active": true, "session_id": "sess-A"}' | bash hooks/session-end.sh)
+assert_noop "$out" "Case B2 (stop_hook_active=true → reset counter, break the loop)"
+[ -f "$FOLDER/.session-state" ] || { echo "FAIL: Case B2 should have written state"; exit 1; }
+[ "$(cat "$FOLDER/.session-state")" = "sess-A 0" ] || { echo "FAIL: Case B2 state should be reset to 0, got: $(cat "$FOLDER/.session-state")"; exit 1; }
 
-# Case B4: subsequent turn within same session (sentinel matches session_id) → no-op,
-# do NOT pester the agent on every reply
-out=$(printf '{"session_id":"abc"}' | bash hooks/session-end.sh)
-assert_noop "$out" "Case B4 (already logged this session → no-op for the rest of the session)"
+# Case B3: after reset, next 9 turns are no-op again
+for i in 1 2 3 4 5 6 7 8 9; do
+  out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
+  assert_noop "$out" "Case B3 (post-reset turn $i)"
+done
+out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
+assert_reminder "$out" "Case B3 (post-reset turn 10 fires again — every-N-turns continues)"
 
-# Case B5: NEW session (different session_id) → block again (one log per session)
-out=$(printf '{"session_id":"different-session"}' | bash hooks/session-end.sh)
-assert_reminder "$out" "Case B5 (new session_id → block again, one log per session)"
+# Case B4: env override SUPER_MANUS_LOG_EVERY_N_TURNS=2 with a new session
+rm -f "$FOLDER/.session-state"
+out=$(printf '{"session_id":"sess-B"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=2 bash hooks/session-end.sh)
+assert_noop "$out" "Case B4 (custom threshold 2, turn 1 below)"
+out=$(printf '{"session_id":"sess-B"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=2 bash hooks/session-end.sh)
+assert_reminder "$out" "Case B4 (custom threshold 2, turn 2 hits)"
+
+# Case B5: switching session_id resets the counter mid-stream
+rm -f "$FOLDER/.session-state"
+printf '%s' '{"session_id":"sess-C"}' | bash hooks/session-end.sh >/dev/null
+printf '%s' '{"session_id":"sess-C"}' | bash hooks/session-end.sh >/dev/null
+[ "$(awk '{print $2}' "$FOLDER/.session-state")" = "2" ] || { echo "FAIL: Case B5 setup count should be 2, got: $(cat "$FOLDER/.session-state")"; exit 1; }
+out=$(printf '{"session_id":"sess-D"}' | bash hooks/session-end.sh)
+assert_noop "$out" "Case B5 (different session_id resets counter to 1, below threshold)"
+[ "$(awk '{print $2}' "$FOLDER/.session-state")" = "1" ] || { echo "FAIL: Case B5 should have reset count to 1, got: $(cat "$FOLDER/.session-state")"; exit 1; }
 
 # Case C: active file points to ghost folder → no-op
 echo "2026-05-04-ghost" > .super-manus/active

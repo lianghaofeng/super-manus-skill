@@ -12,23 +12,34 @@ folder=$(sm_active_folder || true)
 [ -n "$folder" ] || { echo '{}'; exit 0; }
 [ -f "$folder/progress.md" ] || { echo '{}'; exit 0; }
 
-# Sentinel: avoid asking for a session log on every agent turn.
 # Stop hooks fire at the end of EACH agent reply, not just at session end.
-# We keep a per-feature sentinel containing the session_id of the last session
-# we already logged. If the current session_id matches, no-op for the rest of
-# the session.
-sentinel="$folder/.session-logged"
+# Triggering a session-log write on every reply spams progress.md, so we count
+# turns and only trigger every N turns (default 10; override via env).
+# State file format: "<session_id> <turn_count>" on a single line.
+state_file="$folder/.session-state"
 session_id=$(sm_payload_field "$payload" "session_id")
+[ -n "$session_id" ] || session_id="unknown"
+threshold="${SUPER_MANUS_LOG_EVERY_N_TURNS:-10}"
 
-# If we already blocked once in this stop cycle and the agent is now retrying,
-# don't block again — record this session as logged and let the agent stop.
+# Agent just finished writing per our previous block. Reset counter and stop.
 if sm_stop_hook_active "$payload"; then
-  [ -n "$session_id" ] && printf '%s' "$session_id" > "$sentinel"
+  printf '%s 0\n' "$session_id" > "$state_file"
   echo '{}'; exit 0
 fi
 
-# Already logged this session? No-op for every subsequent turn.
-if [ -n "$session_id" ] && [ -f "$sentinel" ] && [ "$(cat "$sentinel" 2>/dev/null)" = "$session_id" ]; then
+# Read prior state; reset counter on a session change.
+prev_id=""; count=0
+if [ -f "$state_file" ]; then
+  read -r prev_id count < "$state_file" || true
+fi
+[ "$prev_id" = "$session_id" ] || count=0
+
+# This turn counts. Persist immediately so we don't lose state on crash.
+count=$((count + 1))
+printf '%s %d\n' "$session_id" "$count" > "$state_file"
+
+# Below threshold → no-op for this turn.
+if [ "$count" -lt "$threshold" ]; then
   echo '{}'; exit 0
 fi
 

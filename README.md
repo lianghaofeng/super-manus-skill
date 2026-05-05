@@ -47,11 +47,11 @@ git commit -m "..."             # post-commit hook prompts agent to log the comm
 ... next session ...            # SessionStart hook restores task_plan.md automatically
 ```
 
-Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-manus:catchup` to re-inject the plan mid-session.
+Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-manus:catchup` to re-inject the plan mid-session, `/super-manus:log` to write a session-log entry on demand.
 
 Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>_impl.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
 
-**Heads-up on session end**: when you stop a session with an active feature, the Stop hook makes the agent write one paragraph to `progress.md ## Session log` before actually stopping — so you'll see one extra agent turn at the end. If that's intrusive, remove the `Stop` entry from `hooks/hooks.json`.
+**Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus counts turns and only nudges the agent to write `progress.md ## Session log` every 10 turns by default. Override with `SUPER_MANUS_LOG_EVERY_N_TURNS=<n>` in your environment, or call `/super-manus:log` to write one immediately. Note: the post-commit hook is unaffected — every Bash-tool `git commit` still produces a `## Completed commits` line.
 
 ## What it does NOT do
 
