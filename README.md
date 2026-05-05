@@ -35,18 +35,19 @@ On first install, you may need to restart your Claude Code session for hooks to 
 /sm start my-feature       # creates docs/super-manus/<date>-my-feature/
                            # with task_plan.md / findings.md / progress.md
 ... work, edit files, take notes in findings.md ...
+/sm phase 1                # when phase 1 needs an impl plan; seeds tasks/p1.md
 git commit -m "..."        # post-commit hook prompts agent to log the commit
 /clear                     # safe — state is on disk
 ... next session ...       # SessionStart hook restores task_plan.md automatically
 ```
 
-That's the loop. Phase status, commit log, and session summaries all accrue to the feature folder; you read them, the agent reads them, and `/clear` no longer costs you context.
+That's the loop. Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
 
 ## What it does NOT do
 
 v0.1 is deliberately small. The following are out of scope (deferred to v0.2+ or owned by other tools):
 
-- TDD task executor (`tasks/` is reserved in the layout but unused in v0.1)
+- TDD task executor — `tasks/p<n>.md` persists per-phase planning detail in v0.1; an executor that runs against it is v0.2 work
 - Subagent dispatch
 - Code review integration
 - Git worktree integration
@@ -76,12 +77,13 @@ The on-disk layout super-manus creates inside a project that uses it:
 │   └── active                                  # text file: current feature folder name
 └── docs/super-manus/
     └── <YYYY-MM-DD>-<feature-name>/
-        ├── task_plan.md                        # goal / phases / status (LLM-maintained)
+        ├── task_plan.md                        # goal / phases index — no code (LLM-maintained)
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
-        └── tasks/                              # reserved for v0.2 executor (empty in v0.1)
+        └── tasks/
+            └── p<n>.md                         # per-phase implementation plan (lazy, /sm phase <n>)
 ```
 
 ## Status
 
-v0.1, persistence only. v0.2 will add a TDD executor.
+v0.1, persistence only. v0.2 may add a TDD executor that runs against `tasks/p<n>.md`.
