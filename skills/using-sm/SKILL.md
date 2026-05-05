@@ -53,10 +53,12 @@ The recommended flow for a non-trivial feature: `start` → `brainstorm` → rev
 - Status values: `pending` / `in_progress` / `blocked` / `closed` (lowercase, exact). The `## Outstanding` section in `progress.md` is regenerated from this table by parsing those exact strings — typos break the regen.
 - **Not for**: code, pseudo-code, file diffs, multi-line implementation sketches, OR product-spec details (Problem statement, Demo, capability lists, success metrics). Product → `prd.md`. Implementation → `tasks/p<n>_impl.md`. The `Notes` column is strictly one line.
 
-**`findings.md`** — your working memory on disk.
-- `## Decisions`: dated entries — what was chosen, why, what alternatives were ruled out.
-- `## Errors`: table with columns `When | What failed | Resolution`.
-- `## Data points / research`: free-form — smoke results, screenshots-as-text, eval numbers, links.
+**`findings.md`** — your working memory on disk. **Keep entries TIGHT.**
+- `## Decisions`: dated entries, **3 short lines max each**: `Chose: <one sentence>`, `Why: <one sentence>`, `Ruled out: <one sentence, optional>`. **No** code blocks, file paths, line numbers, function names, test command names, block-A/B/C decompositions, or implementation steps. Those belong in `tasks/p<n>_impl.md ## Approach` and commit messages — `findings.md` records the *judgment*, not the *artifact*.
+- `## Errors`: table with `When | What failed | Resolution`. Each cell ≤ one short sentence.
+- `## Data points / research`: bullet form. Smoke numbers, eval scores, links. No multi-paragraph prose.
+
+The litmus test for any findings.md entry: **could a stranger six months from now read it in 10 seconds?** If not, you're writing a status report; cut it.
 
 **`progress.md`** — auto-managed; treat as read-only by default.
 - `## Completed commits`: the post-commit hook appends one line per `git commit` (Bash-tool calls only — external terminal commits aren't seen).
@@ -101,6 +103,7 @@ The point is to surface tarpits early, not to slog through them in silence.
 - Pasting code, pseudo-code, file diffs, or multi-line implementation sketches into `task_plan.md` — the file is a phase index, not a scratchpad. Use `tasks/p<n>_impl.md` for the active phase (run `/super-manus:phase <n>`) or `findings.md ## Data points / research`.
 - Putting **product spec** (Problem statements, Demo scenarios, capability lists, success metrics) into `task_plan.md` — those belong in `prd.md`. `task_plan.md ## Goal` is one sentence + a pointer.
 - Putting **DB schema, API endpoints, interface contracts, or any tech design** into `prd.md` — those belong in `tasks/p<n>_impl.md ## Approach` per phase. PRD is product-only.
+- Pasting **TDD plan recaps, file lists, line numbers, function names, test commands, or block-A/B/C breakdowns** into `findings.md ## Decisions` — record the JUDGMENT (what / why / ruled out, 3 lines), not the IMPLEMENTATION ARTIFACT. The artifact lives in `tasks/p<n>_impl.md` and the commit messages.
 - Reordering or renaming the schema headings — hooks parse by heading name (`## Phases`, `## Outstanding`, `## Completed commits`, `## Session log`) and will silently produce wrong output if you rename them.
 - Creating ad-hoc files (`notes.md`, `decisions.md`, `todo.md`) inside the feature folder — keep state in the canonical files.
 - Hand-editing `## Outstanding` in `progress.md` — `scripts/refresh-outstanding.sh` will overwrite it on the next refresh.
