@@ -10,14 +10,28 @@ payload=$(cat 2>/dev/null || true)
 
 folder=$(sm_active_folder || true)
 [ -n "$folder" ] || { echo '{}'; exit 0; }
-[ -f "$folder/progress.md" ] || { echo '{}'; exit 0; }
+
+# v0.2 detection: prd/ exists as a directory → target the active update's progress.md.
+# v0.1 fallback: target feature root.
+if [ -d "$folder/prd" ]; then
+  update_rel=$(sm_active_update "$folder")
+  if [ -z "$update_rel" ]; then
+    # v0.2 feature with no impl/<module>/<update>/ yet — nothing to log to.
+    echo '{}'; exit 0
+  fi
+  target_dir="$folder/impl/$update_rel"
+else
+  target_dir="$folder"
+fi
+[ -f "$target_dir/progress.md" ] || { echo '{}'; exit 0; }
 
 # Stop hooks fire at the end of EACH agent reply, not just at session end.
 # Triggering a session-log write on every reply spams progress.md, so we count
 # turns and only trigger every N turns (default 5; override via SUPER_MANUS_LOG_EVERY_N_TURNS).
 # Cadence policy is governed by SUPER_MANUS_LOG_MODE (turns / commit / both / off).
 # State file format: "<session_id> <turn_count>" on a single line.
-state_file="$folder/.session-state"
+# State file lives next to progress.md so it tracks per-update state in v0.2.
+state_file="$target_dir/.session-state"
 session_id=$(sm_payload_field "$payload" "session_id")
 [ -n "$session_id" ] || session_id="unknown"
 threshold="${SUPER_MANUS_LOG_EVERY_N_TURNS:-5}"
@@ -49,22 +63,22 @@ trigger=0
 case "$mode" in
   off)    trigger=0 ;;
   turns)  [ "$count" -ge "$threshold" ] && trigger=1 ;;
-  commit) sm_has_unlogged_commits "$folder/progress.md" && trigger=1 ;;
+  commit) sm_has_unlogged_commits "$target_dir/progress.md" && trigger=1 ;;
   both|*)
     if [ "$count" -ge "$threshold" ]; then trigger=1
-    elif sm_has_unlogged_commits "$folder/progress.md"; then trigger=1
+    elif sm_has_unlogged_commits "$target_dir/progress.md"; then trigger=1
     fi
     ;;
 esac
 
 [ "$trigger" -eq 1 ] || { echo '{}'; exit 0; }
 
-text="Session checkpoint. Re-read \`$folder/progress.md ## Completed commits\` (source of truth). Judge: is the activity since the latest \`## Session log\` entry worth a new line? If not, just stop.
+text="Session checkpoint. Re-read \`$target_dir/progress.md ## Completed commits\` (source of truth). Judge: is the activity since the latest \`## Session log\` entry worth a new line? If not, just stop.
 
 If yes, prepend ONE entry to \`## Session log\`:
 \`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\`
 + at most 3 bullets, each ONE LINE (≤80 English chars / ≤30 Chinese chars): what closed/advanced; blockers (skip if none); Next: one concrete action.
 
-Hard rules: no file paths, no line numbers, no function names, no test commands, no code identifiers, no block-A/B/C breakdowns. Don't restate \`## Completed commits\` — summarise. Standup tone, not status report. If a phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
+Hard rules: no file paths, no line numbers, no function names, no test commands, no code identifiers, no block-A/B/C breakdowns. Don't restate \`## Completed commits\` — summarise. Standup tone, not status report. If a phase is now blocked, flip its row in \`$target_dir/task_plan.md\` to \`blocked\`."
 
 emit_context "Stop" "$text"

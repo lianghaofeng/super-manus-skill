@@ -47,14 +47,28 @@ folder=$(sm_active_folder || true)
 [ -n "$folder" ] || { echo '{}'; exit 0; }
 [ -d "$folder" ] || { echo '{}'; exit 0; }
 
-text="A \`git commit\` just succeeded. Per the using-sm skill: append a one-line entry to \`$folder/progress.md\` under \`## Completed commits\`. Use this format:
+# v0.2 detection: prd/ exists as a directory → use the active update's progress.md.
+# v0.1 fallback: feature root has progress.md.
+if [ -d "$folder/prd" ]; then
+  update_rel=$(sm_active_update "$folder")
+  if [ -z "$update_rel" ]; then
+    # v0.2 feature with no impl/<module>/<update>/ yet — nothing to write to.
+    echo '{}'; exit 0
+  fi
+  target_dir="$folder/impl/$update_rel"
+else
+  # v0.1: target progress.md / task_plan.md at the feature root.
+  target_dir="$folder"
+fi
+
+text="A \`git commit\` just succeeded. Per the using-sm skill: append a one-line entry to \`$target_dir/progress.md\` under \`## Completed commits\`. Use this format:
 
 \`- <YYYY-MM-DD HH:MM> · \\\`<short-hash>\\\` · <phase impact, e.g. closed P1, advanced P2, no phase change> — <one-sentence summary of the change>\`
 
-If this commit closed a phase, also update the matching row in \`$folder/task_plan.md\` Phases table to \`closed\`. After both writes, run:
+If this commit closed a phase, also update the matching row in \`$target_dir/task_plan.md\` Phases table to \`closed\`. After both writes, run:
 
 \`\`\`bash
-bash \"\${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh\" \"$folder\"
+bash \"\${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh\" \"$target_dir\"
 \`\`\`
 
 to regenerate the Outstanding section."

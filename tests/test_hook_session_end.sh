@@ -170,4 +170,41 @@ rm "docs/super-manus/${TODAY}-demo/progress.md"
 out=$(bash hooks/session-end.sh </dev/null)
 assert_noop "$out" "Case D (missing progress.md)"
 
+# === v0.2 cases ===
+# A v0.2 feature has prd/ directory and progress.md lives under
+# impl/<module>/<update>/. The hook must detect v0.2 and target the active update.
+V02_NAME="${TODAY}-v02-feat"
+V02_FEATURE="docs/super-manus/$V02_NAME"
+SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "v02-feat" >/dev/null
+SUPER_MANUS_ROOT="$TMP" bash scripts/sm-update.sh "api" "mvp" >/dev/null
+V02_UPDATE="$V02_FEATURE/impl/api/${TODAY}-mvp"
+echo "$V02_NAME" > .super-manus/active
+
+# Case V0.2-A: v0.2 active update + threshold N=1 → block on first turn, reminder mentions update path
+rm -f "$V02_UPDATE/.session-state"
+out=$(printf '{"session_id":"v02-A"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=1 bash hooks/session-end.sh)
+printf '%s' "$out" > "$TMP/v02-out.json"
+HOOK_OUT_FILE="$TMP/v02-out.json" UPDATE_DIR="$V02_UPDATE" python3 - <<'PY' || { echo "FAIL: v0.2-A — Stop reminder should target the v0.2 update folder"; exit 1; }
+import json, os
+with open(os.environ["HOOK_OUT_FILE"]) as f:
+    d = json.load(f)
+assert d.get("decision") == "block", f"v0.2-A: must block, got: {d}"
+ctx = d["reason"]
+update = os.environ["UPDATE_DIR"]
+assert f"{update}/progress.md" in ctx, f"v0.2-A: reminder must point at {update}/progress.md, got: {ctx[:300]!r}"
+assert f"{update}/task_plan.md" in ctx, f"v0.2-A: reminder must point at {update}/task_plan.md"
+PY
+
+# State file should live in the update folder, not the feature root
+[ -f "$V02_UPDATE/.session-state" ] || { echo "FAIL: v0.2-A — .session-state should live in the update folder, not feature root"; exit 1; }
+[ ! -f "$V02_FEATURE/.session-state" ] || { echo "FAIL: v0.2-A — .session-state should NOT be at the feature root in v0.2"; exit 1; }
+
+# Case V0.2-B: v0.2 feature with NO impl/<m>/<u>/ yet → no-op
+EMPTY_NAME="${TODAY}-empty-v02"
+EMPTY_FEATURE="docs/super-manus/$EMPTY_NAME"
+mkdir -p "$EMPTY_FEATURE/prd" "$EMPTY_FEATURE/impl"
+echo "$EMPTY_NAME" > .super-manus/active
+out=$(printf '{"session_id":"v02-B"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=1 bash hooks/session-end.sh)
+assert_noop "$out" "v0.2-B (v0.2 feature with no impl/<m>/<u>/ yet)"
+
 echo OK
