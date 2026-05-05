@@ -45,8 +45,8 @@ p.write_text(text.replace(old_table, new_table))
 PY
 
 out=$(sm_phase "1")
-TARGET="$FOLDER/tasks/p1.md"
-[ -f "$TARGET" ] || { echo "FAIL: tasks/p1.md not created at $TARGET"; exit 1; }
+TARGET="$FOLDER/tasks/p1_impl.md"
+[ -f "$TARGET" ] || { echo "FAIL: tasks/p1_impl.md not created at $TARGET"; exit 1; }
 grep -q "^# Phase 1: scaffold-routes" "$TARGET" || { echo "FAIL: phase number/name not substituted in $TARGET"; cat "$TARGET"; exit 1; }
 grep -q "^## Objective" "$TARGET" || { echo "FAIL: Objective heading missing"; exit 1; }
 grep -q "^## Approach" "$TARGET" || { echo "FAIL: Approach heading missing"; exit 1; }
@@ -56,7 +56,7 @@ echo "$out" | grep -q "$TARGET" || { echo "FAIL: success output should mention t
 
 # Case E: phase number not present in Phases table → exit non-zero
 if sm_phase "9" 2>/dev/null; then echo "FAIL: phase 9 (not in table) should be rejected"; exit 1; fi
-[ ! -f "$FOLDER/tasks/p9.md" ] || { echo "FAIL: rejected phase should not have left a file"; exit 1; }
+[ ! -f "$FOLDER/tasks/p9_impl.md" ] || { echo "FAIL: rejected phase should not have left a file"; exit 1; }
 
 # Case F: idempotency — sm_phase 1 a second time must not overwrite, must print same path
 echo "USER EDIT" >> "$TARGET"
@@ -67,8 +67,8 @@ echo "$out2" | grep -q "$TARGET" || { echo "FAIL: re-run output should mention t
 
 # Case G: phase 2 (different row) → fresh file with that phase's name
 out3=$(sm_phase "2")
-TARGET2="$FOLDER/tasks/p2.md"
-[ -f "$TARGET2" ] || { echo "FAIL: tasks/p2.md not created"; exit 1; }
+TARGET2="$FOLDER/tasks/p2_impl.md"
+[ -f "$TARGET2" ] || { echo "FAIL: tasks/p2_impl.md not created"; exit 1; }
 grep -q "^# Phase 2: wire-handlers" "$TARGET2" || { echo "FAIL: phase 2 name not substituted"; cat "$TARGET2"; exit 1; }
 
 echo OK

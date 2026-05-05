@@ -23,7 +23,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 **In:**
 - Per-feature folder layout (parallel-feature safe)
 - Three canonical persistent files per feature: `task_plan.md` / `findings.md` / `progress.md`
-- On-demand per-phase implementation plans under `tasks/p<n>.md` (lazy-created by `/sm phase <n>`; planning-detail container only — not a TDD task spec)
+- On-demand per-phase implementation plans under `tasks/p<n>_impl.md` (lazy-created by `/sm phase <n>`; planning-detail container only — not a TDD task spec)
 - SessionStart hook: auto-restore active feature's `task_plan.md`
 - SessionEnd hook: main agent writes session-level summary to `progress.md`
 - PostToolUse hook on `git commit`: main agent writes one-line commit summary, updates phase status
@@ -31,7 +31,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 - A `using-sm` skill that documents read/write conventions for the main agent
 
 **Out (deferred to v0.2+):**
-- TDD task executor (would consume `tasks/p<n>.md` plus a runner; v0.1 only persists the planning file)
+- TDD task executor (would consume `tasks/p<n>_impl.md` plus a runner; v0.1 only persists the planning file)
 - Subagent dispatch
 - Code review integration
 - Git worktree integration
@@ -49,7 +49,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
         └── tasks/                              # phase-level implementation plans (lazy)
-            └── p<n>.md                         # one per active phase, created by /sm phase <n> (v0.2 may add a runner)
+            └── p<n>_impl.md                         # one per active phase, created by /sm phase <n> (v0.2 may add a runner)
 ```
 
 ### File responsibilities
@@ -59,7 +59,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 | `task_plan.md` | LLM | Phase boundaries (status changes, new phase added) |
 | `findings.md` | LLM | Research finding, decision made, error logged |
 | `progress.md` | LLM (via hooks) | Each `git commit`, each session end |
-| `tasks/p<n>.md` | LLM | Phase entered `in_progress` and needs an implementation plan; updated as approach evolves |
+| `tasks/p<n>_impl.md` | LLM | Phase entered `in_progress` and needs an implementation plan; updated as approach evolves |
 | `.super-manus/active` | `/sm start` and `/sm switch` commands | Feature created or switched |
 
 ### task_plan.md schema (minimal — it's the SessionStart-injected file)
@@ -80,7 +80,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 ```
 
 **Status values:** `pending` / `in_progress` / `blocked` / `closed`.
-**No errors, decisions, or code here** — errors/decisions go in `findings.md`; per-phase implementation plans go in `tasks/p<n>.md` (see §6 `/sm phase`).
+**No errors, decisions, or code here** — errors/decisions go in `findings.md`; per-phase implementation plans go in `tasks/p<n>_impl.md` (see §6 `/sm phase`).
 
 ### findings.md schema (loose, free-form sections)
 
@@ -130,7 +130,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 - [P4] 类比保护 (pending)
 ```
 
-### tasks/p<n>.md schema (per-phase implementation plan, lazy)
+### tasks/p<n>_impl.md schema (per-phase implementation plan, lazy)
 
 ```markdown
 # Phase <n>: <phase name>
@@ -148,7 +148,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 <how you will know this phase is closed: tests to run, smoke command, manual check>
 ```
 
-**Headings are stable** (`## Objective`, `## Approach`, `## Files touched`, `## Verification`) so future tooling can index them. The file is created on demand — phases that don't need a written plan can stay without one. `task_plan.md`'s Notes column may carry a relative link to the file (e.g. `tasks/p1.md`) but is not required to.
+**Headings are stable** (`## Objective`, `## Approach`, `## Files touched`, `## Verification`) so future tooling can index them. The file is created on demand — phases that don't need a written plan can stay without one. `task_plan.md`'s Notes column may carry a relative link to the file (e.g. `tasks/p1_impl.md`) but is not required to.
 
 ## 5. Hooks (the runtime)
 
@@ -167,7 +167,7 @@ super-manus/
 │   ├── refresh-outstanding.sh       # regenerates "## Outstanding" section, no LLM
 │   ├── sm-start.sh
 │   ├── sm-switch.sh
-│   └── sm-phase.sh                  # /sm phase <n> — lazy-create tasks/p<n>.md
+│   └── sm-phase.sh                  # /sm phase <n> — lazy-create tasks/p<n>_impl.md
 ├── commands/
 │   ├── start.md                     # /sm start <name>
 │   ├── switch.md                    # /sm switch <name>
@@ -179,7 +179,7 @@ super-manus/
 │   ├── task_plan.md
 │   ├── findings.md
 │   ├── progress.md
-│   └── phase_plan.md                # template for tasks/p<n>.md
+│   └── phase_plan.md                # template for tasks/p<n>_impl.md
 ├── .claude-plugin/plugin.json
 ├── README.md
 ├── LICENSE                          # MIT (matches both upstream projects)
@@ -263,7 +263,7 @@ super-manus/
 
 ### `/sm phase <n>`
 - Validate `<n>` is a positive integer matching a row in the active feature's `task_plan.md ## Phases` table
-- Resolve target path: `<feature-folder>/tasks/p<n>.md`
+- Resolve target path: `<feature-folder>/tasks/p<n>_impl.md`
 - If file exists: print its absolute path so the main agent can open it
 - Otherwise: copy `templates/phase_plan.md`, substitute `<n>` and `<phase name>` (read from the Phases row), create `tasks/` parent dir as needed, then print the path
 - No status mutation — entering `in_progress` is still the main agent's call via `task_plan.md` edit
@@ -356,7 +356,7 @@ If 1–6 all work for one real feature in teachagent, ship as v0.1.0.
 
 ## 13. Out-of-scope clarifications (so reviewers don't ask)
 
-- **No TDD enforcement** — `tasks/p<n>.md` is a planning-detail file, not a TDD task spec. v0.2 may add an executor that consumes it; v0.1 only persists the file.
+- **No TDD enforcement** — `tasks/p<n>_impl.md` is a planning-detail file, not a TDD task spec. v0.2 may add an executor that consumes it; v0.1 only persists the file.
 - **No subagent dispatch** — main agent does all writing
 - **No automated test running** — that's the user's existing toolchain
 - **No PR creation / merge integration** — separate concerns

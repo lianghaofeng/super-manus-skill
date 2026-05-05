@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# /sm phase <n> — open or seed the per-phase implementation plan tasks/p<n>.md
+# /sm phase <n> — open or seed the per-phase implementation plan tasks/p<n>_impl.md
 # for the active feature. Pure persistence: copies template, substitutes <n>
 # and <phase name> from task_plan.md ## Phases. Idempotent: if the file already
 # exists, prints its path and exits 0 without modifying it.
@@ -60,7 +60,7 @@ if [ -z "$phase_name" ]; then
   exit 1
 fi
 
-target="$folder/tasks/p${n}.md"
+target="$folder/tasks/p${n}_impl.md"
 if [ -f "$target" ]; then
   # Idempotent: just print the path, leave content untouched
   echo "$(pwd)/$target"
