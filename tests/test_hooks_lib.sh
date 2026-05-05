@@ -157,4 +157,52 @@ cat > "$TMP_PROG" <<'EOF'
 EOF
 sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: no commits should be false"; exit 1; } || true
 
+# sm_active_update: returns "<module>/<update>" of most recently modified update folder,
+# or empty if feature folder has no impl/<module>/<update> structure yet.
+TMP_FEAT=$(mktemp -d)
+trap 'rm -f "$TMP_PROG"; rm -rf "$TMP_FEAT"' RETURN
+
+# Case A: feature folder has no impl/ dir → empty
+got=$(sm_active_update "$TMP_FEAT" || true)
+[ -z "$got" ] || { echo "FAIL: missing impl/ should give empty, got: $got"; exit 1; }
+
+# Case B: empty impl/ dir → empty
+mkdir -p "$TMP_FEAT/impl"
+got=$(sm_active_update "$TMP_FEAT" || true)
+[ -z "$got" ] || { echo "FAIL: empty impl/ should give empty, got: $got"; exit 1; }
+
+# Case C: module dir exists but no update folders → empty
+mkdir -p "$TMP_FEAT/impl/api"
+got=$(sm_active_update "$TMP_FEAT" || true)
+[ -z "$got" ] || { echo "FAIL: module without updates should give empty, got: $got"; exit 1; }
+
+# Case D: single update folder → returns "<module>/<update>"
+mkdir -p "$TMP_FEAT/impl/api/2026-05-06-foo"
+got=$(sm_active_update "$TMP_FEAT")
+[ "$got" = "api/2026-05-06-foo" ] || { echo "FAIL: single update, expected api/2026-05-06-foo, got: $got"; exit 1; }
+
+# Case E: two updates same module → most recently modified wins
+mkdir -p "$TMP_FEAT/impl/api/2026-05-07-bar"
+# Force older mtime on the first folder
+touch -t 202504010800 "$TMP_FEAT/impl/api/2026-05-06-foo"
+got=$(sm_active_update "$TMP_FEAT")
+[ "$got" = "api/2026-05-07-bar" ] || { echo "FAIL: expected api/2026-05-07-bar, got: $got"; exit 1; }
+
+# Case F: two modules with updates → most recently modified across all wins
+mkdir -p "$TMP_FEAT/impl/frontend/2026-05-08-baz"
+# Make api/2026-05-07-bar older than frontend/2026-05-08-baz
+touch -t 202504020800 "$TMP_FEAT/impl/api/2026-05-07-bar"
+got=$(sm_active_update "$TMP_FEAT")
+[ "$got" = "frontend/2026-05-08-baz" ] || { echo "FAIL: expected frontend/2026-05-08-baz, got: $got"; exit 1; }
+
+# Case G: feature path that does not exist on disk → empty
+got=$(sm_active_update "/nonexistent/feature/$$" || true)
+[ -z "$got" ] || { echo "FAIL: nonexistent feature path should give empty, got: $got"; exit 1; }
+
+# Case H: empty / missing argument → empty
+got=$(sm_active_update "" || true)
+[ -z "$got" ] || { echo "FAIL: empty arg should give empty, got: $got"; exit 1; }
+got=$(sm_active_update || true)
+[ -z "$got" ] || { echo "FAIL: missing arg should give empty, got: $got"; exit 1; }
+
 echo OK

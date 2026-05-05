@@ -28,25 +28,42 @@ if sm_start "" 2>/dev/null; then echo "FAIL: empty name should be rejected"; exi
 # Case D: invalid name (with space) → exit non-zero
 if sm_start "two words" 2>/dev/null; then echo "FAIL: spaces should be rejected"; exit 1; fi
 
-# Case E: happy path — name "demo"
+# Case E: happy path — name "demo" creates v0.2 layout
 out=$(sm_start "demo")
 TODAY=$(date +%F)
 FOLDER="docs/super-manus/${TODAY}-demo"
 [ -d "$FOLDER" ] || { echo "FAIL: folder not created at $FOLDER"; exit 1; }
-[ -f "$FOLDER/task_plan.md" ] || { echo "FAIL: task_plan.md not copied"; exit 1; }
-[ -f "$FOLDER/prd.md" ] || { echo "FAIL: prd.md not copied"; exit 1; }
-[ -f "$FOLDER/findings.md" ] || { echo "FAIL: findings.md not copied"; exit 1; }
-[ -f "$FOLDER/progress.md" ] || { echo "FAIL: progress.md not copied"; exit 1; }
-grep -q "^# PRD: demo" "$FOLDER/prd.md" || { echo "FAIL: <feature title> not substituted in prd.md"; exit 1; }
+
+# v0.2 layout: prd/ folder with _index.md, empty impl/, roadmap.md, prd_drift.md
+[ -d "$FOLDER/prd" ] || { echo "FAIL: prd/ dir not created"; exit 1; }
+[ -f "$FOLDER/prd/_index.md" ] || { echo "FAIL: prd/_index.md not seeded"; exit 1; }
+[ -d "$FOLDER/impl" ] || { echo "FAIL: impl/ dir not created"; exit 1; }
+[ -f "$FOLDER/roadmap.md" ] || { echo "FAIL: roadmap.md not seeded"; exit 1; }
+[ -f "$FOLDER/prd_drift.md" ] || { echo "FAIL: prd_drift.md not seeded"; exit 1; }
+
+# v0.1 four-file set must NOT be created at feature root anymore — they live inside
+# impl/<module>/<update>/ now, populated by /super-manus:brainstorm.
+[ ! -f "$FOLDER/task_plan.md" ] || { echo "FAIL: task_plan.md should NOT be seeded at feature root in v0.2"; exit 1; }
+[ ! -f "$FOLDER/prd.md" ] || { echo "FAIL: legacy prd.md should NOT be seeded in v0.2 (use prd/_index.md)"; exit 1; }
+[ ! -f "$FOLDER/findings.md" ] || { echo "FAIL: findings.md should NOT be seeded at feature root in v0.2"; exit 1; }
+[ ! -f "$FOLDER/progress.md" ] || { echo "FAIL: progress.md should NOT be seeded at feature root in v0.2"; exit 1; }
+
+# Substitution: <feature title> in prd/_index.md should be replaced with the name
+grep -q "^# demo$" "$FOLDER/prd/_index.md" || { echo "FAIL: <feature title> not substituted in prd/_index.md"; exit 1; }
+# But the placeholder must be GONE from the title heading
+grep -q "^# <feature title>" "$FOLDER/prd/_index.md" && { echo "FAIL: <feature title> placeholder still present in prd/_index.md title"; exit 1; } || true
+
+# roadmap and prd_drift remain generic — no per-feature substitution
+grep -q "^# Roadmap" "$FOLDER/roadmap.md" || { echo "FAIL: roadmap.md missing Roadmap title"; exit 1; }
+grep -q "^# PRD drift log" "$FOLDER/prd_drift.md" || { echo "FAIL: prd_drift.md missing title"; exit 1; }
+
+# .gitignore + .super-manus/active must still be set up
 [ -f "$FOLDER/.gitignore" ] || { echo "FAIL: .gitignore not seeded"; exit 1; }
 grep -qF ".session-*" "$FOLDER/.gitignore" || { echo "FAIL: .gitignore should ignore .session-*"; exit 1; }
-grep -q "# Task Plan: demo" "$FOLDER/task_plan.md" || { echo "FAIL: <feature title> not substituted in task_plan.md"; exit 1; }
-grep -q "# Findings: demo" "$FOLDER/findings.md" || { echo "FAIL: <feature title> not substituted in findings.md"; exit 1; }
-grep -q "# Progress: demo" "$FOLDER/progress.md" || { echo "FAIL: <feature title> not substituted in progress.md"; exit 1; }
-# .super-manus/active should contain the basename
 [ -f .super-manus/active ] || { echo "FAIL: .super-manus/active not written"; exit 1; }
 content=$(cat .super-manus/active)
 [ "$content" = "${TODAY}-demo" ] || { echo "FAIL: .super-manus/active content wrong: '$content'"; exit 1; }
+
 # Echoed path should mention the folder
 echo "$out" | grep -q "$FOLDER" || { echo "FAIL: success output should mention folder path, got: $out"; exit 1; }
 
@@ -56,9 +73,8 @@ if sm_start "demo" 2>/dev/null; then echo "FAIL: duplicate name should be reject
 # Case G: partial template set → script must clean up the half-created folder
 TMP_BAD_ROOT=$(mktemp -d)
 mkdir -p "$TMP_BAD_ROOT/templates"
-cp "$REPO_ROOT/templates/task_plan.md" "$TMP_BAD_ROOT/templates/"
-cp "$REPO_ROOT/templates/findings.md" "$TMP_BAD_ROOT/templates/"
-# Deliberately omit progress.md
+cp "$REPO_ROOT/templates/prd_index.md" "$TMP_BAD_ROOT/templates/"
+# Deliberately omit roadmap.md and prd_drift.md
 TODAY2=$(date +%F)
 TARGET="docs/super-manus/${TODAY2}-cleanup-test"
 if SUPER_MANUS_ROOT="$TMP_BAD_ROOT" bash "$REPO_ROOT/scripts/sm-start.sh" "cleanup-test" 2>/dev/null; then

@@ -78,6 +78,42 @@ if isinstance(v, str):
 '
 }
 
+# Echoes "<module>/<update-folder-name>" of the most recently modified update folder
+# under the given feature folder's impl/ tree, or nothing if there are no update
+# folders. Used by hooks (post-commit, session-end) and the /super-manus:impl /
+# /super-manus:drive commands to resolve "where do I write progress.md right now?"
+# without a separate active-update state file.
+sm_active_update() {
+  local feature="${1:-}"
+  [ -n "$feature" ] && [ -d "$feature/impl" ] || return 0
+  python3 - "$feature/impl" <<'PY'
+import os, sys
+root = sys.argv[1]
+best = None
+best_mtime = -1.0
+try:
+    for module in os.listdir(root):
+        mdir = os.path.join(root, module)
+        if not os.path.isdir(mdir):
+            continue
+        for update in os.listdir(mdir):
+            udir = os.path.join(mdir, update)
+            if not os.path.isdir(udir):
+                continue
+            try:
+                m = os.path.getmtime(udir)
+            except OSError:
+                continue
+            if m > best_mtime:
+                best_mtime = m
+                best = f"{module}/{update}"
+except FileNotFoundError:
+    sys.exit(0)
+if best:
+    print(best)
+PY
+}
+
 # Returns 0 (true) if progress.md has commits in `## Completed commits` whose
 # latest timestamp is newer than the latest entry in `## Session log`. That is:
 # there is real activity (a commit) that has not yet been narrated in the log.

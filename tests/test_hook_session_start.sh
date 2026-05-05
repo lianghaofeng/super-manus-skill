@@ -25,10 +25,17 @@ ctx = d["hookSpecificOutput"]["additionalContext"]
 assert "no active super-manus feature" in ctx.lower(), f"missing no-active phrase: {ctx!r}"
 PY
 
-# Case B: active feature exists with task_plan.md → injects full plan + paths to other files
+# Case B: active v0.1 feature exists with task_plan.md → injects full plan + paths to other files
+# Scaffold v0.1 layout directly (sm-start now creates v0.2; commit 4 will teach this hook
+# to also handle v0.2-shaped features). The v0.1 path here verifies legacy compatibility.
 mkdir -p .super-manus
-SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
-# sm-start created docs/super-manus/<today>-demo/ with templates substituted, and wrote .super-manus/active
+TODAY=$(date +%F)
+V01_FOLDER="docs/super-manus/${TODAY}-demo"
+mkdir -p "$V01_FOLDER"
+for f in task_plan.md prd.md findings.md progress.md; do
+  sed "s|<feature title>|demo|g" "templates/$f" > "$V01_FOLDER/$f"
+done
+echo "${TODAY}-demo" > .super-manus/active
 
 bash hooks/session-start.sh > "$OUT_FILE"
 HOOK_OUT_FILE="$OUT_FILE" python3 - <<'PY' || { echo "FAIL: Case B — hook output is not valid SessionStart JSON"; exit 1; }

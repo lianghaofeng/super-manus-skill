@@ -48,11 +48,17 @@ PY
 out=$(bash hooks/session-end.sh </dev/null)
 assert_noop "$out" "Case A (no active feature)"
 
-# Case B setup: active feature with progress.md
+# Case B setup: active v0.1 feature with progress.md
+# Scaffold v0.1 layout directly (sm-start now creates v0.2; commit 4 will teach this hook
+# to write into impl/<module>/<update>/progress.md). The v0.1 path verifies legacy compat.
 mkdir -p .super-manus
-SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
 TODAY=$(date +%F)
 FOLDER="docs/super-manus/${TODAY}-demo"
+mkdir -p "$FOLDER"
+for f in task_plan.md prd.md findings.md progress.md; do
+  sed "s|<feature title>|demo|g" "templates/$f" > "$FOLDER/$f"
+done
+echo "${TODAY}-demo" > .super-manus/active
 
 # Case B: with default threshold (5), the first 4 turns are no-op; turn 5 blocks.
 rm -f "$FOLDER/.session-state"

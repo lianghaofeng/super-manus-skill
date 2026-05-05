@@ -7,8 +7,19 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
 
-sm_start() {
-  SUPER_MANUS_ROOT="$REPO_ROOT" bash "$REPO_ROOT/scripts/sm-start.sh" "$@"
+# Scaffold a v0.1-shaped feature directly. /super-manus:phase still targets v0.1
+# layout (its replacement absorbs into /super-manus:impl in commit 4). We can't use
+# sm-start.sh anymore because it creates v0.2 layout (prd/ folder, no root task_plan.md).
+v01_scaffold() {
+  local name="$1"
+  local today
+  today=$(date +%F)
+  local folder="docs/super-manus/${today}-${name}"
+  mkdir -p "$folder/tasks" .super-manus
+  for f in task_plan.md prd.md findings.md progress.md; do
+    sed "s|<feature title>|${name}|g" "$REPO_ROOT/templates/$f" > "$folder/$f"
+  done
+  echo "${today}-${name}" > .super-manus/active
 }
 sm_phase() {
   SUPER_MANUS_ROOT="$REPO_ROOT" bash "$REPO_ROOT/scripts/sm-phase.sh" "$@"
@@ -24,8 +35,8 @@ if sm_phase "abc" 2>/dev/null; then echo "FAIL: non-numeric phase should be reje
 # Case C: no active feature → exit non-zero
 if sm_phase "1" 2>/dev/null; then echo "FAIL: missing active feature should be rejected"; exit 1; fi
 
-# Case D: happy path — start a feature, customize phases table, then call /super-manus:phase 1
-sm_start "demo" >/dev/null
+# Case D: happy path — scaffold a v0.1 feature, customize phases table, then call /super-manus:phase 1
+v01_scaffold "demo"
 TODAY=$(date +%F)
 FOLDER="docs/super-manus/${TODAY}-demo"
 PLAN="$FOLDER/task_plan.md"

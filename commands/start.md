@@ -1,5 +1,5 @@
 ---
-description: Create a new super-manus feature folder and set it active
+description: Create a new super-manus v0.2 feature folder and set it active
 ---
 
 The user wants to start a new super-manus feature. Run:
@@ -12,11 +12,13 @@ If the script exits non-zero, surface its stderr to the user verbatim and stop.
 
 If it exits zero, the script printed the absolute path of the created folder. Tell the user:
 
-> Started feature `<name>` at `<path>`. Three files seeded from templates:
-> - `task_plan.md` — fill in the Goal and Phases
-> - `findings.md` — log decisions, errors, research as you work
-> - `progress.md` — auto-managed by hooks (do not hand-edit)
+> Started feature `<name>` at `<path>`. v0.2 skeleton seeded:
+> - `prd/_index.md` — feature-level overview, module manifest, data flow
+> - `prd/` — per-module PRDs land here after `/super-manus:brainstorm`
+> - `impl/` — per-module per-milestone update folders go here
+> - `roadmap.md` — module status table (auto-managed)
+> - `prd_drift.md` — PRD ↔ implementation conflict log (append-only)
 >
-> Run `/super-manus:catchup` any time to re-load the plan into context.
+> Next: run `/super-manus:brainstorm` to define the product spec and split into modules.
 
-Then load the new task_plan.md by reading `<path>/task_plan.md` so you have it in context for the rest of the session.
+Then load the new prd/_index.md by reading `<path>/prd/_index.md` so you have it in context for the rest of the session.

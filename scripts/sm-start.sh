@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# /super-manus:start <name> — create a new super-manus feature folder and set it active.
+# /super-manus:start <name> — create a new super-manus v0.2 feature folder and set it active.
+#
+# v0.2 layout:
+#   docs/super-manus/<YYYY-MM-DD>-<name>/
+#     prd/_index.md          (seeded from templates/prd_index.md, <feature title> substituted)
+#     impl/                  (empty; populated by /super-manus:brainstorm and /super-manus:sync)
+#     roadmap.md             (seeded from templates/roadmap.md)
+#     prd_drift.md           (seeded from templates/prd_drift.md)
+#
+# Per-module PRD files (prd/<module>.md) and the four-file work set
+# (impl/<module>/<update>/{task_plan,findings,progress,tasks}) are NOT created
+# here — /super-manus:brainstorm seeds them after module-split Q&A.
+#
 # Templates are sourced from $SUPER_MANUS_ROOT/templates (defaults to plugin root via $CLAUDE_PLUGIN_ROOT).
 
 if [ $# -ne 1 ] || [ -z "${1:-}" ]; then
@@ -36,12 +48,18 @@ cleanup_partial() {
 }
 trap cleanup_partial ERR
 
-mkdir -p "$folder" .super-manus
-for f in task_plan.md prd.md findings.md progress.md; do
+mkdir -p "$folder/prd" "$folder/impl" .super-manus
+
+# prd/_index.md — substitute <feature title>
+src="$ROOT/templates/prd_index.md"
+[ -f "$src" ] || { echo "sm-start: template missing: $src" >&2; cleanup_partial; exit 1; }
+sed "s|<feature title>|${name}|g" "$src" > "$folder/prd/_index.md"
+
+# roadmap.md and prd_drift.md — copy verbatim (no <feature title> placeholder)
+for f in roadmap.md prd_drift.md; do
   src="$ROOT/templates/$f"
   [ -f "$src" ] || { echo "sm-start: template missing: $src" >&2; cleanup_partial; exit 1; }
-  # Substitute <feature title> placeholder. Use sed with a delimiter unlikely to collide.
-  sed "s|<feature title>|${name}|g" "$src" > "$folder/$f"
+  cp "$src" "$folder/$f"
 done
 
 trap - ERR
