@@ -1,7 +1,7 @@
 {
   "name": "super-manus",
   "description": "Persistent feature-state for Claude Code: survives /clear, generates progress journals from git history",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": { "name": "super-manus contributors" },
   "license": "MIT",
   "keywords": ["state", "persistence", "manus", "planning", "hooks"]

@@ -4,13 +4,23 @@
 
 ## What
 
-**super-manus** is a Claude Code plugin that fuses [obra/superpowers](https://github.com/obra/superpowers)' execution discipline with Manus-style ([OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files)) persistent file-based state. It owns the state layer only: a per-feature folder on disk holds your task plan, findings, and progress journal, and hooks keep them in sync as you work.
+**super-manus** is a Claude Code plugin that fuses [obra/superpowers](https://github.com/obra/superpowers)' execution discipline with Manus-style ([OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files)) persistent file-based state. It owns the state layer only: a per-feature folder on disk holds your PRD, plan, findings, and progress journal, and hooks keep them in sync as you work.
 
 ## Why
 
 `superpowers` gives you TDD, subagent dispatch, and code-review discipline, but loses everything on `/clear` or `/compact`. `planning-with-files` gives you Manus-style persistent state across sessions, but no execution discipline.
 
-super-manus targets the gap: persistent state that survives session boundaries, with hooks that auto-restore "where were we" without user babysitting. It does NOT re-implement superpowers' executor — v0.1 is **persistence only**. Keep using superpowers (or any other workflow) for execution; super-manus only owns the state layer.
+super-manus targets the gap: persistent state that survives session boundaries, with hooks that auto-restore "where were we" without user babysitting. It does NOT re-implement superpowers' executor — super-manus owns the **state layer**. Keep using superpowers (or any other workflow) for execution.
+
+## v0.2 — two-axis model
+
+v0.2 reshapes the model around **module (space) × milestone (time)**:
+
+- **PRD is a folder** (`prd/`), one file per module (db / api / frontend / ...). Each per-module PRD allows schema sketches, interface outlines, UX flows in its `## Surface` section — the level of detail a PM gives engineering — capped at ~2000 words. Under that, six stable headings (Purpose / Surface / Data flow / Constraints / Out of scope / Open questions).
+- **Implementation is per-module per-milestone**: each "milestone update" is a folder under `impl/<module>/<YYYY-MM-DD>-<update-name>/` containing the v0.1 four-file set (`task_plan.md`, `findings.md`, `progress.md`, `tasks/p<n>_impl.md`). Old updates are immutable historical record; the latest is active.
+- **PRD ↔ implementation alignment is enforced**: when intent diverges from PRD, the agent stops, logs to `prd_drift.md`, and asks the user — revert implementation, or run `/super-manus:prd-update <module>`. PRD is never silently updated.
+
+v0.1 features keep working through hook fallbacks; v0.2 only applies to features started with the v0.2 `/super-manus:start`. See [docs/design-v0.2.md](docs/design-v0.2.md) for the full design.
 
 ## Install
 
@@ -34,60 +44,95 @@ Point at a local clone of this repo — `marketplace.json` lives at `.claude-plu
 
 On first install, restart your Claude Code session so hooks and slash commands register.
 
-## Quickstart
+## Quickstart (v0.2)
 
 ```
-/super-manus:start my-feature   # creates docs/super-manus/<date>-my-feature/
-                                # with prd.md / task_plan.md / findings.md / progress.md
-/super-manus:brainstorm         # 5-question PRD Q&A → fills prd.md, distills task_plan.md ## Goal,
-                                # suggests Phases (you review)
-... work, edit files, take notes in findings.md ...
-/super-manus:phase 1            # seed an impl plan for phase 1: tasks/p1_impl.md
-git commit -m "..."             # post-commit hook prompts agent to log the commit
-/clear                          # safe — state is on disk
-... next session ...            # SessionStart hook restores task_plan.md automatically
+/super-manus:start my-feature             # creates docs/super-manus/<date>-my-feature/
+                                          # with prd/_index.md, empty prd/, empty impl/,
+                                          # roadmap.md, prd_drift.md
+/super-manus:brainstorm                   # 5 questions (last = module split). Writes prd/_index.md
+                                          # + per-module prd/<module>.md stubs, then auto-seeds
+                                          # impl/<first-module>/<date>-mvp/ with the four-file set
+... user audits prd/<module>.md files, fleshes out ## Surface ...
+/super-manus:impl                         # auto-finds next pending phase in the active update,
+                                          # seeds tasks/p<n>_impl.md, drift-checks against PRD,
+                                          # proceeds to draft + execute
+git commit -m "..."                       # post-commit hook prompts agent to log into the active
+                                          # update's progress.md
+/clear                                    # safe — state is on disk
+... next session ...                      # SessionStart hook injects the active update's task_plan
 ```
 
-Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-manus:catchup` to re-inject the plan mid-session, `/super-manus:log` to write a session-log entry on demand.
+When PRD and implementation diverge:
 
-**Three-layer separation** (no overlap):
+```
+/super-manus:prd-update <module>          # surgical edit on a single per-module PRD (5 options:
+                                          # tighten / split / demote / exclude / add). No changelog
+                                          # markers; paired entry in active update's findings.md.
+/super-manus:sync <module>                # PRD changed — scaffold a new update folder for that module
+```
 
-- `prd.md` is **WHAT** — product spec only (Problem / Demo / Must / Nice / Not). Capped at ~500 words. No DB schema, no API design.
-- `task_plan.md` is **HOW-overview** — `## Goal` is one sentence + pointer to `prd.md`; `## Phases` table tracks status across the whole feature.
-- `tasks/p<n>_impl.md` is **HOW-detail** — DB schema, API endpoints, interface contracts, code, all per phase.
+When you don't know what to do next, use the global switch:
 
-Phase status, commit log, and session summaries accrue to the feature folder; you read them, the agent reads them, and `/clear` no longer costs you context.
+```
+/super-manus:drive                        # reads everything, picks one of brainstorm / sync /
+                                          # prd-update / impl, announces decision + reason, executes
+```
 
-**Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus rate-limits when it surfaces the question to the agent. Two signals, OR'd by default:
+For an existing project that has no PRD yet:
 
-- `SUPER_MANUS_LOG_EVERY_N_TURNS` — surface every N turns (default `5`)
-- New commits since the latest `### Session …` entry — surface as soon as the post-commit hook records activity that the session log hasn't covered yet
+```
+/super-manus:reverse-prd                  # one-shot: scan source, infer modules, generate
+                                          # prd/_index.md + per-module stubs (audit afterwards)
+```
 
-When either signal fires, the agent is asked to **judge** whether the activity is worth a new line. If the last few turns produced nothing log-worthy, the agent just stops; otherwise it prepends one entry to `## Session log`. So the cadence is "rate-limited prompt + LLM decision" rather than a forced write every time.
+**Two-axis model** (no overlap):
 
-Choose the policy via `SUPER_MANUS_LOG_MODE`:
+- `prd/<module>.md` is **WHAT** the module IS (target state). `## Surface` carries schema sketches / endpoint outlines / screen flows.
+- `impl/<module>/<update>/task_plan.md` is **HOW-overview** for ONE milestone of work on that module.
+- `impl/<module>/<update>/tasks/p<n>_impl.md` is **HOW-detail** — DB migrations, API code, file diffs per phase.
 
-- `both` (default) — whichever signal fires first
-- `turns` — turn count only
-- `commit` — only on unlogged commits (best if you commit at meaningful checkpoints)
-- `off` — disable auto-fire entirely; use `/super-manus:log` for explicit triggers
+PRD updates only via `/super-manus:prd-update <module>` (single-section, ≤2000 words, no changelog markers). Drift between PRD and implementation is logged to `prd_drift.md` and resolved by the user.
 
-`/super-manus:log` writes one immediately (no judgment, you said so) and resets the turn counter. The post-commit hook is independent — every Bash-tool `git commit` still produces a `## Completed commits` line.
+**Session log cadence** is unchanged from v0.1 — Stop hook rate-limits checkpoints via `SUPER_MANUS_LOG_EVERY_N_TURNS` (default 5) and `SUPER_MANUS_LOG_MODE` (`both` / `turns` / `commit` / `off`); the agent judges whether to write each time. In v0.2 the state file moves into the active update folder, so per-update turn counts are isolated.
+
+## Layout
+
+The on-disk layout super-manus creates inside a project that uses it (v0.2):
+
+```
+<project-root>/
+├── .super-manus/
+│   └── active                                  # text file: current feature folder name
+└── docs/super-manus/
+    └── <YYYY-MM-DD>-<feature-name>/
+        ├── prd/
+        │   ├── _index.md                       # feature overview + module manifest + data flow (≤700 words)
+        │   └── <module>.md                     # per-module target state (≤2000 words; /super-manus:prd-update)
+        ├── impl/
+        │   └── <module>/
+        │       └── <YYYY-MM-DD>-<update-name>/
+        │           ├── task_plan.md            # phase index for this update
+        │           ├── findings.md             # decisions / errors / data points for this update
+        │           ├── progress.md             # commits + session log for this update (hook-managed)
+        │           └── tasks/
+        │               └── p<n>_impl.md        # per-phase technical plan (lazy, /super-manus:impl)
+        ├── roadmap.md                          # module status table (auto-managed)
+        └── prd_drift.md                        # PRD ↔ implementation conflict log (append-only)
+```
+
+v0.1 features keep their flat layout (`<feature>/{prd.md,task_plan.md,findings.md,progress.md,tasks/}`); both shapes coexist via hook-side probing.
 
 ## What it does NOT do
 
-v0.1 is deliberately small. The following are out of scope (deferred to v0.2+ or owned by other tools):
+v0.2 stays small. Out of scope:
 
-- TDD task executor — `tasks/p<n>_impl.md` persists per-phase planning detail in v0.1; an executor that runs against it is v0.2 work
-- Subagent dispatch
-- Code review integration
-- Git worktree integration
-- Multi-harness support (Codex / Cursor / Gemini) — Claude Code only for v0.1
-- TDD enforcement
+- Migration of v0.1 features to v0.2 layout (both layouts coexist; no migration command planned)
+- Per-module test folders (test design intent goes in `prd/<module>.md ## Constraints`; per-day test outcomes go in the update's `findings.md`)
+- Module rename command (low frequency — rename folders + edit `prd/_index.md` manually)
+- TDD task executor / subagent dispatch / code review / multi-harness — still v0.1's deferred items
 - Automated test running (use your existing toolchain)
 - PR creation or merge integration
-- Multi-language commit message parsing — the post-commit hook reads the hash and message verbatim
-- Conflict resolution between concurrent writers — single-threaded by Claude Code's tool execution model
 
 ## Coexistence with superpowers
 
@@ -96,26 +141,8 @@ super-manus and superpowers can both be installed; they don't fight:
 - super-manus owns SessionStart / Stop / PostToolUse hooks for the **state layer**.
 - superpowers owns its own SessionStart hook for skill bootstrap — both fire, both inject, no conflict.
 - super-manus skills don't auto-trigger; `using-sm` is invoked only when you run `/super-manus:*`.
-- Plans written by superpowers' `writing-plans` (`docs/plans/*.md`) are independent of super-manus' feature folders. Use `writing-plans` for TDD execution plans and super-manus for cross-session feature state.
-
-## Layout
-
-The on-disk layout super-manus creates inside a project that uses it:
-
-```
-<project-root>/
-├── .super-manus/
-│   └── active                                  # text file: current feature folder name
-└── docs/super-manus/
-    └── <YYYY-MM-DD>-<feature-name>/
-        ├── prd.md                              # product spec — WHAT (≤500 words; /super-manus:brainstorm)
-        ├── task_plan.md                        # phase index — HOW-overview (Goal pointer + Phases table)
-        ├── findings.md                         # research / decisions / errors (LLM-maintained)
-        ├── progress.md                         # commit log + session summaries (LLM-written, structured)
-        └── tasks/
-            └── p<n>_impl.md                    # per-phase technical plan — DB / API / code (lazy, /super-manus:phase <n>)
-```
+- Plans written by superpowers' `writing-plans` (`docs/plans/*.md`) are independent of super-manus' feature folders.
 
 ## Status
 
-v0.1, persistence only. v0.2 may add a TDD executor that runs against `tasks/p<n>_impl.md`.
+v0.2 — module × milestone two-axis model with PRD-folder + drift detection. v0.1 (single `prd.md` flat folder) remains supported via hook fallbacks. See [docs/design-v0.2.md](docs/design-v0.2.md) for the full design and [docs/design-v0.1.md](docs/design-v0.1.md) for the historical v0.1 spec.
