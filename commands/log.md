@@ -6,14 +6,21 @@ The user wants to update the session log immediately, without waiting for the ev
 
 Resolve the active feature folder by reading `.super-manus/active`; the folder is `docs/super-manus/<that-name>/`.
 
-Re-read `<folder>/progress.md ## Completed commits` (the source of truth — your memory may be stale), then prepend one entry to `## Session log`:
+Re-read `<folder>/progress.md ## Completed commits` (the source of truth — your memory may be stale), then prepend one entry to `## Session log` in this exact shape:
 
 ```
 ### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)
-- <closed phases / key commits this session>
-- <blockers, if any>
-- Next session should first: <one concrete action>
+- <what closed / what advanced — ONE line>
+- <blockers, ONE line; omit the bullet if none>
+- Next: <one concrete next action — ONE line>
 ```
+
+**Length rules (hard)**:
+- 3 bullets max. Skip the blockers bullet if there are none.
+- Each bullet ≤ 1 line / ≤ 80 English chars / ≤ 30 Chinese chars. Like a standup update — not a status report.
+- **No** file paths, line numbers, function names, test commands, code identifiers, or block-A/B/C decompositions. Those live in `tasks/p<n>_impl.md` and commit messages, not here.
+- **No** copy-paste from the `## Completed commits` section — assume the reader will see it right above. Summarise, don't restate.
+- Write plain language a teammate would use, in the user's working language (zh / en).
 
 If any phase is now blocked, flip its row in `<folder>/task_plan.md` Phases table to `blocked` with a one-line reason.
 

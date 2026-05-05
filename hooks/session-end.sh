@@ -59,6 +59,12 @@ esac
 
 [ "$trigger" -eq 1 ] || { echo '{}'; exit 0; }
 
-text="Session checkpoint. Re-read \`$folder/progress.md ## Completed commits\` (source of truth), then judge: is the activity since the latest \`## Session log\` entry worth a new line? If not, just stop. If yes, prepend: \`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\` + 3 bullets (closed phases / blockers / next session first action). If a phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
+text="Session checkpoint. Re-read \`$folder/progress.md ## Completed commits\` (source of truth). Judge: is the activity since the latest \`## Session log\` entry worth a new line? If not, just stop.
+
+If yes, prepend ONE entry to \`## Session log\`:
+\`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\`
++ at most 3 bullets, each ONE LINE (≤80 English chars / ≤30 Chinese chars): what closed/advanced; blockers (skip if none); Next: one concrete action.
+
+Hard rules: no file paths, no line numbers, no function names, no test commands, no code identifiers, no block-A/B/C breakdowns. Don't restate \`## Completed commits\` — summarise. Standup tone, not status report. If a phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
 
 emit_context "Stop" "$text"

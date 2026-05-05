@@ -18,20 +18,19 @@ super-manus targets the gap: persistent state that survives session boundaries, 
 
 ```
 /plugin marketplace add https://github.com/lianghaofeng/super-manus-skill
-/plugin
+/plugin install super-manus@super-manus-skill
 ```
 
-In the `/plugin` UI, pick `super-manus@super-manus-skill` and install. You'll get future updates via the marketplace.
+You'll get future updates via `/plugin marketplace update super-manus-skill`.
 
-**Direct clone (fallback):**
+**Local marketplace (for local development or if remote install fails):**
 
-```bash
-cd ~/.claude/plugins
-git clone https://github.com/lianghaofeng/super-manus-skill.git super-manus
-# then in Claude Code: /plugin
+```
+/plugin marketplace add /path/to/super-manus
+/plugin install super-manus@super-manus-skill
 ```
 
-**Local marketplace** (only if you're hacking on super-manus locally): add the parent directory containing `super-manus/` to your project's `.claude/settings.json` under `extraKnownMarketplaces`, then `/plugin` → install `super-manus`.
+Point at a local clone of this repo — `marketplace.json` lives at `.claude-plugin/marketplace.json` and resolves the plugin from the same checkout.
 
 On first install, restart your Claude Code session so hooks and slash commands register.
 
