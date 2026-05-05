@@ -45,6 +45,14 @@ for f in task_plan.md findings.md progress.md; do
 done
 
 trap - ERR
+
+# Drop a .gitignore so hook-managed runtime state (.session-state and friends)
+# doesn't pollute `git status` for the project that uses super-manus.
+cat > "$folder/.gitignore" <<'EOF'
+# super-manus runtime state — managed by Stop hook, do not commit
+.session-*
+EOF
+
 echo "$basename" > .super-manus/active
 
 # Print the resolved folder path for the caller (Claude reads this and confirms to user)

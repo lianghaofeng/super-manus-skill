@@ -36,6 +36,8 @@ FOLDER="docs/super-manus/${TODAY}-demo"
 [ -f "$FOLDER/task_plan.md" ] || { echo "FAIL: task_plan.md not copied"; exit 1; }
 [ -f "$FOLDER/findings.md" ] || { echo "FAIL: findings.md not copied"; exit 1; }
 [ -f "$FOLDER/progress.md" ] || { echo "FAIL: progress.md not copied"; exit 1; }
+[ -f "$FOLDER/.gitignore" ] || { echo "FAIL: .gitignore not seeded"; exit 1; }
+grep -qF ".session-*" "$FOLDER/.gitignore" || { echo "FAIL: .gitignore should ignore .session-*"; exit 1; }
 grep -q "# Task Plan: demo" "$FOLDER/task_plan.md" || { echo "FAIL: <feature title> not substituted in task_plan.md"; exit 1; }
 grep -q "# Findings: demo" "$FOLDER/findings.md" || { echo "FAIL: <feature title> not substituted in findings.md"; exit 1; }
 grep -q "# Progress: demo" "$FOLDER/progress.md" || { echo "FAIL: <feature title> not substituted in progress.md"; exit 1; }
