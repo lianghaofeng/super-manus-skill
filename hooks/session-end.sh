@@ -5,6 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
+# Read Claude Code's stdin payload (may be empty in tests / direct invocation).
+payload=$(cat 2>/dev/null || true)
+# If we already blocked once in this stop cycle and the agent is now retrying,
+# don't block again — that's an infinite loop. Just no-op so the agent can stop.
+if sm_stop_hook_active "$payload"; then
+  echo '{}'; exit 0
+fi
+
 folder=$(sm_active_folder || true)
 [ -n "$folder" ] || { echo '{}'; exit 0; }
 [ -f "$folder/progress.md" ] || { echo '{}'; exit 0; }

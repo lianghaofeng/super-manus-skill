@@ -66,4 +66,34 @@ assert d["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
 assert d["hookSpecificOutput"]["additionalContext"] == expected, (d["hookSpecificOutput"]["additionalContext"], expected)
 ' "$multi" || { echo "FAIL: emit_context did not preserve multiline/quoted text"; exit 1; }
 
+# Stop event must use decision:block (not systemMessage / additionalContext) so the
+# agent actually receives the reminder instead of the user's terminal swallowing it.
+out=$(emit_context "Stop" "remember to write the session log")
+printf '%s' "$out" | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d.get("decision") == "block", f"Stop must emit decision:block, got: {d}"
+assert d.get("reason") == "remember to write the session log", f"reason mismatch: {d}"
+assert "systemMessage" not in d, "Stop must not fall back to systemMessage"
+assert "hookSpecificOutput" not in d, "Stop must not use hookSpecificOutput"
+' || { echo "FAIL: emit_context Stop branch did not produce decision:block"; exit 1; }
+
+# SubagentStop should follow the same rule
+out=$(emit_context "SubagentStop" "x")
+printf '%s' "$out" | python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d.get("decision") == "block", f"SubagentStop must emit decision:block, got: {d}"
+' || { echo "FAIL: emit_context SubagentStop branch did not produce decision:block"; exit 1; }
+
+# sm_stop_hook_active: empty / malformed / false-flag payload → returns 1 (false)
+sm_stop_hook_active "" && { echo "FAIL: empty payload should be false"; exit 1; } || true
+sm_stop_hook_active "not json" && { echo "FAIL: malformed payload should be false"; exit 1; } || true
+sm_stop_hook_active '{}' && { echo "FAIL: payload without stop_hook_active should be false"; exit 1; } || true
+sm_stop_hook_active '{"stop_hook_active": false}' && { echo "FAIL: explicit false should be false"; exit 1; } || true
+
+# sm_stop_hook_active: payload with stop_hook_active=true → returns 0 (true)
+sm_stop_hook_active '{"stop_hook_active": true}' || { echo "FAIL: true payload should be true"; exit 1; }
+sm_stop_hook_active '{"foo": "bar", "stop_hook_active": true, "session_id": "abc"}' || { echo "FAIL: true payload with extras should be true"; exit 1; }
+
 echo OK

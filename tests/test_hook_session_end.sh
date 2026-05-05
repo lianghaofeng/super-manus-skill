@@ -21,7 +21,9 @@ assert_noop() {
   fi
 }
 
-# Helper: assert hook output is a Stop reminder mentioning Session log + Completed commits
+# Helper: assert hook output is a Stop reminder mentioning Session log + Completed commits.
+# Stop hooks must emit {"decision":"block","reason":...} so the agent actually receives
+# the reminder; systemMessage / additionalContext both fail to reach the model on Stop.
 assert_reminder() {
   local out="$1" label="$2"
   printf '%s' "$out" > "$TMP/out.json"
@@ -30,8 +32,11 @@ import json, os, sys
 label = os.environ["LABEL"]
 with open(os.environ["HOOK_OUT_FILE"]) as f:
     d = json.load(f)
-assert d["hookSpecificOutput"]["hookEventName"] == "Stop", f"{label}: wrong event"
-ctx = d["hookSpecificOutput"]["additionalContext"]
+assert d.get("decision") == "block", f"{label}: Stop hook must emit decision=block, got: {d}"
+assert "reason" in d, f"{label}: missing reason field"
+assert "systemMessage" not in d, f"{label}: must not fall back to systemMessage (model wouldn't see it)"
+assert "hookSpecificOutput" not in d, f"{label}: must not use hookSpecificOutput (invalid for Stop)"
+ctx = d["reason"]
 assert "Session log" in ctx, f"{label}: missing Session log ref: {ctx[:200]!r}"
 assert "Completed commits" in ctx, f"{label}: missing Completed commits ref"
 assert "re-read" in ctx.lower(), f"{label}: must explicitly tell agent to re-read progress.md (design §11 risk mitigation)"
@@ -39,26 +44,34 @@ assert "task_plan.md" in ctx, f"{label}: should reference task_plan.md for block
 PY
 }
 
-# Case A: no active feature → no-op
-out=$(bash hooks/session-end.sh)
+# Case A: no active feature → no-op (regardless of stdin)
+out=$(bash hooks/session-end.sh </dev/null)
 assert_noop "$out" "Case A (no active feature)"
 
 # Case B: active feature exists with progress.md → emits Stop reminder
 mkdir -p .super-manus
 SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
-out=$(bash hooks/session-end.sh)
-assert_reminder "$out" "Case B (active feature with progress.md)"
+out=$(bash hooks/session-end.sh </dev/null)
+assert_reminder "$out" "Case B (active feature with progress.md, empty stdin)"
+
+# Case B2: same feature but Claude Code passes a payload without stop_hook_active → still emits
+out=$(printf '{"session_id":"abc"}' | bash hooks/session-end.sh)
+assert_reminder "$out" "Case B2 (payload without stop_hook_active flag)"
+
+# Case B3: same feature but Claude Code passes stop_hook_active=true (re-stop after block) → no-op
+out=$(printf '{"stop_hook_active": true, "session_id": "abc"}' | bash hooks/session-end.sh)
+assert_noop "$out" "Case B3 (stop_hook_active=true → break the block loop)"
 
 # Case C: active file points to ghost folder → no-op
 echo "2026-05-04-ghost" > .super-manus/active
-out=$(bash hooks/session-end.sh)
+out=$(bash hooks/session-end.sh </dev/null)
 assert_noop "$out" "Case C (ghost folder)"
 
 # Case D: active feature exists but progress.md missing → no-op
 TODAY=$(date +%F)
 echo "${TODAY}-demo" > .super-manus/active
 rm "docs/super-manus/${TODAY}-demo/progress.md"
-out=$(bash hooks/session-end.sh)
+out=$(bash hooks/session-end.sh </dev/null)
 assert_noop "$out" "Case D (missing progress.md)"
 
 echo OK
