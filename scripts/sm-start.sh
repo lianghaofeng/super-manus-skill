@@ -37,7 +37,7 @@ cleanup_partial() {
 trap cleanup_partial ERR
 
 mkdir -p "$folder" .super-manus
-for f in task_plan.md findings.md progress.md; do
+for f in task_plan.md prd.md findings.md progress.md; do
   src="$ROOT/templates/$f"
   [ -f "$src" ] || { echo "sm-start: template missing: $src" >&2; cleanup_partial; exit 1; }
   # Substitute <feature title> placeholder. Use sed with a delimiter unlikely to collide.

@@ -22,13 +22,14 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 
 **In:**
 - Per-feature folder layout (parallel-feature safe)
-- Three canonical persistent files per feature: `task_plan.md` / `findings.md` / `progress.md`
-- On-demand per-phase implementation plans under `tasks/p<n>_impl.md` (lazy-created by `/super-manus:phase <n>`; planning-detail container only — not a TDD task spec)
+- Four canonical persistent files per feature: `prd.md` (product spec, ≤500 words) / `task_plan.md` (phase index) / `findings.md` / `progress.md`
+- On-demand per-phase **technical** plans under `tasks/p<n>_impl.md` (lazy-created by `/super-manus:phase <n>`; DB schema / API design / code live here — not a TDD task spec)
 - SessionStart hook: auto-restore active feature's `task_plan.md`
 - SessionEnd hook: main agent writes session-level summary to `progress.md`
 - PostToolUse hook on `git commit`: main agent writes one-line commit summary, updates phase status
-- Slash commands: `/super-manus:start <name>` / `/super-manus:switch <name>` / `/super-manus:catchup` / `/super-manus:phase <n>` / `/super-manus:log`
+- Slash commands: `/super-manus:start <name>` / `/super-manus:brainstorm` / `/super-manus:switch <name>` / `/super-manus:catchup` / `/super-manus:phase <n>` / `/super-manus:log`
 - A `using-sm` skill that documents read/write conventions for the main agent
+- Three-layer concept separation: PRD (WHAT) ↔ task_plan (HOW-overview) ↔ phase impl (HOW-detail)
 
 **Out (deferred to v0.2+):**
 - TDD task executor (would consume `tasks/p<n>_impl.md` plus a runner; v0.1 only persists the planning file)
@@ -45,21 +46,23 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 │   └── active                                  # text file: current feature folder name
 └── docs/super-manus/
     └── <YYYY-MM-DD>-<feature-name>/
-        ├── task_plan.md                        # goal / phases / status (LLM-maintained, index only — no code)
+        ├── prd.md                              # product spec — Problem / Demo / Must / Nice / Not (≤500 words)
+        ├── task_plan.md                        # phase index — Goal (one sentence + pointer to prd.md) + Phases table
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
-        └── tasks/                              # phase-level implementation plans (lazy)
-            └── p<n>_impl.md                         # one per active phase, created by /super-manus:phase <n> (v0.2 may add a runner)
+        └── tasks/                              # per-phase technical plans (lazy)
+            └── p<n>_impl.md                    # DB schema / API / code per phase, created by /super-manus:phase <n>
 ```
 
 ### File responsibilities
 
 | File | Owner | Updated when |
 |---|---|---|
-| `task_plan.md` | LLM | Phase boundaries (status changes, new phase added) |
+| `prd.md` | LLM (via `/super-manus:brainstorm`) or human | Initial brainstorm; product scope clarified or revised. Engineering changes never trigger a PRD update. |
+| `task_plan.md` | LLM | Phase boundaries (status changes, new phase added). `## Goal` only changes when PRD framing changes. |
 | `findings.md` | LLM | Research finding, decision made, error logged |
-| `progress.md` | LLM (via hooks) | Each `git commit`, each session end |
-| `tasks/p<n>_impl.md` | LLM | Phase entered `in_progress` and needs an implementation plan; updated as approach evolves |
+| `progress.md` | LLM (via hooks) | Each `git commit`, every-N-turns / new-commit checkpoint |
+| `tasks/p<n>_impl.md` | LLM | Phase entered `in_progress` and needs a technical plan (DB / API / code); updated as approach evolves |
 | `.super-manus/active` | `/super-manus:start` and `/super-manus:switch` commands | Feature created or switched |
 
 ### task_plan.md schema (minimal — it's the SessionStart-injected file)
@@ -80,7 +83,33 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 ```
 
 **Status values:** `pending` / `in_progress` / `blocked` / `closed`.
-**No errors, decisions, or code here** — errors/decisions go in `findings.md`; per-phase implementation plans go in `tasks/p<n>_impl.md` (see §6 `/super-manus:phase`).
+**No errors, decisions, code, OR product spec here** — errors/decisions go in `findings.md`; per-phase implementation plans go in `tasks/p<n>_impl.md` (see §6 `/super-manus:phase`); product spec (Problem / Demo / Must / Nice / Not) goes in `prd.md`. `## Goal` is a single sentence ending with a pointer to `prd.md`.
+
+### prd.md schema (product spec, ≤500 words)
+
+```markdown
+# PRD: <feature title>
+
+## Problem
+<one sentence: pain + for whom>
+
+## Demo
+<3–5 lines, second person, concrete usage scenario>
+
+## Must
+- <one-liner each, 3–7 items>
+
+## Nice-to-have
+- <one-liner each, optional>
+
+## Not doing
+- <explicit non-goals>
+
+## Success metric
+<optional one line>
+```
+
+**Headings stable.** **Not for**: database schema, API endpoints, interface contracts, code, libraries, architecture diagrams. Those are tech design and live in `tasks/p<n>_impl.md ## Approach` per phase. PRD is a product artifact, not an engineering one. Generated interactively by `/super-manus:brainstorm` (5-question Q&A), or hand-written.
 
 ### findings.md schema (loose, free-form sections)
 
@@ -139,7 +168,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 <one paragraph: what "done" means for this phase, in plain English>
 
 ## Approach
-<the chosen route: bullets, ordered steps, or short prose. Code snippets, pseudo-code, file diffs all live here, not in task_plan.md.>
+<the chosen technical route: bullets, ordered steps, or short prose. Code snippets, pseudo-code, file diffs, DB schema, API endpoints, interface contracts all live here, not in task_plan.md or prd.md.>
 
 ## Files touched
 - `path/to/file.py` — <one-line reason>
@@ -170,14 +199,16 @@ super-manus/
 │   └── sm-phase.sh                  # /super-manus:phase <n> — lazy-create tasks/p<n>_impl.md
 ├── commands/
 │   ├── start.md                     # /super-manus:start <name>
+│   ├── brainstorm.md                # /super-manus:brainstorm (PRD-led 5-question Q&A, writes prd.md)
 │   ├── switch.md                    # /super-manus:switch <name>
 │   ├── catchup.md                   # /super-manus:catchup (manual re-run of session-start logic)
-│   ├── phase.md                     # /super-manus:phase <n> (open or seed a per-phase impl plan)
+│   ├── phase.md                     # /super-manus:phase <n> (open or seed a per-phase tech plan)
 │   └── log.md                       # /super-manus:log (force-write a session log entry, reset counter)
 ├── skills/
 │   └── using-sm/SKILL.md            # how to read/write the three files
 ├── templates/
 │   ├── task_plan.md
+│   ├── prd.md                       # template for product spec (≤500 words)
 │   ├── findings.md
 │   ├── progress.md
 │   └── phase_plan.md                # template for tasks/p<n>_impl.md
@@ -264,6 +295,23 @@ super-manus/
 - Manual re-run of `session-start` logic
 - Useful when context drifted mid-session and main agent needs re-orientation
 - No state change, just re-injection
+
+### `/super-manus:brainstorm`
+- Active feature required (`.super-manus/active` non-empty); else tell user to `/super-manus:start` first
+- Reads existing `prd.md` and `task_plan.md`; if `prd.md` already has substantive content, asks once whether to refine in place or replace
+- Runs a focused **5-question Q&A**, one question per turn, max 5 turns:
+  1. Problem (one sentence + for whom)
+  2. Users / trigger moment
+  3. Demo (3-line second-person walkthrough; offers 2 alternatives if user is unsure)
+  4. Must vs nice-to-have capabilities
+  5. Out of scope
+  Then optionally probes once for a success metric (skips if user can't articulate)
+- Hard constraints embedded in the prompt: do **not** ask about architecture / database / API / libraries / implementation; do **not** propose tech approaches; keep total `prd.md` under 500 words
+- After the Q&A, writes `<folder>/prd.md` and updates `<folder>/task_plan.md`:
+  - `## Goal` → one sentence distillation + `See [prd.md](prd.md).`
+  - `## Phases` → 3–7 suggested rows derived from the Must list, all status `pending`
+- Stops; does not propose architecture or seed any `tasks/p<n>_impl.md`
+- Zero external-skill dependency: the entire 5-question flow + writing rules live in the command's markdown body
 
 ### `/super-manus:phase <n>`
 - Validate `<n>` is a positive integer matching a row in the active feature's `task_plan.md ## Phases` table
@@ -373,6 +421,7 @@ If 1–6 all work for one real feature in teachagent, ship as v0.1.0.
 - **No multi-language commit message parsing** — D-trigger reads commit hash + message verbatim, doesn't interpret
 - **No conflict resolution if main agent writes progress.md and post-commit fires concurrently** — single-threaded by Claude Code's tool execution model
 - **No auto-generation of phase plan content** — `/super-manus:phase <n>` only seeds the template; the Objective / Approach / etc. are filled by the main agent or user, consistent with v0.1's "persistence only" stance
+- **No tech design in PRD** — `prd.md` is product semantics only (Problem / Demo / Must / Nice / Not). Database schema, API endpoints, interface contracts, code → `tasks/p<n>_impl.md ## Approach` per phase. Brainstorm command enforces this in its embedded prompt
 
 ## 14. Open questions deferred to implementation
 

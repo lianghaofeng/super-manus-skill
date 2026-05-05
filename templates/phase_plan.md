@@ -1,5 +1,5 @@
-<!-- Per-phase implementation plan. Lazy-created by `/super-manus:phase <n>`. Headings are stable — keep them. -->
-<!-- This is where code, pseudo-code, and implementation detail belong. task_plan.md stays an index. -->
+<!-- Per-phase implementation plan. Lazy-created by `/super-manus:phase <n>`. Headings are stable. -->
+<!-- This is where engineering detail lives: code, pseudo-code, file diffs, **DB schema, API endpoints, interface contracts**. Product spec stays in prd.md; task_plan.md stays a phase index. -->
 # Phase <n>: <phase name>
 
 ## Objective
@@ -8,7 +8,7 @@
 
 ## Approach
 
-<the chosen route: bullets, ordered steps, or short prose. Code snippets, pseudo-code, file diffs all live here.>
+<the chosen technical route: bullets, ordered steps, or short prose. Code snippets, pseudo-code, file diffs, DB schema, API endpoints, interface contracts all live here.>
 
 ## Files touched
 

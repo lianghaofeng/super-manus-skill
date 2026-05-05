@@ -39,7 +39,9 @@ On first install, restart your Claude Code session so hooks and slash commands r
 
 ```
 /super-manus:start my-feature   # creates docs/super-manus/<date>-my-feature/
-                                # with task_plan.md / findings.md / progress.md
+                                # with prd.md / task_plan.md / findings.md / progress.md
+/super-manus:brainstorm         # 5-question PRD Q&A → fills prd.md, distills task_plan.md ## Goal,
+                                # suggests Phases (you review)
 ... work, edit files, take notes in findings.md ...
 /super-manus:phase 1            # seed an impl plan for phase 1: tasks/p1_impl.md
 git commit -m "..."             # post-commit hook prompts agent to log the commit
@@ -49,7 +51,13 @@ git commit -m "..."             # post-commit hook prompts agent to log the comm
 
 Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-manus:catchup` to re-inject the plan mid-session, `/super-manus:log` to write a session-log entry on demand.
 
-Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>_impl.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
+**Three-layer separation** (no overlap):
+
+- `prd.md` is **WHAT** — product spec only (Problem / Demo / Must / Nice / Not). Capped at ~500 words. No DB schema, no API design.
+- `task_plan.md` is **HOW-overview** — `## Goal` is one sentence + pointer to `prd.md`; `## Phases` table tracks status across the whole feature.
+- `tasks/p<n>_impl.md` is **HOW-detail** — DB schema, API endpoints, interface contracts, code, all per phase.
+
+Phase status, commit log, and session summaries accrue to the feature folder; you read them, the agent reads them, and `/clear` no longer costs you context.
 
 **Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus rate-limits when it surfaces the question to the agent. Two signals, OR'd by default:
 
@@ -101,11 +109,12 @@ The on-disk layout super-manus creates inside a project that uses it:
 │   └── active                                  # text file: current feature folder name
 └── docs/super-manus/
     └── <YYYY-MM-DD>-<feature-name>/
-        ├── task_plan.md                        # goal / phases index — no code (LLM-maintained)
+        ├── prd.md                              # product spec — WHAT (≤500 words; /super-manus:brainstorm)
+        ├── task_plan.md                        # phase index — HOW-overview (Goal pointer + Phases table)
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
         └── tasks/
-            └── p<n>_impl.md                     # per-phase implementation plan (lazy, /super-manus:phase <n>)
+            └── p<n>_impl.md                    # per-phase technical plan — DB / API / code (lazy, /super-manus:phase <n>)
 ```
 
 ## Status
