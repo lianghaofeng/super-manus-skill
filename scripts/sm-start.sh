@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# /sm start <name> — create a new super-manus feature folder and set it active.
+# /super-manus:start <name> — create a new super-manus feature folder and set it active.
 # Templates are sourced from $SUPER_MANUS_ROOT/templates (defaults to plugin root via $CLAUDE_PLUGIN_ROOT).
 
 if [ $# -ne 1 ] || [ -z "${1:-}" ]; then
@@ -27,7 +27,7 @@ basename="${today}-${name}"
 folder="docs/super-manus/${basename}"
 
 if [ -e "$folder" ]; then
-  echo "sm-start: feature folder already exists: $folder — use /sm switch ${name} instead" >&2
+  echo "sm-start: feature folder already exists: $folder — use /super-manus:switch ${name} instead" >&2
   exit 1
 fi
 

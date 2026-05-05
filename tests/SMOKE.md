@@ -24,11 +24,11 @@ Restart Claude Code (or run `/plugin reload` if available) so the plugin manifes
 
 Run each step in a fresh Claude Code session in the scratch project directory.
 
-### 1. /sm start creates a feature folder
+### 1. /super-manus:start creates a feature folder
 
 In Claude Code:
 ```
-/sm start smoketest
+/super-manus:start smoketest
 ```
 
 Expected:
@@ -51,11 +51,11 @@ What feature are we currently on? What phase?
 
 Expected: Claude refers to `smoketest` and references the Phases table from `task_plan.md` WITHOUT being told. (The injection happened via the SessionStart hook reading `.super-manus/active`.)
 
-### 3. /sm catchup re-injects the plan mid-session
+### 3. /super-manus:catchup re-injects the plan mid-session
 
 If you've drifted away from the plan, run:
 ```
-/sm catchup
+/super-manus:catchup
 ```
 
 Expected: Claude re-loads the plan into context.
@@ -78,4 +78,4 @@ Open a fresh Claude Code session in the same scratch project the next day. Expec
 
 Pass if steps 1, 2, 3 work today (Phase 6 ships). Defer 4, 5, 6 to after Phases 7, 8, 10.
 
-If any step fails, file a task in this very repo's `task_plan.md` (yes, dogfood — you should `/sm start super-manus-bugs` and log it there).
+If any step fails, file a task in this very repo's `task_plan.md` (yes, dogfood — you should `/super-manus:start super-manus-bugs` and log it there).

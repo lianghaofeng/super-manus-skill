@@ -1,6 +1,6 @@
 ---
 name: using-sm
-description: How to read and write super-manus state files (task_plan.md, findings.md, progress.md, tasks/p<n>_impl.md). Triggered by /sm slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
+description: How to read and write super-manus state files (task_plan.md, findings.md, progress.md, tasks/p<n>_impl.md). Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
 user-invocable: false
 ---
 
@@ -20,10 +20,10 @@ The super-manus plugin keeps a small set of persistent files per feature so stat
         ├── findings.md                         # decisions / errors / research (LLM-maintained)
         ├── progress.md                         # commit log + session log (hook-managed; do not hand-edit)
         └── tasks/
-            └── p<n>_impl.md                         # per-phase implementation plan, lazy-created by /sm phase <n>
+            └── p<n>_impl.md                         # per-phase implementation plan, lazy-created by /super-manus:phase <n>
 ```
 
-`.super-manus/active` contains just the folder basename (e.g. `2026-05-04-refactor-auth`). Switch features with `/sm switch`; create new ones with `/sm start`. Always resolve the active feature folder by reading `.super-manus/active` first — never hard-code a path.
+`.super-manus/active` contains just the folder basename (e.g. `2026-05-04-refactor-auth`). Switch features with `/super-manus:switch`; create new ones with `/super-manus:start`. Always resolve the active feature folder by reading `.super-manus/active` first — never hard-code a path.
 
 ## 2. What goes in which file
 
@@ -44,7 +44,7 @@ The super-manus plugin keeps a small set of persistent files per feature so stat
 - `## Outstanding`: regenerated from `task_plan.md` by `scripts/refresh-outstanding.sh` — never edit by hand.
 
 **`tasks/p<n>_impl.md`** — per-phase implementation plan (one file per phase, lazy).
-- Created by `/sm phase <n>` when the active phase needs more than a one-line note. Trivial phases don't need one.
+- Created by `/super-manus:phase <n>` when the active phase needs more than a one-line note. Trivial phases don't need one.
 - Sections: `## Objective` (what "done" means), `## Approach` (the chosen route — code, pseudo-code, file diffs all live here), `## Files touched` (one-line reasons), `## Verification` (how you'll know it's closed). Headings are stable.
 - Lifecycle: fill `## Objective` first, evolve `## Approach` in place, leave the file as historical record when the phase closes. Don't delete; future sessions reconstruct intent from it.
 - Optionally, `task_plan.md`'s `Notes` column can carry a relative link like `tasks/p1_impl.md` to point at the plan, but it's not required.
@@ -77,7 +77,7 @@ The point is to surface tarpits early, not to slog through them in silence.
 - Using TodoWrite for cross-session persistence — TodoWrite resets on `/clear`. Use `task_plan.md ## Phases` instead.
 - Writing to `progress.md` without a hook reminder — you'll race with the auto-managed sections and produce duplicate or out-of-order entries.
 - Putting errors in `task_plan.md` — they belong in `findings.md ## Errors`.
-- Pasting code, pseudo-code, file diffs, or multi-line implementation sketches into `task_plan.md` — the file is a phase index, not a scratchpad. Use `tasks/p<n>_impl.md` for the active phase (run `/sm phase <n>`) or `findings.md ## Data points / research`.
+- Pasting code, pseudo-code, file diffs, or multi-line implementation sketches into `task_plan.md` — the file is a phase index, not a scratchpad. Use `tasks/p<n>_impl.md` for the active phase (run `/super-manus:phase <n>`) or `findings.md ## Data points / research`.
 - Reordering or renaming the schema headings — hooks parse by heading name (`## Phases`, `## Outstanding`, `## Completed commits`, `## Session log`) and will silently produce wrong output if you rename them.
 - Creating ad-hoc files (`notes.md`, `decisions.md`, `todo.md`) inside the feature folder — keep state in the canonical files.
 - Hand-editing `## Outstanding` in `progress.md` — `scripts/refresh-outstanding.sh` will overwrite it on the next refresh.

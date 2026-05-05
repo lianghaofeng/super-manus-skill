@@ -8,7 +8,7 @@ source "${SCRIPT_DIR}/lib.sh"
 folder=$(sm_active_folder || true)
 
 if [ -z "$folder" ] || [ ! -f "$folder/task_plan.md" ]; then
-  emit_context "SessionStart" "No active super-manus feature in this project. Run \`/sm start <name>\` to begin a new feature, or \`/sm switch <name>\` to resume an existing one."
+  emit_context "SessionStart" "No active super-manus feature in this project. Run \`/super-manus:start <name>\` to begin a new feature, or \`/super-manus:switch <name>\` to resume an existing one."
   exit 0
 fi
 

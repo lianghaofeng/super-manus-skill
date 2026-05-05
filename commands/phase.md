@@ -15,4 +15,4 @@ If it exits zero, the script printed the absolute path of `tasks/p<n>_impl.md`. 
 - If the file was just seeded (Objective / Approach / Files touched / Verification are placeholders): "Seeded `tasks/p<n>_impl.md` for phase `<phase name>`. Fill in `## Objective`, `## Approach`, `## Files touched`, `## Verification` — code, pseudo-code, and file diffs go here, not in `task_plan.md`."
 - If the file already had content: "Loaded existing `tasks/p<n>_impl.md` for phase `<phase name>`."
 
-Reminder: `/sm phase` does not change phase status. When the phase actually starts or closes, edit the `## Phases` table in `task_plan.md` per the using-sm skill.
+Reminder: `/super-manus:phase` does not change phase status. When the phase actually starts or closes, edit the `## Phases` table in `task_plan.md` per the using-sm skill.

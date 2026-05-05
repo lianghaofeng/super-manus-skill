@@ -17,6 +17,6 @@ If it exits zero, the script printed the absolute path of the created folder. Te
 > - `findings.md` — log decisions, errors, research as you work
 > - `progress.md` — auto-managed by hooks (do not hand-edit)
 >
-> Run `/sm catchup` any time to re-load the plan into context.
+> Run `/super-manus:catchup` any time to re-load the plan into context.
 
 Then load the new task_plan.md by reading `<path>/task_plan.md` so you have it in context for the rest of the session.

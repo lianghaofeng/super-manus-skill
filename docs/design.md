@@ -23,11 +23,11 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 **In:**
 - Per-feature folder layout (parallel-feature safe)
 - Three canonical persistent files per feature: `task_plan.md` / `findings.md` / `progress.md`
-- On-demand per-phase implementation plans under `tasks/p<n>_impl.md` (lazy-created by `/sm phase <n>`; planning-detail container only — not a TDD task spec)
+- On-demand per-phase implementation plans under `tasks/p<n>_impl.md` (lazy-created by `/super-manus:phase <n>`; planning-detail container only — not a TDD task spec)
 - SessionStart hook: auto-restore active feature's `task_plan.md`
 - SessionEnd hook: main agent writes session-level summary to `progress.md`
 - PostToolUse hook on `git commit`: main agent writes one-line commit summary, updates phase status
-- Slash commands: `/sm start <name>` / `/sm switch <name>` / `/sm catchup` / `/sm phase <n>`
+- Slash commands: `/super-manus:start <name>` / `/super-manus:switch <name>` / `/super-manus:catchup` / `/super-manus:phase <n>`
 - A `using-sm` skill that documents read/write conventions for the main agent
 
 **Out (deferred to v0.2+):**
@@ -49,7 +49,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
         └── tasks/                              # phase-level implementation plans (lazy)
-            └── p<n>_impl.md                         # one per active phase, created by /sm phase <n> (v0.2 may add a runner)
+            └── p<n>_impl.md                         # one per active phase, created by /super-manus:phase <n> (v0.2 may add a runner)
 ```
 
 ### File responsibilities
@@ -60,7 +60,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 | `findings.md` | LLM | Research finding, decision made, error logged |
 | `progress.md` | LLM (via hooks) | Each `git commit`, each session end |
 | `tasks/p<n>_impl.md` | LLM | Phase entered `in_progress` and needs an implementation plan; updated as approach evolves |
-| `.super-manus/active` | `/sm start` and `/sm switch` commands | Feature created or switched |
+| `.super-manus/active` | `/super-manus:start` and `/super-manus:switch` commands | Feature created or switched |
 
 ### task_plan.md schema (minimal — it's the SessionStart-injected file)
 
@@ -80,7 +80,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 ```
 
 **Status values:** `pending` / `in_progress` / `blocked` / `closed`.
-**No errors, decisions, or code here** — errors/decisions go in `findings.md`; per-phase implementation plans go in `tasks/p<n>_impl.md` (see §6 `/sm phase`).
+**No errors, decisions, or code here** — errors/decisions go in `findings.md`; per-phase implementation plans go in `tasks/p<n>_impl.md` (see §6 `/super-manus:phase`).
 
 ### findings.md schema (loose, free-form sections)
 
@@ -167,12 +167,12 @@ super-manus/
 │   ├── refresh-outstanding.sh       # regenerates "## Outstanding" section, no LLM
 │   ├── sm-start.sh
 │   ├── sm-switch.sh
-│   └── sm-phase.sh                  # /sm phase <n> — lazy-create tasks/p<n>_impl.md
+│   └── sm-phase.sh                  # /super-manus:phase <n> — lazy-create tasks/p<n>_impl.md
 ├── commands/
-│   ├── start.md                     # /sm start <name>
-│   ├── switch.md                    # /sm switch <name>
-│   ├── catchup.md                   # /sm catchup (manual re-run of session-start logic)
-│   └── phase.md                     # /sm phase <n> (open or seed a per-phase impl plan)
+│   ├── start.md                     # /super-manus:start <name>
+│   ├── switch.md                    # /super-manus:switch <name>
+│   ├── catchup.md                   # /super-manus:catchup (manual re-run of session-start logic)
+│   └── phase.md                     # /super-manus:phase <n> (open or seed a per-phase impl plan)
 ├── skills/
 │   └── using-sm/SKILL.md            # how to read/write the three files
 ├── templates/
@@ -216,7 +216,7 @@ super-manus/
 
 **`session-start`** (catchup)
 - Read `.super-manus/active` → resolve current feature folder
-- If no active feature: inject a small reminder ("no active super-manus feature; run `/sm start <name>` to begin"). Do nothing else.
+- If no active feature: inject a small reminder ("no active super-manus feature; run `/super-manus:start <name>` to begin"). Do nothing else.
 - If active: inject **only `task_plan.md` full text** + 1 line pointing to findings.md / progress.md paths.
 - Token budget: ~500–1500 tokens depending on plan size.
 
@@ -243,25 +243,25 @@ super-manus/
 
 ## 6. Commands
 
-### `/sm start <feature-name>`
+### `/super-manus:start <feature-name>`
 - Validate `<feature-name>` (no spaces, lowercase-kebab-case)
 - Compute folder path: `docs/super-manus/<TODAY>-<feature-name>/`
-- If folder exists: error, suggest `/sm switch`
+- If folder exists: error, suggest `/super-manus:switch`
 - Otherwise: copy templates, write `.super-manus/active` with folder name
 - Print confirmation + path
 
-### `/sm switch <feature-name>`
+### `/super-manus:switch <feature-name>`
 - List existing folders if `<feature-name>` ambiguous
 - Match exact folder or unique substring
 - Update `.super-manus/active`
 - Trigger `session-start` hook logic to inject the new feature's `task_plan.md`
 
-### `/sm catchup`
+### `/super-manus:catchup`
 - Manual re-run of `session-start` logic
 - Useful when context drifted mid-session and main agent needs re-orientation
 - No state change, just re-injection
 
-### `/sm phase <n>`
+### `/super-manus:phase <n>`
 - Validate `<n>` is a positive integer matching a row in the active feature's `task_plan.md ## Phases` table
 - Resolve target path: `<feature-folder>/tasks/p<n>_impl.md`
 - If file exists: print its absolute path so the main agent can open it
@@ -320,7 +320,7 @@ super-manus and superpowers can both be installed. They don't fight:
 
 - super-manus owns: SessionStart / Stop / PostToolUse hooks (state layer)
 - superpowers owns: SessionStart hook (skill bootstrap) — both fire, both inject, no conflict
-- super-manus skills don't auto-trigger; only `using-sm` is invoked when user runs `/sm *`
+- super-manus skills don't auto-trigger; only `using-sm` is invoked when user runs `/super-manus:*`
 - Plans written by superpowers' writing-plans (`docs/plans/*.md`) are independent of super-manus' feature folders. User can keep using both: writing-plans for TDD execution plans, super-manus for cross-session feature state.
 
 ## 10. Distribution
@@ -345,7 +345,7 @@ super-manus and superpowers can both be installed. They don't fight:
 
 The plugin is "v0.1 done" when, in teachagent's own development:
 
-1. ✅ Run `/sm start refactor-x` → folder created, templates filled
+1. ✅ Run `/super-manus:start refactor-x` → folder created, templates filled
 2. ✅ Work for an hour, make 2 commits → progress.md auto-populates with 2 commit lines
 3. ✅ Run `/clear` → next message, main agent already knows current phase + recent commits without being told
 4. ✅ Phase status in task_plan.md auto-updates when a closing commit lands
@@ -362,13 +362,13 @@ If 1–6 all work for one real feature in teachagent, ship as v0.1.0.
 - **No PR creation / merge integration** — separate concerns
 - **No multi-language commit message parsing** — D-trigger reads commit hash + message verbatim, doesn't interpret
 - **No conflict resolution if main agent writes progress.md and post-commit fires concurrently** — single-threaded by Claude Code's tool execution model
-- **No auto-generation of phase plan content** — `/sm phase <n>` only seeds the template; the Objective / Approach / etc. are filled by the main agent or user, consistent with v0.1's "persistence only" stance
+- **No auto-generation of phase plan content** — `/super-manus:phase <n>` only seeds the template; the Objective / Approach / etc. are filled by the main agent or user, consistent with v0.1's "persistence only" stance
 
 ## 14. Open questions deferred to implementation
 
 - Exact wording of hook injection prompts (will iterate during implementation, not design-time)
 - Template content for `task_plan.md` / `findings.md` / `progress.md` (draft during implementation)
-- Whether `/sm catchup` should also reload findings.md or stay task_plan.md only (likely task_plan.md only, but verify with usage)
+- Whether `/super-manus:catchup` should also reload findings.md or stay task_plan.md only (likely task_plan.md only, but verify with usage)
 - Cross-platform polyglot wrapper details for `run-hook.cmd` (port from superpowers verbatim)
 
 ## 15. Next steps after this design

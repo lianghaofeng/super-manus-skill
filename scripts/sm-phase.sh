@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# /sm phase <n> — open or seed the per-phase implementation plan tasks/p<n>_impl.md
+# /super-manus:phase <n> — open or seed the per-phase implementation plan tasks/p<n>_impl.md
 # for the active feature. Pure persistence: copies template, substitutes <n>
 # and <phase name> from task_plan.md ## Phases. Idempotent: if the file already
 # exists, prints its path and exits 0 without modifying it.
@@ -24,7 +24,7 @@ if [ -z "$ROOT" ] || [ ! -f "$ROOT/templates/phase_plan.md" ]; then
 fi
 
 if [ ! -f .super-manus/active ]; then
-  echo "sm-phase: no active super-manus feature (run /sm start <name> first)" >&2
+  echo "sm-phase: no active super-manus feature (run /super-manus:start <name> first)" >&2
   exit 1
 fi
 basename=$(cat .super-manus/active)

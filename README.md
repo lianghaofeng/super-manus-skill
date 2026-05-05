@@ -32,10 +32,10 @@ On first install, you may need to restart your Claude Code session for hooks to 
 ## Quickstart
 
 ```
-/sm start my-feature       # creates docs/super-manus/<date>-my-feature/
+/super-manus:start my-feature       # creates docs/super-manus/<date>-my-feature/
                            # with task_plan.md / findings.md / progress.md
 ... work, edit files, take notes in findings.md ...
-/sm phase 1                # when phase 1 needs an impl plan; seeds tasks/p1_impl.md
+/super-manus:phase 1                # when phase 1 needs an impl plan; seeds tasks/p1_impl.md
 git commit -m "..."        # post-commit hook prompts agent to log the commit
 /clear                     # safe — state is on disk
 ... next session ...       # SessionStart hook restores task_plan.md automatically
@@ -64,7 +64,7 @@ super-manus and superpowers can both be installed; they don't fight:
 
 - super-manus owns SessionStart / Stop / PostToolUse hooks for the **state layer**.
 - superpowers owns its own SessionStart hook for skill bootstrap — both fire, both inject, no conflict.
-- super-manus skills don't auto-trigger; `using-sm` is invoked only when you run `/sm *`.
+- super-manus skills don't auto-trigger; `using-sm` is invoked only when you run `/super-manus:*`.
 - Plans written by superpowers' `writing-plans` (`docs/plans/*.md`) are independent of super-manus' feature folders. Use `writing-plans` for TDD execution plans and super-manus for cross-session feature state.
 
 ## Layout
@@ -81,7 +81,7 @@ The on-disk layout super-manus creates inside a project that uses it:
         ├── findings.md                         # research / decisions / errors (LLM-maintained)
         ├── progress.md                         # commit log + session summaries (LLM-written, structured)
         └── tasks/
-            └── p<n>_impl.md                         # per-phase implementation plan (lazy, /sm phase <n>)
+            └── p<n>_impl.md                         # per-phase implementation plan (lazy, /super-manus:phase <n>)
 ```
 
 ## Status

@@ -1,4 +1,4 @@
-<!-- Per-phase implementation plan. Lazy-created by `/sm phase <n>`. Headings are stable — keep them. -->
+<!-- Per-phase implementation plan. Lazy-created by `/super-manus:phase <n>`. Headings are stable — keep them. -->
 <!-- This is where code, pseudo-code, and implementation detail belong. task_plan.md stays an index. -->
 # Phase <n>: <phase name>
 

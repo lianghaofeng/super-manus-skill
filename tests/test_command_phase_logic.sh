@@ -24,7 +24,7 @@ if sm_phase "abc" 2>/dev/null; then echo "FAIL: non-numeric phase should be reje
 # Case C: no active feature → exit non-zero
 if sm_phase "1" 2>/dev/null; then echo "FAIL: missing active feature should be rejected"; exit 1; fi
 
-# Case D: happy path — start a feature, customize phases table, then call /sm phase 1
+# Case D: happy path — start a feature, customize phases table, then call /super-manus:phase 1
 sm_start "demo" >/dev/null
 TODAY=$(date +%F)
 FOLDER="docs/super-manus/${TODAY}-demo"

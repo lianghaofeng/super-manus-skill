@@ -4,7 +4,7 @@
 
 **Goal:** Ship a Claude Code plugin that gives any project persistent feature-state across `/clear` and `/compact` boundaries via three on-disk files (`task_plan.md` / `findings.md` / `progress.md`) maintained by hook-driven LLM writes.
 
-**Architecture:** Pure plugin — no external services, no API keys. Three SessionStart / Stop / PostToolUse hooks inject one-paragraph reminders into the main agent's context, which then performs all reads/writes. Three slash commands (`/sm start|switch|catchup`) manage the active feature pointer (`.super-manus/active`). One `using-sm` skill teaches the read/write conventions. One pure-shell helper (`refresh-outstanding.sh`) regenerates the read-only Outstanding section without LLM cost.
+**Architecture:** Pure plugin — no external services, no API keys. Three SessionStart / Stop / PostToolUse hooks inject one-paragraph reminders into the main agent's context, which then performs all reads/writes. Three slash commands (`/super-manus:start|switch|catchup`) manage the active feature pointer (`.super-manus/active`). One `using-sm` skill teaches the read/write conventions. One pure-shell helper (`refresh-outstanding.sh`) regenerates the read-only Outstanding section without LLM cost.
 
 **Tech Stack:** POSIX shell (bash), markdown templates, JSON manifests. Polyglot `.cmd` wrapper borrowed from superpowers for cross-platform hook invocation. No package manager, no compile step. Tests are bats-style shell scripts (run script in temp dir, assert stdout/files).
 
@@ -132,7 +132,7 @@ Sections (in order, ~150 lines total):
 1. **What** — one paragraph from `design.md §1`.
 2. **Why** — one paragraph from `design.md §2`.
 3. **Install** — `cd ~/.claude/plugins && git clone <repo> super-manus` then `/plugin reload`.
-4. **Quickstart** — `/sm start my-feature` → work → `git commit` → `/clear` → next session resumes automatically.
+4. **Quickstart** — `/super-manus:start my-feature` → work → `git commit` → `/clear` → next session resumes automatically.
 5. **What it does NOT do** — bullets from `design.md §3 Out` and `§13`.
 6. **Coexistence with superpowers** — short blurb from `design.md §9`.
 7. **Layout** — copy the tree from `design.md §4`.
@@ -174,7 +174,7 @@ git commit -m "docs: add README, LICENSE, contributor guide"
 
 ## Phase 2 — Templates
 
-Goal: three template files that `/sm start` will copy. Schema must match `design.md §4`.
+Goal: three template files that `/super-manus:start` will copy. Schema must match `design.md §4`.
 
 ### Task 2.1: task_plan.md template
 
@@ -199,7 +199,7 @@ echo OK
 
 **Step 2: Run, expect FAIL.**
 
-**Step 3: Implement template** matching `design.md §4` task_plan.md schema verbatim. Use `<feature title>` as a placeholder that `/sm start` will substitute. Include a one-line HTML comment at top stating "this file is auto-injected by SessionStart — keep headings stable".
+**Step 3: Implement template** matching `design.md §4` task_plan.md schema verbatim. Use `<feature title>` as a placeholder that `/super-manus:start` will substitute. Include a one-line HTML comment at top stating "this file is auto-injected by SessionStart — keep headings stable".
 
 **Step 4: Run, expect OK. Commit.**
 
@@ -395,9 +395,9 @@ echo '{}'
 
 ## Phase 5 — Slash commands
 
-Goal: `/sm start`, `/sm switch`, `/sm catchup` work. Slash commands are markdown prompt files; the LLM reads them and executes the described shell. We test by simulating the shell parts in the test runner — but the prose itself we just structurally validate.
+Goal: `/super-manus:start`, `/super-manus:switch`, `/super-manus:catchup` work. Slash commands are markdown prompt files; the LLM reads them and executes the described shell. We test by simulating the shell parts in the test runner — but the prose itself we just structurally validate.
 
-### Task 5.1: /sm start
+### Task 5.1: /super-manus:start
 
 **Files:**
 - Create: `commands/start.md`
@@ -430,14 +430,14 @@ description: Create a new super-manus feature folder and set it active
 Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/sm-start.sh "$ARGUMENTS"` from the project root.
 
 If the script exits non-zero, surface the stderr to the user verbatim.
-On success, tell the user: "Started feature `<name>` at `<path>`. Run `/sm catchup` any time to re-load the plan."
+On success, tell the user: "Started feature `<name>` at `<path>`. Run `/super-manus:catchup` any time to re-load the plan."
 ```
 
-**Step 5: Run test, expect OK. Commit `feat: /sm start command`.**
+**Step 5: Run test, expect OK. Commit `feat: /super-manus:start command`.**
 
 ---
 
-### Task 5.2: /sm switch
+### Task 5.2: /super-manus:switch
 
 Same pattern as 5.1.
 
@@ -452,11 +452,11 @@ Same pattern as 5.1.
 
 `tests/test_command_switch_logic.sh`: builds three fake feature folders, asserts exact match wins, unique substring matches, ambiguous fails, missing fails.
 
-Commit `feat: /sm switch command`.
+Commit `feat: /super-manus:switch command`.
 
 ---
 
-### Task 5.3: /sm catchup
+### Task 5.3: /super-manus:catchup
 
 `commands/catchup.md`: tells the main agent to re-run the session-start hook script directly:
 
@@ -471,7 +471,7 @@ Run `bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh` and treat its `additiona
 No script needed (the hook script itself is the implementation).
 No new logic test (covered by Phase 6 session-start tests).
 
-Commit `feat: /sm catchup command`.
+Commit `feat: /super-manus:catchup command`.
 
 ---
 
@@ -530,7 +530,7 @@ source "${SCRIPT_DIR}/lib.sh"
 
 folder=$(sm_active_folder || true)
 if [ -z "$folder" ] || [ ! -f "$folder/task_plan.md" ]; then
-  emit_context "SessionStart" "No active super-manus feature in this project. Run \`/sm start <name>\` to begin one, or \`/sm switch <name>\` to resume an existing one."
+  emit_context "SessionStart" "No active super-manus feature in this project. Run \`/super-manus:start <name>\` to begin one, or \`/super-manus:switch <name>\` to resume an existing one."
   exit 0
 fi
 
@@ -547,7 +547,7 @@ emit_context "SessionStart" "$text"
 
 Document a smoke procedure in `tests/SMOKE.md`:
 1. Symlink the repo into `~/.claude/plugins/super-manus`.
-2. In a sandbox project: run `/sm start smoketest`, then `/clear`, then prompt the agent "what feature are we on?" — expect it to reference the demo plan.
+2. In a sandbox project: run `/super-manus:start smoketest`, then `/clear`, then prompt the agent "what feature are we on?" — expect it to reference the demo plan.
 
 This is a checklist for the human, not an automated test. Commit `docs: smoke test procedure`.
 
@@ -791,7 +791,7 @@ Commit any fixes as `fix: <description>`.
 Per `design.md §12` success criteria, run all six checks against this repo:
 
 1. Symlink `super-manus/` → `~/.claude/plugins/super-manus`. Reload Claude Code.
-2. In a NEW sandbox project, run `/sm start dogfood-1`. Verify folder + templates appear.
+2. In a NEW sandbox project, run `/super-manus:start dogfood-1`. Verify folder + templates appear.
 3. Make 2 commits. Verify `progress.md ## Completed commits` got two entries.
 4. Run `/clear`. Verify next message shows agent referencing the active feature without prompting.
 5. Verify any phase status update lands in `task_plan.md` automatically.
