@@ -17,21 +17,6 @@ folder=$(sm_active_folder || true)
 [ -n "$folder" ] || { echo '{}'; exit 0; }
 [ -f "$folder/progress.md" ] || { echo '{}'; exit 0; }
 
-text="Session ending. Before stopping, write a session log entry to \`$folder/progress.md\`. Steps:
-
-1. **Re-read** \`$folder/progress.md ## Completed commits\` — those are the source of truth, not your memory of what happened this session.
-2. Identify entries added this session (compare against the existing \`## Session log\` to see where the last session ended).
-3. Append a new entry to \`$folder/progress.md ## Session log\` (newest first), formatted:
-
-   \`\`\`
-   ### Session <YYYY-MM-DD> #<N> (<HH:MM> – <HH:MM>)
-   - <closed phases / key commits this session>
-   - 卡点 / blockers (if any)
-   - Next session should first: <one concrete action>
-   \`\`\`
-
-4. If any phase is now blocked, flip its row in \`$folder/task_plan.md\` Phases table to \`blocked\` with a one-line note explaining the block.
-
-Do this BEFORE you stop — the user is waiting on the next session being able to resume cleanly."
+text="Session ending. Re-read \`$folder/progress.md ## Completed commits\` (source of truth), then prepend one entry to \`## Session log\`: \`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\` + 3 bullets (closed phases / blockers / next session first action). If any phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
 
 emit_context "Stop" "$text"
