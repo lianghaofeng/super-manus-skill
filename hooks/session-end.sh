@@ -14,7 +14,8 @@ folder=$(sm_active_folder || true)
 
 # Stop hooks fire at the end of EACH agent reply, not just at session end.
 # Triggering a session-log write on every reply spams progress.md, so we count
-# turns and only trigger every N turns (default 10; override via env).
+# turns and only trigger every N turns (default 5; override via SUPER_MANUS_LOG_EVERY_N_TURNS).
+# Cadence policy is governed by SUPER_MANUS_LOG_MODE (turns / commit / both / off).
 # State file format: "<session_id> <turn_count>" on a single line.
 state_file="$folder/.session-state"
 session_id=$(sm_payload_field "$payload" "session_id")

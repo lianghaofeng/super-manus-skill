@@ -6,7 +6,15 @@ user-invocable: false
 
 # using-sm
 
-The super-manus plugin keeps a small set of persistent files per feature so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol. Follow it whenever a `/sm` command runs or a hook reminder references "the using-sm skill conventions".
+The super-manus plugin keeps a small set of persistent files per feature so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol. Follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions".
+
+User-facing commands (all in the `/super-manus:` namespace):
+
+- `/super-manus:start <name>` — create a new feature folder + activate it
+- `/super-manus:switch <name>` — switch to an existing feature
+- `/super-manus:catchup` — re-inject the active plan into context mid-session
+- `/super-manus:phase <n>` — open or seed the per-phase implementation plan `tasks/p<n>_impl.md`
+- `/super-manus:log` — write a `## Session log` entry on demand (no LLM judgment, force-write)
 
 ## 1. Where state lives
 
@@ -39,8 +47,8 @@ The super-manus plugin keeps a small set of persistent files per feature so stat
 - `## Data points / research`: free-form — smoke results, screenshots-as-text, eval numbers, links.
 
 **`progress.md`** — auto-managed; treat as read-only by default.
-- `## Completed commits`: the post-commit hook appends one line per `git commit`.
-- `## Session log`: the Stop hook appends one paragraph at session end.
+- `## Completed commits`: the post-commit hook appends one line per `git commit` (Bash-tool calls only — external terminal commits aren't seen).
+- `## Session log`: the Stop hook surfaces a checkpoint **every N turns OR when there are commits since the latest entry** (whichever fires first; default `N=5`, modes via `SUPER_MANUS_LOG_MODE`). When surfaced, you **judge** whether the activity warrants a new line — skip if not. `/super-manus:log` force-writes one immediately.
 - `## Outstanding`: regenerated from `task_plan.md` by `scripts/refresh-outstanding.sh` — never edit by hand.
 
 **`tasks/p<n>_impl.md`** — per-phase implementation plan (one file per phase, lazy).
@@ -55,7 +63,7 @@ The super-manus plugin keeps a small set of persistent files per feature so stat
 |---|---|
 | `task_plan.md` | A phase status changes (closed / in_progress / blocked); a new phase is added or split. |
 | `findings.md` | Any decision (with reasoning), any error encountered, any research finding worth surviving the session. |
-| `progress.md` | NEVER directly. Wait for a hook reminder. The PostToolUse (post-commit) hook will tell you to write to `## Completed commits`; the Stop hook will tell you to write to `## Session log`. |
+| `progress.md` | NEVER directly. Wait for a hook reminder, or be invoked via `/super-manus:log`. The PostToolUse (post-commit) hook will tell you to write to `## Completed commits`; the Stop hook checkpoint asks you to consider writing to `## Session log` (your call to skip if nothing log-worthy happened). |
 | `tasks/p<n>_impl.md` | A phase entered `in_progress` and is non-trivial; the approach changes mid-phase; the verification step changes. |
 
 ## 4. The 2-action rule

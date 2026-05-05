@@ -27,7 +27,7 @@ It does NOT re-implement superpowers' executor. v0.1 is **persistence only**. Us
 - SessionStart hook: auto-restore active feature's `task_plan.md`
 - SessionEnd hook: main agent writes session-level summary to `progress.md`
 - PostToolUse hook on `git commit`: main agent writes one-line commit summary, updates phase status
-- Slash commands: `/super-manus:start <name>` / `/super-manus:switch <name>` / `/super-manus:catchup` / `/super-manus:phase <n>`
+- Slash commands: `/super-manus:start <name>` / `/super-manus:switch <name>` / `/super-manus:catchup` / `/super-manus:phase <n>` / `/super-manus:log`
 - A `using-sm` skill that documents read/write conventions for the main agent
 
 **Out (deferred to v0.2+):**
@@ -172,7 +172,8 @@ super-manus/
 │   ├── start.md                     # /super-manus:start <name>
 │   ├── switch.md                    # /super-manus:switch <name>
 │   ├── catchup.md                   # /super-manus:catchup (manual re-run of session-start logic)
-│   └── phase.md                     # /super-manus:phase <n> (open or seed a per-phase impl plan)
+│   ├── phase.md                     # /super-manus:phase <n> (open or seed a per-phase impl plan)
+│   └── log.md                       # /super-manus:log (force-write a session log entry, reset counter)
 ├── skills/
 │   └── using-sm/SKILL.md            # how to read/write the three files
 ├── templates/
@@ -220,10 +221,13 @@ super-manus/
 - If active: inject **only `task_plan.md` full text** + 1 line pointing to findings.md / progress.md paths.
 - Token budget: ~500–1500 tokens depending on plan size.
 
-**`session-end`** (B-trigger)
-- Find commits made during this session (by checking commits since `progress.md`'s last "Session log" entry timestamp, or last hour as fallback)
-- Inject system reminder to main agent: "Session ending. Read `progress.md ## Completed commits`, identify commits from this session, write 1 paragraph (4–8 lines) to `## Session log` section as a new entry. Include: what closed, what's blocked, what next session should do first."
-- Main agent does the write before ending.
+**`session-end`** (B-trigger — runs on every Stop, but rate-limited)
+- Stop hooks fire at the end of every agent reply, not just at session end. To avoid spamming `## Session log`, the hook keeps a per-feature counter at `<folder>/.session-state` (`<session_id> <turn-count>`) and only surfaces a checkpoint when one of two signals fires (governed by `SUPER_MANUS_LOG_MODE`, default `both`):
+  - **turns** — count reaches `SUPER_MANUS_LOG_EVERY_N_TURNS` (default `5`)
+  - **commit** — `## Completed commits` has an entry newer than the latest `### Session …` header in `## Session log`
+- When surfaced, the hook returns `{"decision":"block","reason":text}` so the reminder actually reaches the model. Reason text asks the agent to **judge** whether the activity is worth a new line; if not, just stop. If yes, prepend a `### Session <date> #<n> (start–end)` block + 3 bullets (closed phases / blockers / next-session-first-action) and flip any newly blocked phase rows in `task_plan.md`.
+- After the agent writes (or decides to skip), it tries to stop again; the hook receives `stop_hook_active=true` in stdin, resets the counter to 0, and exits no-op so the loop terminates.
+- `/super-manus:log` is the manual escape hatch: force-write one entry, no judgment, also resets the counter.
 
 **`post-commit`** (D-trigger)
 - Detect `git commit` succeeded in the last Bash tool call (check exit code + command pattern)
@@ -267,6 +271,12 @@ super-manus/
 - If file exists: print its absolute path so the main agent can open it
 - Otherwise: copy `templates/phase_plan.md`, substitute `<n>` and `<phase name>` (read from the Phases row), create `tasks/` parent dir as needed, then print the path
 - No status mutation — entering `in_progress` is still the main agent's call via `task_plan.md` edit
+
+### `/super-manus:log`
+- Manual escape hatch when the user wants a `## Session log` entry now, regardless of the auto-trigger cadence
+- Resolves the active feature, reads `<folder>/progress.md ## Completed commits`, prepends one entry to `## Session log` (no judgment / no skip — user explicitly asked)
+- Resets `<folder>/.session-state` count to 0 so the next `SUPER_MANUS_LOG_EVERY_N_TURNS` window starts fresh
+- No-op (with helpful message) if there is no active feature
 
 ## 7. The `using-sm` skill (the agent-facing protocol)
 

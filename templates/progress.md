@@ -8,7 +8,7 @@
 
 ## Session log
 
-<!-- auto-appended by Stop hook at session end; one entry per session, newest first -->
+<!-- Stop hook surfaces a checkpoint every N turns or after a new commit (default N=5); the agent judges whether to write. /super-manus:log forces one. Newest entry first. -->
 
 (no sessions logged yet)
 
