@@ -1,0 +1,26 @@
+{
+  "name": "super-manus-skill",
+  "id": "super-manus-skill",
+  "owner": {
+    "name": "lianghaofeng",
+    "url": "https://github.com/lianghaofeng"
+  },
+  "metadata": {
+    "description": "Single-plugin marketplace for super-manus",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "super-manus",
+      "source": ".",
+      "description": "Persistent feature-state for Claude Code: survives /clear, generates progress journals from git history",
+      "version": "0.1.0",
+      "author": {
+        "name": "super-manus contributors"
+      },
+      "license": "MIT",
+      "keywords": ["state", "persistence", "manus", "planning", "hooks"],
+      "category": "workflow"
+    }
+  ]
+}
