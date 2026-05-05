@@ -54,14 +54,14 @@ SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
 TODAY=$(date +%F)
 FOLDER="docs/super-manus/${TODAY}-demo"
 
-# Case B: with default threshold (10), the first 9 turns are no-op; turn 10 blocks.
+# Case B: with default threshold (5), the first 4 turns are no-op; turn 5 blocks.
 rm -f "$FOLDER/.session-state"
-for i in 1 2 3 4 5 6 7 8 9; do
+for i in 1 2 3 4; do
   out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
-  assert_noop "$out" "Case B (turn $i, below default threshold 10)"
+  assert_noop "$out" "Case B (turn $i, below default threshold 5)"
 done
 out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
-assert_reminder "$out" "Case B (turn 10 hits threshold, blocks)"
+assert_reminder "$out" "Case B (turn 5 hits threshold, blocks)"
 
 # Case B2: stop_hook_active=true (agent done writing) → no-op AND counter reset to 0
 out=$(printf '{"stop_hook_active": true, "session_id": "sess-A"}' | bash hooks/session-end.sh)
@@ -69,13 +69,13 @@ assert_noop "$out" "Case B2 (stop_hook_active=true → reset counter, break the 
 [ -f "$FOLDER/.session-state" ] || { echo "FAIL: Case B2 should have written state"; exit 1; }
 [ "$(cat "$FOLDER/.session-state")" = "sess-A 0" ] || { echo "FAIL: Case B2 state should be reset to 0, got: $(cat "$FOLDER/.session-state")"; exit 1; }
 
-# Case B3: after reset, next 9 turns are no-op again
-for i in 1 2 3 4 5 6 7 8 9; do
+# Case B3: after reset, next 4 turns are no-op again
+for i in 1 2 3 4; do
   out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
   assert_noop "$out" "Case B3 (post-reset turn $i)"
 done
 out=$(printf '{"session_id":"sess-A"}' | bash hooks/session-end.sh)
-assert_reminder "$out" "Case B3 (post-reset turn 10 fires again — every-N-turns continues)"
+assert_reminder "$out" "Case B3 (post-reset turn 5 fires again — every-N-turns continues)"
 
 # Case B4: env override SUPER_MANUS_LOG_EVERY_N_TURNS=2 with a new session
 rm -f "$FOLDER/.session-state"

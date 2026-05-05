@@ -51,10 +51,12 @@ Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-
 
 Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>_impl.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
 
-**Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus rate-limits when it nudges the agent to write `progress.md ## Session log`. Two signals, OR'd by default:
+**Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus rate-limits when it surfaces the question to the agent. Two signals, OR'd by default:
 
-- `SUPER_MANUS_LOG_EVERY_N_TURNS` — fire every N turns (default `10`)
-- New commits since the latest `### Session …` entry — fire as soon as the post-commit hook records activity that the session log hasn't covered yet
+- `SUPER_MANUS_LOG_EVERY_N_TURNS` — surface every N turns (default `5`)
+- New commits since the latest `### Session …` entry — surface as soon as the post-commit hook records activity that the session log hasn't covered yet
+
+When either signal fires, the agent is asked to **judge** whether the activity is worth a new line. If the last few turns produced nothing log-worthy, the agent just stops; otherwise it prepends one entry to `## Session log`. So the cadence is "rate-limited prompt + LLM decision" rather than a forced write every time.
 
 Choose the policy via `SUPER_MANUS_LOG_MODE`:
 
@@ -63,7 +65,7 @@ Choose the policy via `SUPER_MANUS_LOG_MODE`:
 - `commit` — only on unlogged commits (best if you commit at meaningful checkpoints)
 - `off` — disable auto-fire entirely; use `/super-manus:log` for explicit triggers
 
-Either way, `/super-manus:log` writes one immediately and resets the turn counter. The post-commit hook is independent — every Bash-tool `git commit` still produces a `## Completed commits` line.
+`/super-manus:log` writes one immediately (no judgment, you said so) and resets the turn counter. The post-commit hook is independent — every Bash-tool `git commit` still produces a `## Completed commits` line.
 
 ## What it does NOT do
 

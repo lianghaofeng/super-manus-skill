@@ -19,7 +19,7 @@ folder=$(sm_active_folder || true)
 state_file="$folder/.session-state"
 session_id=$(sm_payload_field "$payload" "session_id")
 [ -n "$session_id" ] || session_id="unknown"
-threshold="${SUPER_MANUS_LOG_EVERY_N_TURNS:-10}"
+threshold="${SUPER_MANUS_LOG_EVERY_N_TURNS:-5}"
 
 # Agent just finished writing per our previous block. Reset counter and stop.
 if sm_stop_hook_active "$payload"; then
@@ -58,6 +58,6 @@ esac
 
 [ "$trigger" -eq 1 ] || { echo '{}'; exit 0; }
 
-text="Session ending. Re-read \`$folder/progress.md ## Completed commits\` (source of truth), then prepend one entry to \`## Session log\`: \`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\` + 3 bullets (closed phases / blockers / next session first action). If any phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
+text="Session checkpoint. Re-read \`$folder/progress.md ## Completed commits\` (source of truth), then judge: is the activity since the latest \`## Session log\` entry worth a new line? If not, just stop. If yes, prepend: \`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\` + 3 bullets (closed phases / blockers / next session first action). If a phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
 
 emit_context "Stop" "$text"
