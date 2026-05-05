@@ -51,16 +51,32 @@ assert_noop "$out" "Case A (no active feature)"
 # Case B: active feature exists with progress.md → emits Stop reminder
 mkdir -p .super-manus
 SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
+TODAY=$(date +%F)
+FOLDER="docs/super-manus/${TODAY}-demo"
 out=$(bash hooks/session-end.sh </dev/null)
 assert_reminder "$out" "Case B (active feature with progress.md, empty stdin)"
 
 # Case B2: same feature but Claude Code passes a payload without stop_hook_active → still emits
+# (use a fresh sentinel state — remove any leftover from prior cases)
+rm -f "$FOLDER/.session-logged"
 out=$(printf '{"session_id":"abc"}' | bash hooks/session-end.sh)
 assert_reminder "$out" "Case B2 (payload without stop_hook_active flag)"
 
-# Case B3: same feature but Claude Code passes stop_hook_active=true (re-stop after block) → no-op
+# Case B3: stop_hook_active=true (re-stop after block) → no-op AND records session_id as logged
+rm -f "$FOLDER/.session-logged"
 out=$(printf '{"stop_hook_active": true, "session_id": "abc"}' | bash hooks/session-end.sh)
 assert_noop "$out" "Case B3 (stop_hook_active=true → break the block loop)"
+[ -f "$FOLDER/.session-logged" ] || { echo "FAIL: Case B3 should have written sentinel"; exit 1; }
+[ "$(cat "$FOLDER/.session-logged")" = "abc" ] || { echo "FAIL: Case B3 sentinel content wrong: $(cat "$FOLDER/.session-logged")"; exit 1; }
+
+# Case B4: subsequent turn within same session (sentinel matches session_id) → no-op,
+# do NOT pester the agent on every reply
+out=$(printf '{"session_id":"abc"}' | bash hooks/session-end.sh)
+assert_noop "$out" "Case B4 (already logged this session → no-op for the rest of the session)"
+
+# Case B5: NEW session (different session_id) → block again (one log per session)
+out=$(printf '{"session_id":"different-session"}' | bash hooks/session-end.sh)
+assert_reminder "$out" "Case B5 (new session_id → block again, one log per session)"
 
 # Case C: active file points to ghost folder → no-op
 echo "2026-05-04-ghost" > .super-manus/active

@@ -96,4 +96,12 @@ sm_stop_hook_active '{"stop_hook_active": false}' && { echo "FAIL: explicit fals
 sm_stop_hook_active '{"stop_hook_active": true}' || { echo "FAIL: true payload should be true"; exit 1; }
 sm_stop_hook_active '{"foo": "bar", "stop_hook_active": true, "session_id": "abc"}' || { echo "FAIL: true payload with extras should be true"; exit 1; }
 
+# sm_payload_field: extracts string fields from payload, empty for missing / malformed
+[ "$(sm_payload_field '' session_id)" = "" ] || { echo "FAIL: empty payload should give empty"; exit 1; }
+[ "$(sm_payload_field 'not json' session_id)" = "" ] || { echo "FAIL: malformed payload should give empty"; exit 1; }
+[ "$(sm_payload_field '{}' session_id)" = "" ] || { echo "FAIL: missing field should give empty"; exit 1; }
+[ "$(sm_payload_field '{"session_id": "abc-123"}' session_id)" = "abc-123" ] || { echo "FAIL: should extract session_id"; exit 1; }
+[ "$(sm_payload_field '{"session_id": 42}' session_id)" = "" ] || { echo "FAIL: non-string field should give empty"; exit 1; }
+[ "$(sm_payload_field '{"foo":"bar","session_id":"x","stop_hook_active":true}' session_id)" = "x" ] || { echo "FAIL: should extract session_id with siblings"; exit 1; }
+
 echo OK

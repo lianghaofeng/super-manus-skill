@@ -59,3 +59,21 @@ except Exception:
 sys.exit(0 if d.get("stop_hook_active", False) else 1)
 '
 }
+
+# Echo the value of a top-level string field in the Stop-hook payload (e.g. "session_id").
+# Empty output if payload is missing, malformed, or field absent.
+sm_payload_field() {
+  local payload="${1:-}" field="${2:-}"
+  [ -n "$payload" ] || return 0
+  [ -n "$field" ] || return 0
+  printf '%s' "$payload" | FIELD="$field" python3 -c '
+import json, os, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+v = d.get(os.environ["FIELD"], "")
+if isinstance(v, str):
+    sys.stdout.write(v)
+'
+}
