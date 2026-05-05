@@ -1,7 +1,11 @@
-# super-manus — Design Doc (v0.1)
+# super-manus — Design Doc (v0.1) — SUPERSEDED
 
+> **This document is v0.1 and is superseded by [`design-v0.2.md`](design-v0.2.md). Do not use this as the current design source.**
+>
+> v0.2 reshapes the model around a two-axis (module × milestone) structure: PRD becomes a folder with one file per module, implementation work happens in per-module per-milestone update folders that internally reuse the v0.1 four-file set, and PRD ↔ implementation drift is actively detected and reconciled. v0.1 is kept as historical record for the initial release.
+>
 > Validated through brainstorming session 2026-05-04.
-> Status: design locked, ready to enter writing-plans.
+> Status: superseded 2026-05-06.
 
 ## 1. What it is
 
