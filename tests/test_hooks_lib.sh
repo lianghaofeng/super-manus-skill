@@ -104,4 +104,57 @@ sm_stop_hook_active '{"foo": "bar", "stop_hook_active": true, "session_id": "abc
 [ "$(sm_payload_field '{"session_id": 42}' session_id)" = "" ] || { echo "FAIL: non-string field should give empty"; exit 1; }
 [ "$(sm_payload_field '{"foo":"bar","session_id":"x","stop_hook_active":true}' session_id)" = "x" ] || { echo "FAIL: should extract session_id with siblings"; exit 1; }
 
+# sm_has_unlogged_commits: progress.md timestamp comparison
+TMP_PROG=$(mktemp)
+trap 'rm -f "$TMP_PROG"' RETURN
+
+# Missing file → false
+sm_has_unlogged_commits "/nonexistent/$$.md" && { echo "FAIL: missing file should be false"; exit 1; } || true
+
+# Empty progress.md (no sections) → false
+> "$TMP_PROG"
+sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: empty progress should be false"; exit 1; } || true
+
+# Only commits, no session log → true (commits exist, none narrated)
+cat > "$TMP_PROG" <<'EOF'
+# Progress: x
+## Completed commits
+- 2026-05-05 09:00 · `abc123` · advanced P1
+## Session log
+EOF
+sm_has_unlogged_commits "$TMP_PROG" || { echo "FAIL: commits without log should be true"; exit 1; }
+
+# Commit older than latest log entry → false (already narrated)
+cat > "$TMP_PROG" <<'EOF'
+# Progress: x
+## Completed commits
+- 2026-05-05 09:00 · `abc123` · advanced P1
+## Session log
+### Session 2026-05-05 #1 (10:00 – 11:00)
+- closed P1
+EOF
+sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: commit older than log should be false"; exit 1; } || true
+
+# New commit after the latest log entry → true (unlogged)
+cat > "$TMP_PROG" <<'EOF'
+# Progress: x
+## Completed commits
+- 2026-05-05 09:00 · `abc123` · advanced P1
+- 2026-05-05 12:30 · `def456` · closed P2
+## Session log
+### Session 2026-05-05 #1 (10:00 – 11:00)
+- closed P1
+EOF
+sm_has_unlogged_commits "$TMP_PROG" || { echo "FAIL: newer commit than latest log should be true"; exit 1; }
+
+# No commits at all → false (nothing to log)
+cat > "$TMP_PROG" <<'EOF'
+# Progress: x
+## Completed commits
+## Session log
+### Session 2026-05-05 #1 (10:00 – 11:00)
+- nothing happened
+EOF
+sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: no commits should be false"; exit 1; } || true
+
 echo OK

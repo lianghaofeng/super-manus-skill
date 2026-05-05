@@ -51,7 +51,19 @@ Other commands: `/super-manus:switch <feature>` to swap active feature, `/super-
 
 Phase status, commit log, and session summaries all accrue to the feature folder; per-phase implementation plans live under `tasks/p<n>_impl.md` so `task_plan.md` stays a clean index. You read them, the agent reads them, and `/clear` no longer costs you context.
 
-**Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus counts turns and only nudges the agent to write `progress.md ## Session log` every 10 turns by default. Override with `SUPER_MANUS_LOG_EVERY_N_TURNS=<n>` in your environment, or call `/super-manus:log` to write one immediately. Note: the post-commit hook is unaffected — every Bash-tool `git commit` still produces a `## Completed commits` line.
+**Session log cadence**: the Stop hook fires at the end of every agent reply, so super-manus rate-limits when it nudges the agent to write `progress.md ## Session log`. Two signals, OR'd by default:
+
+- `SUPER_MANUS_LOG_EVERY_N_TURNS` — fire every N turns (default `10`)
+- New commits since the latest `### Session …` entry — fire as soon as the post-commit hook records activity that the session log hasn't covered yet
+
+Choose the policy via `SUPER_MANUS_LOG_MODE`:
+
+- `both` (default) — whichever signal fires first
+- `turns` — turn count only
+- `commit` — only on unlogged commits (best if you commit at meaningful checkpoints)
+- `off` — disable auto-fire entirely; use `/super-manus:log` for explicit triggers
+
+Either way, `/super-manus:log` writes one immediately and resets the turn counter. The post-commit hook is independent — every Bash-tool `git commit` still produces a `## Completed commits` line.
 
 ## What it does NOT do
 

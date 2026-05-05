@@ -93,6 +93,65 @@ out=$(printf '{"session_id":"sess-D"}' | bash hooks/session-end.sh)
 assert_noop "$out" "Case B5 (different session_id resets counter to 1, below threshold)"
 [ "$(awk '{print $2}' "$FOLDER/.session-state")" = "1" ] || { echo "FAIL: Case B5 should have reset count to 1, got: $(cat "$FOLDER/.session-state")"; exit 1; }
 
+# Case M1: SUPER_MANUS_LOG_MODE=off → never trigger, even after threshold
+rm -f "$FOLDER/.session-state"
+for i in $(seq 1 15); do
+  out=$(printf '{"session_id":"sess-OFF"}' | SUPER_MANUS_LOG_MODE=off bash hooks/session-end.sh)
+  assert_noop "$out" "Case M1 mode=off, turn $i (must never trigger)"
+done
+
+# Case M2: mode=commit → ignores turn count, fires only on unlogged commit
+rm -f "$FOLDER/.session-state"
+# Replace progress.md with one that has a commit but no session log → unlogged
+cat > "$FOLDER/progress.md" <<'EOF'
+# Progress: demo
+## Completed commits
+- 2026-05-05 09:00 · `abc123` · advanced P1
+## Session log
+EOF
+out=$(printf '{"session_id":"sess-COMMIT"}' | SUPER_MANUS_LOG_MODE=commit bash hooks/session-end.sh)
+assert_reminder "$out" "Case M2 mode=commit + unlogged commit → block on turn 1"
+
+# Replace with progress.md where log is up-to-date → no unlogged commits
+cat > "$FOLDER/progress.md" <<'EOF'
+# Progress: demo
+## Completed commits
+- 2026-05-05 09:00 · `abc123` · advanced P1
+## Session log
+### Session 2026-05-05 #1 (10:00 – 11:00)
+- closed P1
+EOF
+rm -f "$FOLDER/.session-state"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  out=$(printf '{"session_id":"sess-COMMIT2"}' | SUPER_MANUS_LOG_MODE=commit bash hooks/session-end.sh)
+  assert_noop "$out" "Case M2 mode=commit + log up-to-date, turn $i (must stay no-op)"
+done
+
+# Case M3: mode=both (default) — turns hits threshold even without commit signal
+rm -f "$FOLDER/.session-state"
+# progress.md still has up-to-date log from M2 → no commit signal
+for i in 1 2; do
+  out=$(printf '{"session_id":"sess-BOTH"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=3 bash hooks/session-end.sh)
+  assert_noop "$out" "Case M3 mode=both, turn $i (below threshold 3)"
+done
+out=$(printf '{"session_id":"sess-BOTH"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=3 bash hooks/session-end.sh)
+assert_reminder "$out" "Case M3 mode=both, turn 3 (turns threshold hit)"
+
+# Case M4: mode=both — commit signal fires before threshold
+rm -f "$FOLDER/.session-state"
+# Add an unlogged commit to progress.md
+cat > "$FOLDER/progress.md" <<'EOF'
+# Progress: demo
+## Completed commits
+- 2026-05-05 09:00 · `abc123` · advanced P1
+- 2026-05-05 13:00 · `def456` · advanced P2
+## Session log
+### Session 2026-05-05 #1 (10:00 – 11:00)
+- closed P1
+EOF
+out=$(printf '{"session_id":"sess-BOTH2"}' | SUPER_MANUS_LOG_EVERY_N_TURNS=99 bash hooks/session-end.sh)
+assert_reminder "$out" "Case M4 mode=both, unlogged commit triggers immediately even with N=99"
+
 # Case C: active file points to ghost folder → no-op
 echo "2026-05-04-ghost" > .super-manus/active
 out=$(bash hooks/session-end.sh </dev/null)

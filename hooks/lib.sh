@@ -77,3 +77,46 @@ if isinstance(v, str):
     sys.stdout.write(v)
 '
 }
+
+# Returns 0 (true) if progress.md has commits in `## Completed commits` whose
+# latest timestamp is newer than the latest entry in `## Session log`. That is:
+# there is real activity (a commit) that has not yet been narrated in the log.
+# Returns 1 if up-to-date or no commits at all. Empty / missing file → 1.
+sm_has_unlogged_commits() {
+  local file="${1:-}"
+  [ -n "$file" ] && [ -f "$file" ] || return 1
+  python3 - "$file" <<'PY'
+import re, sys
+try:
+    text = open(sys.argv[1]).read()
+except Exception:
+    sys.exit(1)
+commit_ts = None
+log_ts = None
+section = None
+for line in text.splitlines():
+    if line.startswith("## "):
+        if "Completed commits" in line:
+            section = "commits"
+        elif "Session log" in line:
+            section = "log"
+        else:
+            section = None
+        continue
+    if section == "commits":
+        m = re.match(r"^\s*-\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", line)
+        if m and (commit_ts is None or m.group(1) > commit_ts):
+            commit_ts = m.group(1)
+    elif section == "log":
+        m = re.match(r"^###\s*Session\s+(\d{4}-\d{2}-\d{2})\s+#\d+\s*\((\d{2}:\d{2})", line)
+        if m:
+            ts = f"{m.group(1)} {m.group(2)}"
+            if log_ts is None or ts > log_ts:
+                log_ts = ts
+if commit_ts is None:
+    sys.exit(1)
+if log_ts is None:
+    sys.exit(0)
+sys.exit(0 if commit_ts > log_ts else 1)
+PY
+}

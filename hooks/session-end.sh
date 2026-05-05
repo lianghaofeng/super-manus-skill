@@ -38,10 +38,25 @@ fi
 count=$((count + 1))
 printf '%s %d\n' "$session_id" "$count" > "$state_file"
 
-# Below threshold → no-op for this turn.
-if [ "$count" -lt "$threshold" ]; then
-  echo '{}'; exit 0
-fi
+# Trigger mode:
+#   both    (default) — fire on whichever comes first: every-N-turns OR new commit
+#   turns             — only every-N-turns
+#   commit            — only when there's a new commit since last `### Session` entry
+#   off               — never auto-fire; users opt-in via /super-manus:log
+mode="${SUPER_MANUS_LOG_MODE:-both}"
+trigger=0
+case "$mode" in
+  off)    trigger=0 ;;
+  turns)  [ "$count" -ge "$threshold" ] && trigger=1 ;;
+  commit) sm_has_unlogged_commits "$folder/progress.md" && trigger=1 ;;
+  both|*)
+    if [ "$count" -ge "$threshold" ]; then trigger=1
+    elif sm_has_unlogged_commits "$folder/progress.md"; then trigger=1
+    fi
+    ;;
+esac
+
+[ "$trigger" -eq 1 ] || { echo '{}'; exit 0; }
 
 text="Session ending. Re-read \`$folder/progress.md ## Completed commits\` (source of truth), then prepend one entry to \`## Session log\`: \`### Session <YYYY-MM-DD> #<N> (<HH:MM>–<HH:MM>)\` + 3 bullets (closed phases / blockers / next session first action). If any phase is now blocked, flip its row in \`$folder/task_plan.md\` to \`blocked\`."
 
