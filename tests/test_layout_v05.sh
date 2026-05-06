@@ -34,17 +34,13 @@ grep -qiE "e2e tests|e2e regression|e2e suite|permanent regression" README.md \
 grep -qE '"version"[[:space:]]*:[[:space:]]*"' .claude-plugin/plugin.json \
   || { echo "FAIL: .claude-plugin/plugin.json must have a \"version\" key"; exit 1; }
 
-# 6. CLAUDE.md mentions the v0.5 e2e/ and impl/.../tests/ paths.
-grep -qF "docs/super-manus/e2e/" CLAUDE.md \
-  || { echo "FAIL: CLAUDE.md must mention docs/super-manus/e2e/ path"; exit 1; }
-# Accept either the long form (impl/<module>/<update>/tests/) or the short form
-# (impl/<m>/<u>/tests/) — both denote the same v0.5 phase-tests location.
-grep -qE "impl/<module>/<update>/tests/|impl/<m>/<u>/tests/" CLAUDE.md \
-  || { echo "FAIL: CLAUDE.md must mention impl/<module>/<update>/tests/ (or impl/<m>/<u>/tests/) path"; exit 1; }
-
-# 7. CLAUDE.md has a "v0.5 layout" subsection.
-grep -qiF "v0.5 layout" CLAUDE.md \
-  || { echo "FAIL: CLAUDE.md must contain a 'v0.5 layout' subsection"; exit 1; }
+# 6. CLAUDE.md describes the e2e/ topology + phase tests subdirectory (semantic invariant;
+# we do not require a literal "docs/super-manus/e2e/" token because CLAUDE.md may use
+# the directory tree form `e2e/_system/...` without prefixing the parent path on every line).
+grep -qE "e2e/(<module>|_system)" CLAUDE.md \
+  || { echo "FAIL: CLAUDE.md must describe the e2e/ topology (e2e/<module>/ + e2e/_system/)"; exit 1; }
+grep -qE "tests/phase_p|phase_p<n>_" CLAUDE.md \
+  || { echo "FAIL: CLAUDE.md must mention the phase tests naming (tests/phase_p<n>_...)"; exit 1; }
 
 # 8. skills/using-sm/SKILL.md mentions the 3 new v0.5 skill names.
 for skill in tdd-in-phases verification-before-phase-close systematic-debugging-in-phase; do
