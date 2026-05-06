@@ -1,8 +1,13 @@
 ---
-description: Surgically revise a single prd/<module>.md to absorb a confirmed implementation deviation — minimum edit, no changelog markers
+description: Structured edit on a single prd/<module>.md — add a new capability, tighten/split/demote/exclude an existing bullet. Forward iteration ("add a feature") or drift absorption (resolve a pending prd_drift row). Single-section minimum edit, no changelog markers.
 ---
 
-The user has decided that a PRD module should move (rather than the implementation reverting). This command makes the smallest edit that restores PRD ↔ implementation alignment for that module, while keeping `prd/<module>.md` readable as a current-state product snapshot.
+This command performs ONE structured edit on a single `prd/<module>.md`. Two trigger contexts share the same 5-option workflow:
+
+- **Forward iteration** — user wants to add a new `## What users get` bullet, tighten an existing one, or extend `## Quality bar` BEFORE any code is written. There is no drift to absorb; this is normal product evolution. After the edit, run `/super-manus:sync <module>` to scaffold the implementation milestone.
+- **Drift absorption** — user has decided that PRD should move (rather than the implementation reverting) to resolve a `pending` row in `prd_drift.md`. The edit restores PRD ↔ implementation alignment.
+
+Either mode produces a single-section, single-line edit with no changelog markers — `prd/<module>.md` stays a current-state product snapshot. The orchestrator detects which mode applies from `prd_drift.md` and adapts the lead question + post-edit bookkeeping accordingly.
 
 ## Setup
 
@@ -13,19 +18,30 @@ The user may pass the module as `$ARGUMENTS` (e.g. `/super-manus:prd-update api`
 Read in this order:
 
 1. `docs/super-manus/prd/<module>.md` — full file
-2. `docs/super-manus/prd_drift.md` — find the most recent row whose `Module` column matches and `Resolution` is `pending`. If none, ask the user once: "What's the deviation you want PRD to absorb? One sentence."
-3. The active update for this module — resolved by the most recently modified subfolder under `docs/super-manus/impl/<module>/`. Read its `task_plan.md ## Goal` and most recent `tasks/p<n>_impl.md ## Objective` if present, just to ground the conflict.
+2. `docs/super-manus/prd_drift.md` — find the most recent row whose `Module` column matches and `Resolution` is `pending`. **This determines the mode**:
+   - Matching row exists → **drift absorption** mode; the row's conflict description is the deviation to absorb.
+   - No matching row → **forward iteration** mode; ask the user once: "What edit do you want to make to `prd/<module>.md`? One sentence — the new bullet to add, the existing bullet to change, or the section to extend."
+3. The active update for this module (if any) — resolved by the most recently modified subfolder under `docs/super-manus/impl/<module>/`. Read its `task_plan.md ## Goal` and most recent `tasks/p<n>_impl.md ## Objective` if present. In drift mode this grounds the conflict; in forward mode this confirms the new bullet doesn't already exist in flight. If `docs/super-manus/impl/<module>/` is empty (forward mode on a fresh module), skip this step.
 
 ## The one question
 
-Ask exactly ONE multiple-choice question, then write. Do not bundle, do not follow up with architecture questions.
+Ask exactly ONE multiple-choice question, then write. Do not bundle, do not follow up with architecture questions. The lead phrasing varies by mode; the 5 options are identical.
 
+**Drift absorption mode** lead:
 > The conflict is `<one-line restatement of the deviation>`. Should the affected `prd/<module>.md` line be:
-> a) **Tighten** — keep the bullet, narrow the wording so reality fits
+
+**Forward iteration mode** lead:
+> Editing `prd/<module>.md` to `<one-line restatement of the user's intent>`. Should it be:
+
+Then in both modes, the same 5 options:
+
+> a) **Tighten** — keep the bullet, narrow the wording so reality fits (or the new intent narrows an existing bullet)
 > b) **Split** — replace one bullet with two, separating the original intent from the new capability
 > c) **Demote** — move the bullet from `## What users get` (or `## Quality bar`) to `## Open questions`, signalling it's no longer a firm commitment
 > d) **Exclude** — move the bullet into `## Out of scope`
 > e) **Add** — leave existing bullets alone, append one new bullet under the appropriate section
+
+In forward iteration mode, **Add** is the most common choice (new capability) and **Tighten** is the second most common (refining an existing bullet's wording before code lands). **Demote** / **Exclude** in forward mode usually mean the user changed their mind about scope before building.
 
 The user picks one letter and (optionally) supplies new wording. If they don't, draft it yourself in the user's working language (zh / en) — one short line, second-person concrete tone consistent with the rest of the file.
 
@@ -55,6 +71,10 @@ Use the Edit tool on `docs/super-manus/prd/<module>.md` with the smallest old_st
 
 ## After the edit lands
 
+Behavior is mode-dependent.
+
+### Drift absorption mode
+
 1. Append one entry to `docs/super-manus/impl/<module>/<latest-update>/findings.md ## Decisions` in the standard 3-line shape:
 
    ```
@@ -66,11 +86,18 @@ Use the Edit tool on `docs/super-manus/prd/<module>.md` with the smallest old_st
 
    Keep each line ≤ 1 sentence. No file paths, no code identifiers, no diff snippets.
 
-2. If a row in `docs/super-manus/prd_drift.md` had `Resolution = pending` for this module and matches the conflict, mark its Resolution column as `prd-update: <option-letter>`. Keep all other rows untouched.
+2. Mark the matching row in `docs/super-manus/prd_drift.md` from `Resolution = pending` to `Resolution = prd-update: <option-letter>`. Keep all other rows untouched.
 
 3. Do **not** write to `docs/super-manus/impl/<module>/<latest-update>/progress.md` — it is hook-managed.
 
-4. Tell the user, in one line: "PRD `<module>` updated — `<section>` `<option>`. Decision logged to `findings.md`. Resume the update."
+4. Tell the user, in one line: "PRD `<module>` updated — `<section>` `<option>`. Decision logged to `findings.md`. Drift row resolved. Resume the update."
+
+### Forward iteration mode
+
+1. **Skip the findings.md write.** There may be no active update yet (e.g. user is adding a brand-new capability that has no implementation milestone). Forward iteration is normal product evolution; the PRD edit alone is the record. `git log -p prd/<module>.md` is the audit trail.
+2. **Skip the prd_drift.md mark.** No pending row exists.
+3. Do **not** write to `progress.md`.
+4. Tell the user, in one line: "PRD `<module>` updated — added/changed `<section>` `<option>`. Run `/super-manus:sync <module>` to scaffold the implementation milestone for this bullet." (Or "...to extend the active milestone" if `docs/super-manus/impl/<module>/<latest-update>/` exists and is still `iterating` per `roadmap.md`.)
 
 ## When to refuse and redirect
 
