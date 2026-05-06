@@ -29,6 +29,8 @@ Concrete tells that you have slipped into mirror-test mode (rewrite if any apply
 
 Reference: `andrej-karpathy-skills:karpathy-guidelines` — surgical changes, surface assumptions, define verifiable success criteria, avoid overcomplication. Apply each point to every test.
 
+Code navigation: follow [skills/using-sm/SKILL.md §10](../skills/using-sm/SKILL.md) — when reading source for API surface, prefer LSP for known symbols, Grep/Glob for discovery, Read as last resort.
+
 ## Inputs
 
 The orchestrator provides these in its spawning prompt:

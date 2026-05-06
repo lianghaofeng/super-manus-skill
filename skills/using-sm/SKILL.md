@@ -238,6 +238,20 @@ The split is to prevent the implementing agent from gaming its own tests. Time b
 
 The end-of-update drift gate gains **Pass 3 — e2e coverage check** in v0.5: for every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist and pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
 
+## 10. Code navigation discipline
+
+When reading code (not editing), pick the cheapest tool that answers the question. Reading whole files burns context; grep matches strings and false-matches comments / unrelated names; LSP matches symbols. Use this order:
+
+- **Discovery** (find files, locate by literal text, search unknown patterns): `Grep` / `Glob`.
+- **Understanding** (definition / references / type info for a known symbol): `LSP` (`workspaceSymbol`, `documentSymbol`, `findReferences`, `goToDefinition`, `hover`).
+- **Last resort**: `Read` whole files only when LSP doesn't cover the language, or when you genuinely need surrounding prose / config / data context.
+
+Default for a known symbol = `LSP.goToDefinition` / `LSP.hover`, NOT `Read`. Default for "where is X?" = `Grep`, NOT `Read`. `Read` is for "I need to see this entire file end-to-end".
+
+This applies to **every super-manus agent that reads code** — `impl-architect` (when surveying existing code to draft `## Approach` / `## Files touched`), `impl-test-writer` (when reading source for API surface — class/fn names to import), `impl-code-writer` (when reading the codebase to plan edits). The Drift check protocol in §4 is the specific application of this rule for PRD↔code cross-checking; §10 is the general rule for all code reading.
+
+This is the single source of truth for code-navigation discipline. Agents reference §10; do NOT inline-duplicate the rule into agent personas (so future updates touch one file, not three).
+
 ---
 
 *The 2-action rule and 3-strike error protocol are borrowed from [planning-with-files](https://github.com/OthmanAdi/planning-with-files).*
