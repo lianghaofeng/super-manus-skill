@@ -1,33 +1,14 @@
 ---
 name: using-sm
-description: How to read and write super-manus state files (v0.5 — v0.4 project-global PRD layout + e2e/ permanent regression suite + impl/<m>/<u>/tests/ phase tests + 3-agent /super-manus:impl flow). Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
+description: How to read and write super-manus state files. Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
 user-invocable: false
 ---
 
-# using-sm (v0.5)
+# using-sm
 
-The super-manus plugin keeps a project-global folder on disk so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol for the **v0.5** layout. Follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions".
+super-manus keeps a project-global folder on disk so state survives `/clear`, `/compact`, and full session boundaries. This skill is the read/write protocol; follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions". Two axes: `module` (space) and `milestone update` (time). PRD is per-module target state (project-global, one snapshot per project); implementation work is per-module per-milestone time series.
 
-v0.5 keeps the entire v0.4 layout intact and adds two directories on top: `docs/super-manus/e2e/` (permanent regression, mirrors PRD) and `docs/super-manus/impl/<m>/<u>/tests/` (phase tests, milestone-scoped). The execution discipline is now self-sufficient — three skills (`tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase`) and a 3-agent `/super-manus:impl` pipeline (architect → test-writer → code-writer) replace the v0.4 single `impl-executor` and the previous reliance on `obra/superpowers`.
-
-The v0.4 model has **two axes**: `module` (space) and `milestone update` (time). PRD is per-module target state (project-global, one snapshot for the whole project); implementation work is per-module per-milestone time series.
-
-The "feature" abstraction from v0.2/v0.3 is gone. There is one project = one PRD. The per-feature timestamped wrapper folder (`<YYYY-MM-DD>-<feature>/`) was removed because it conflated two concepts: the PRD (a current-state snapshot of the whole project) and the impl time series (per-update milestones). Multi-product monorepos need multiple super-manus-enabled subdirectories (one per product).
-
-User-facing commands (all in the `/super-manus:` namespace):
-
-- `/super-manus:start` — enable super-manus in this project (no-arg, idempotent; seeds `docs/super-manus/{prd,impl}/`, `roadmap.md`, `prd_drift.md`)
-- `/super-manus:brainstorm` — 6-question Q&A; writes project-global `prd/_index.md` + per-module `prd/<module>.md` stubs (does NOT seed an update folder; user runs `sync` after audit)
-- `/super-manus:reverse-prd` — one-shot: scan an existing project, infer module split, generate `prd/_index.md` + per-module PRD stubs (user audits)
-- `/super-manus:sync <module>` — after a PRD edit, scaffold a new milestone-update folder for the chosen module, drift-checked against `prd/<module>.md`
-- `/super-manus:prd-update <module>` — structured 5-option edit on a single per-module PRD (no changelog markers, ≤2000 words, single-section). Two modes auto-detected from `prd_drift.md`: **forward iteration** (no pending row → user adds/tightens a bullet before coding; no findings.md write) and **drift absorption** (pending row → resolve the divergence; findings.md decision + drift-row Resolution flip)
-- `/super-manus:impl [target]` — run ONE pending phase end-to-end through the 3-agent pipeline (architect → test-writer → code-writer → verify → close), then stop. If that was the last pending phase, runs the end-of-update drift gate. DOGFOOD default — one user invocation = one phase shipped.
-- `/super-manus:impl-all` — POWER MODE. Loop through ALL pending phases of the active update without pausing. Same 3-agent pipeline + same drift checks per phase; the only difference vs `/super-manus:impl` is the orchestrator does not pause between phases. After the last phase, runs the end-of-update drift gate. Aborting it (Ctrl-C, error, drift, tamper, gate fail) leaves on-disk state identical to running `/super-manus:impl` that many times — fallback is safe.
-- `/super-manus:drive` — global next-action switch: read full project state, decide one of brainstorm / sync / prd-update / impl, announce decision + reason, execute inline
-- `/super-manus:catchup` — re-inject project-global `prd/_index.md` + most-recent update's `task_plan.md` into context
-- `/super-manus:log` — manually append a session log entry to the active update's `progress.md` now
-
-The recommended flow for a non-trivial project: `start` → `brainstorm` → audit `prd/<module>.md` files → `sync <module>` → `impl` (or `drive`) → commit → … → on PRD change: `prd-update` (forward or drift mode, auto-detected) or hand-edit `prd/<module>.md` → `sync` → `impl`.
+User commands live under `commands/`; see each file's frontmatter for description. Recommended flow: `start` → `brainstorm` → audit `prd/<module>.md` → `sync <module>` → `impl` (or `drive`) → commit → on PRD change: `prd-update` (forward or drift mode, auto-detected) or hand-edit + `sync` → `impl`.
 
 ## 1. Where state lives
 
@@ -203,52 +184,27 @@ The point is to surface tarpits early, not slog through them silently.
 - Creating ad-hoc files (`notes.md`, `decisions.md`, `todo.md`, `tests.md`) inside the super-manus folder — keep state in the canonical files.
 - Hand-editing `## Outstanding` in any `progress.md` — `scripts/refresh-outstanding.sh` overwrites it on the next refresh.
 
-## 8. Migration from v0.2/v0.3
+## 8. Companion skills
 
-v0.4 has no automatic migration command. If you have a project still on the v0.2/v0.3 layout (per-feature wrapper folder), move things by hand:
-
-1. Pick the canonical feature whose PRD will become the project-global PRD.
-2. Move `docs/super-manus/<feature>/prd/` → `docs/super-manus/prd/`.
-3. Move `docs/super-manus/<feature>/{roadmap.md,prd_drift.md}` → `docs/super-manus/`.
-4. Move `docs/super-manus/<feature>/impl/<module>/<update>/` → `docs/super-manus/impl/<module>/<update>/`.
-5. Delete the now-empty `docs/super-manus/<feature>/` folder and `.super-manus/` directory.
-6. Hooks and scripts pick up the new layout immediately; no further action needed.
-
-Multi-feature projects should pick one feature as the project PRD and either fold the others in as additional modules, archive their docs, or split them into separate super-manus-enabled subdirectories.
-
-## 9. Companion skills (v0.5)
-
-`using-sm` (this skill) is the state-protocol skill — it covers what files exist, what goes in each, when to update them, the Drift check protocol, the 2-action rule, the 3-strike protocol, and the anti-patterns list. It is invoked indirectly: every `/super-manus:*` slash command and every `SessionStart`/`Stop`/`PostToolUse` hook reminder references its conventions.
-
-v0.5 ships three additional skills that cover the **execution discipline** layer (what `using-sm` deliberately does NOT cover). They are invoked by the `/super-manus:impl` and `/super-manus:impl-all` orchestrators during phase execution, not by `using-sm` itself.
+`using-sm` is the state-protocol skill (what files exist, what goes in each, when to update). Three execution-discipline skills are invoked by `/super-manus:impl` and `/super-manus:impl-all` during phase execution:
 
 | Skill | Invoked by | What it enforces |
 | --- | --- | --- |
-| `tdd-in-phases` | `impl-test-writer` step of `/super-manus:impl` and `/super-manus:impl-all` | test-writer is spawned BEFORE code-writer; phase tests at `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_<verb>_<noun>.<ext>`; e2e tests at `docs/super-manus/e2e/<module>/test_<capability>.<ext>` when this phase **completes** a `## What users get` capability; tests committed red; code-writer is forbidden from editing tests |
+| `tdd-in-phases` | `impl-test-writer` step | test-writer is spawned BEFORE code-writer; phase tests at `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_<verb>_<noun>.<ext>`; e2e tests at `docs/super-manus/e2e/<module>/test_<capability>.<ext>` when this phase **completes** a `## What users get` capability; tests committed red; code-writer is forbidden from editing tests |
 | `verification-before-phase-close` | orchestrator after `impl-code-writer` reports done | phase Status flips to `closed` only after every command in `tasks/p<n>_impl.md ## Verification` exits green; `## Verification` MUST contain (1) a phase-test path command and (2) one user-visible smoke command |
-| `systematic-debugging-in-phase` | orchestrator when a `## Verification` command fails | follow the checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, fix, re-run) instead of randomly trying things; same error class three times → escalate |
+| `systematic-debugging-in-phase` | orchestrator when a `## Verification` command fails | follow the checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, fix, re-run); same error class three times → escalate |
 
-The 3-agent `/super-manus:impl` orchestration replaces v0.4's single `impl-executor`:
+End-of-update drift gate has **Pass 3 — e2e coverage check**: every touched `## What users get` capability needs `e2e/<module>/test_<capability>.<ext>` to exist and pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
 
-1. `impl-architect` drafts `tasks/p<n>_impl.md` (Objective / Approach / Files touched / Verification). No code, no tests.
-2. `impl-test-writer` writes phase tests + (conditionally) e2e tests; commits them red. Persona discipline: anchor in PRD spec, not in `## Approach`.
-3. `impl-code-writer` writes implementation; iterates until phase tests + touched e2e tests are green. Has NO permission to edit anything under `tests/` or `e2e/`. Orchestrator hashes test files before/after this agent runs and aborts the phase on tamper.
-
-The split is to prevent the implementing agent from gaming its own tests. Time barrier (test-writer commits before code-writer runs) + write barrier (code-writer cannot edit tests) + persona discipline (test-writer anchors tests in PRD spec) close the obvious cheating modes. Read access is OPEN — both new agents read everything (PRD, plan, source code, prior tests).
-
-The end-of-update drift gate gains **Pass 3 — e2e coverage check** in v0.5: for every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist and pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
-
-## 10. Coding discipline (karpathy reference)
+## 9. Coding discipline (karpathy reference)
 
 Single source of truth for the four `andrej-karpathy-skills:karpathy-guidelines` principles that super-manus agents follow when writing or modifying code:
 
-1. **Surgical changes** — touch only what the task requires. Don't refactor adjacent code, don't "improve" formatting / comments unrelated to the task, don't introduce new abstractions for single-use code. Match existing style. Every changed line should trace directly to the task at hand. Pre-existing dead code stays unless the user asks.
-2. **Surface assumptions** — state what you're assuming explicitly. If multiple interpretations exist, present them rather than picking silently. If something is unclear, stop and name the confusion. Don't guess invisibly.
-3. **Verifiable success criteria** — every task ends with a green check: a test passes, a command exits 0, a user-observable behavior occurs. "It looks done" is not done. The phase plan's `## Verification` section is the literal expression of this principle inside super-manus.
-4. **Avoid overcomplication** — minimum code that solves the problem. No flexibility / configurability / abstractions / error handling that wasn't asked for. If you wrote 200 lines and 50 would do, rewrite. Ask "would a senior engineer call this overcomplicated?".
+1. **Surgical changes** — touch only what the task requires. Don't refactor adjacent code, don't "improve" unrelated formatting / comments, don't introduce abstractions for single-use code. Every changed line should trace directly to the task. Pre-existing dead code stays unless the user asks.
+2. **Surface assumptions** — state what you're assuming explicitly. Present interpretations rather than picking silently. If unclear, stop and name the confusion. Don't guess invisibly.
+3. **Verifiable success criteria** — every task ends with a green check: a test passes, a command exits 0, a user-observable behavior occurs. "It looks done" is not done. The phase plan's `## Verification` section is the literal expression of this inside super-manus.
+4. **Avoid overcomplication** — minimum code that solves the problem. No flexibility / configurability / error handling that wasn't asked for. If you wrote 200 lines and 50 would do, rewrite.
 
-These principles apply universally to every super-manus agent (impl-architect / impl-test-writer / impl-code-writer / reverse-prd-architect / sync-planner). Agents reference §10; do NOT inline-duplicate the four principles into agent personas (so future updates touch one file, not many).
+Applies to every super-manus agent (impl-architect / impl-test-writer / impl-code-writer / reverse-prd-architect / sync-planner). Agents reference §9; do NOT inline-duplicate the four principles.
 
-How the v0.5 execution discipline maps onto these principles: `tdd-in-phases` is principle 3 in TDD form (red test → green test = verifiable criterion); `verification-before-phase-close` is the literal gate for principle 3; `systematic-debugging-in-phase` applies principles 1 + 2 + 3 (smallest change, surface the violated assumption, re-run the verifiable check).
-
-**This is for code-writing discipline**, not code-reading tactics. For "should I LSP, grep, or Read?" questions, there is NO super-manus rule — `impl-*` agents pick whatever fits inside the known module they're working in; `reverse-prd-architect` follows its own runtime-first protocol in [commands/reverse-prd.md](../commands/reverse-prd.md) Stage 1 (LSP is NOT used for module discovery). Different agents have different tool tactics; that's intentional.
+**Code-writing discipline only**, not code-reading tactics. For "should I LSP, grep, or Read?", there is NO super-manus rule — `impl-*` agents pick whatever fits inside the known module they're working in; `reverse-prd-architect` follows its own runtime-first protocol in [commands/reverse-prd.md](../commands/reverse-prd.md) Stage 1 (LSP NOT used for module discovery).

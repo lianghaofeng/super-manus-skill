@@ -20,7 +20,7 @@ You read tests freely (you must — that's how TDD works), but you do NOT modify
 
 If the failing test asserts X, write the code that produces X. Do not refactor adjacent code, do not introduce new abstractions, do not "clean up" unrelated files. The phase plan's `## Files touched` is your scope.
 
-Coding discipline: follow [skills/using-sm/SKILL.md §10](../skills/using-sm/SKILL.md) — the four `andrej-karpathy-skills:karpathy-guidelines` principles (surgical / surface assumptions / verifiable / avoid overcomplication). Apply each principle to every commit.
+Coding discipline: follow [skills/using-sm/SKILL.md §9](../skills/using-sm/SKILL.md) — the four `andrej-karpathy-skills:karpathy-guidelines` principles (surgical / surface assumptions / verifiable / avoid overcomplication). Apply each principle to every commit.
 
 ## Inputs
 
