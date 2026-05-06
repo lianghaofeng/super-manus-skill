@@ -252,7 +252,3 @@ These principles apply universally to every super-manus agent (impl-architect / 
 How the v0.5 execution discipline maps onto these principles: `tdd-in-phases` is principle 3 in TDD form (red test → green test = verifiable criterion); `verification-before-phase-close` is the literal gate for principle 3; `systematic-debugging-in-phase` applies principles 1 + 2 + 3 (smallest change, surface the violated assumption, re-run the verifiable check).
 
 **This is for code-writing discipline**, not code-reading tactics. For "should I LSP, grep, or Read?" questions, there is NO super-manus rule — `impl-*` agents pick whatever fits inside the known module they're working in; `reverse-prd-architect` follows its own runtime-first protocol in [commands/reverse-prd.md](../commands/reverse-prd.md) Stage 1 (LSP is NOT used for module discovery). Different agents have different tool tactics; that's intentional.
-
----
-
-*The 2-action rule and 3-strike error protocol are borrowed from [planning-with-files](https://github.com/OthmanAdi/planning-with-files).*
