@@ -1,6 +1,6 @@
 # super-manus — Design Doc (v0.5)
 
-> Current design. Validated through brainstorming session 2026-05-07.
+> **SUPERSEDED by [docs/design-v0.6.md](design-v0.6.md).** v0.5's 3-agent impl pipeline, e2e regression suite, three execution skills, and `/super-manus:impl-all` are all preserved in v0.6. The only delta in v0.6 is repositioning `/super-manus:prd-update` from drift-absorption-only to forward-iteration + drift-absorption (mode auto-detected from `prd_drift.md`). Layout, agents, hooks, and the end-of-update drift gate are unchanged. Kept for historical reference of the v0.5 design rationale.
 >
 > Supersedes [docs/design-v0.4.md](design-v0.4.md) (v0.4 — project-global PRD layout, single impl-architect agent), [docs/design-v0.2.md](design-v0.2.md) (v0.2/v0.3 — per-feature wrapper folder layout), and [docs/design-v0.1.md](design-v0.1.md) (v0.1 — flat single-PRD layout).
 
