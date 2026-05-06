@@ -103,25 +103,48 @@ With the module list from Stage 1.5 in hand, the next pass reads source code to 
 
 ## Write the PRD
 
-For each inferred module, write `<feature>/prd/<module>.md` from `templates/prd_module.md`, substituting `<module name>` and pre-filling each section:
+For each module from Stage 1.5, write `<feature>/prd/<module>.md` from `templates/prd_module.md`. Each section below specifies its **source priority** — read declarative sources first, fall back to source code only when declarative signals are exhausted. Default module granularity is **per-service** (one PRD module = one runtime entry); if two services obviously serve one logical role (e.g. `web-parent` + `parent-api`), do NOT merge them in this pass — list them separately and add a `## Open questions` entry suggesting the merge.
 
-- `## Purpose` — one sentence inferred from the strongest signal (manifest description, top-level docstring, README mention).
-- `## Surface` — only what you can read off the source: actual tables (from migrations), endpoint paths (from route files), top-level CLI commands, top-level UI screens. Use *short* schema sketches and bullet lists. **Do not invent fields, endpoints, or screens.** When unsure, leave a one-line `(audit)` placeholder.
-- `## Data flow` — what calls in, where outputs go — only from observable wiring (route handlers, service calls). Mark with `(audit)` if uncertain.
-- `## Constraints` — document constraints visible in code AND any `infra_deps[]` from Stage 1.1 that this module talks to (e.g. "reads from Postgres", "publishes to NATS subject `<X>`", "indexes into Qdrant collection `<Y>`"). Plus: explicit timeouts, declared rate limits, license headers about compliance, `// TODO: PII` comments. Library packages from `packages/*` / `libs/*` that this module imports also belong here.
-- `## Out of scope` — leave empty `(audit)` unless the README explicitly says "we don't do X".
-- `## Open questions` — populate liberally with anything you wanted to assert but couldn't verify from source. This is the user's audit list.
+**`(audit)` policy**: mark a fact `(audit)` only when it comes from a single source and you couldn't corroborate it elsewhere. Do NOT bulk-mark whole sections — that just gives the user a wall of placeholders to wade through. If a section is genuinely empty (e.g. no migrations exist for this module), leave it empty rather than `(audit)`-stuffing it.
 
-Total per module file ≤ 2000 words. If a module's `## Surface` would balloon past that, summarise — exhaustive enumeration of every endpoint / table is out of scope here; the user will refine.
+### Per-module sections
 
-For `<feature>/prd/_index.md`:
+- `## Purpose` — one sentence. Sources in priority: (1) the module's own `package.json` `description` / `pyproject.toml` `description` field; (2) the first paragraph of `apps/<module>/README.md` if present; (3) the Makefile target's comment line above it; (4) repo-root README mention. If none yield a sentence, write `(audit — describe what this module does)`.
 
-- `## Problem` — one sentence inferred from README / package description, or `(audit — describe the problem this codebase solves)` if no signal.
-- `## Demo` — 3–5 lines inferred from README's quickstart or top-level docs; `(audit)` if absent.
-- `## Must` — bullet list of the most prominent capabilities visible across modules.
-- `## Not doing` — `(audit)` placeholder.
-- `## Modules` table — one row per inferred module with the relative link `[prd/<module>.md](<module>.md)` and a one-line Purpose.
-- `## Data flow overview` — short paragraph or 1–3 bullets connecting the modules. Mark `(audit)` portions.
+- `## Surface` — fill in this priority:
+  1. **Process entry** — `Dockerfile CMD`/`ENTRYPOINT`, or the file the Stage 1.3 launch target invokes (e.g. `uvicorn parent_api.app:app` → `apps/parent-api/parent_api/app.py`), or the `[project.scripts]` entry. Read top-of-file imports + the FastAPI / Flask / Express / Next route registrations directly off this file.
+  2. **Declared schema / routes / CLI** — for storage modules: `alembic/versions/*.py` or `migrations/*.sql` table definitions. For HTTP modules: every `@router.<verb>` / `app.<verb>` decorator + its path. For CLI modules: subcommand registry. For UI modules: top-level pages / route file.
+  3. **LSP補漏** — only if 1 + 2 don't paint a complete picture: `document symbols` on the entry file, `workspace symbols` filtered to the module's directory. Per the Drift check protocol's double-source rule, single-source LSP claims get `(audit)`.
+  
+  Use *short* schema sketches and bullet lists. **Do not invent fields, endpoints, or screens.**
+
+- `## Data flow` — fill in this priority:
+  1. **Compose / k8s wiring** — `depends_on:`, named networks, env vars containing sibling URLs (`GATEWAY_URL`, `VERIFIER_URL`, `DATABASE_URL`), queue topic / subject names, S3 bucket names.
+  2. **Module entry file imports + outbound calls** — `httpx.AsyncClient(<url>)` / `fetch(<url>)` calls with sibling URLs; `nats_client.subscribe(<subject>)` / `kafka_consumer.subscribe(<topic>)`; SQL connection strings; cache client constructors.
+  3. **find-references on this module's exports** (LSP) — where this module's APIs get called from.
+  4. **grep imports** — backstop for LSP misses (config-driven dispatch, dynamic loading, polyglot boundaries).
+  
+  Format as "in: …, out: …" or a short bullet list of inbound + outbound edges. `(audit)` any single-source claim.
+
+- `## Constraints` — three sources, all required if applicable:
+  1. **`infra_deps[]` from Stage 1.1** — every infra service this module talks to, with concrete role: "reads/writes Postgres `<table>`", "publishes to NATS subject `<X>`", "indexes into Qdrant collection `<Y>`", "caches in Redis with prefix `<Z>`".
+  2. **Library packages** — every `packages/*` / `libs/*` this module imports (resolved from the module's `package.json` `dependencies` / `pyproject.toml` `[project.dependencies]` filtered to internal workspace names).
+  3. **In-code constraints** — explicit timeouts, declared rate limits, license headers about compliance, `// TODO: PII` comments, `# pragma: no cover` blocks indicating known-untested paths.
+
+- `## Out of scope` — leave empty unless the module's README or repo-root README explicitly says "we don't do X" or "X is out of scope". Do NOT speculate.
+
+- `## Open questions` — populate with anything you wanted to assert but couldn't verify, plus any merge / split suggestions (granularity defaults). This is the user's audit list — be generous here, sparse elsewhere.
+
+Total per-module file ≤ 2000 words. If `## Surface` would balloon past that (e.g. an API gateway with 80 routes), summarise — exhaustive enumeration is the user's job during audit.
+
+### `<feature>/prd/_index.md` sections
+
+- `## Problem` — one sentence. Priority: (1) repo-root `package.json` / `pyproject.toml` `description`; (2) first paragraph of `README.md`; (3) `CLAUDE.md` if present. If none yield a sentence, `(audit — describe the problem this codebase solves)`.
+- `## Demo` — 3–5 lines, second person, concrete usage scenario. Source: README quickstart / "Getting started" section, or `docs/` top-level. `(audit)` only if README is empty.
+- `## Must` — bullet list of capabilities visible from the **union of Stage 1.3 launch + batch entry points** (= what the system can actually do). One bullet per capability. NOT a re-listing of modules.
+- `## Not doing` — bullet list. Source: README explicit "we don't do X" lines, or `(audit)` if none.
+- `## Modules` table — one row per Stage 1.5 module with relative link `[prd/<module>.md](<module>.md)` and a one-line Purpose copied from that module's `## Purpose` first sentence.
+- `## Data flow overview` — produced from the **compose `depends_on` graph + env-URL graph**, not from textual inference. Format as a short bullet list of edges (`<A> → <B> via <protocol>`) or a 3–5 line paragraph. Mark `(audit)` only on edges you couldn't corroborate from declarative wiring.
 
 Total `_index.md` ≤ 700 words.
 

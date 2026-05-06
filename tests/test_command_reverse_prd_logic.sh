@@ -55,4 +55,19 @@ grep -qiE "no upper cap|no upper bound" "$F" || { echo "FAIL: must remove the 2�
 grep -qiE "hard-abort|hard abort" "$F" || { echo "FAIL: must hard-abort when active feature is topic-scoped (no overwrite prompt)"; exit 1; }
 grep -qiE "topic-scoped|committed PRD topic|committed.*topic" "$F" || { echo "FAIL: must describe the topic-scoped/committed-PRD condition that triggers abort"; exit 1; }
 
+# Content-filling source priorities (Step 2): declarative-first, LSP last
+grep -qiE "process entry|Dockerfile CMD|launch target invokes" "$F" || { echo "FAIL: ## Surface must take process entry / Dockerfile CMD as priority 1"; exit 1; }
+grep -qiE "depends_on|sibling URL|queue topic|subject name" "$F" || { echo "FAIL: ## Data flow must take compose depends_on / sibling URLs / queue topics as priority 1"; exit 1; }
+grep -qiE "infra_deps|infra dependenc" "$F" || { echo "FAIL: ## Constraints must enumerate infra_deps from Stage 1.1"; exit 1; }
+grep -qiE "library package|packages/\*|workspace.*depend" "$F" || { echo "FAIL: ## Constraints must include internal library-package imports"; exit 1; }
+
+# (audit) policy — single-source only, no bulk marking
+grep -qiE "single.source|do NOT bulk-mark|bulk[ -]mark" "$F" || { echo "FAIL: must restrict (audit) to single-source unverified claims, not bulk filler"; exit 1; }
+
+# Granularity default — per-service / per runtime entry, do not auto-merge
+grep -qiE "per-service|per runtime entry|do NOT merge" "$F" || { echo "FAIL: must default to per-service module granularity (no auto-merge)"; exit 1; }
+
+# _index.md ## Data flow overview from compose graph, not textual inference
+grep -qiE "compose.*graph|depends_on graph|env-URL graph" "$F" || { echo "FAIL: _index.md ## Data flow overview must derive from compose depends_on / env-URL graph"; exit 1; }
+
 echo OK
