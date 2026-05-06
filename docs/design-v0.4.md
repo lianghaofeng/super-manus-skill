@@ -1,6 +1,8 @@
 # super-manus — Design Doc (v0.4)
 
-> Current design. Validated through brainstorming session 2026-05-07.
+> **SUPERSEDED by [docs/design-v0.5.md](design-v0.5.md).** v0.4's project-global PRD layout is preserved in v0.5; what changed in v0.5 is the execution discipline (3-agent impl flow, TDD/verify/debug skills absorbed from superpowers), the addition of the e2e/ permanent regression directory, and the addition of `/super-manus:impl-all`. This file is kept for historical reference of the v0.4 design rationale.
+>
+> Validated through brainstorming session 2026-05-07.
 >
 > Supersedes [docs/design-v0.2.md](design-v0.2.md) (v0.2/v0.3 — per-feature wrapper folder layout) and [docs/design-v0.1.md](design-v0.1.md) (v0.1 — flat single-PRD layout).
 
