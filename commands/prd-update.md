@@ -31,6 +31,17 @@ Ask exactly ONE multiple-choice question, then write. Do not bundle, do not foll
 
 The user picks one letter and (optionally) supplies new wording. If they don't, draft it yourself in the user's working language (zh / en) — one short line, second-person concrete tone consistent with the rest of the file.
 
+## Verify the bullet against the actual code (Tighten / Demote / Split only)
+
+Before writing the edit, run the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/using-sm/SKILL.md) on the affected bullet:
+
+- **Tighten** — confirm the narrower wording you're about to write actually matches what the code does. Use **LSP** (`document symbols` on the relevant file, `find-references` on the relevant export) to read the real symbol; cross-check with grep on the file's text. Don't trust the user's framing alone — they may misremember the current behavior. The double-source rule applies: write the tightened bullet only if LSP and grep agree on what the code does today.
+- **Demote** — confirm the bullet's surface really is unbuilt / partial before moving it to `## Open questions`. If LSP shows the symbol exists and is referenced, the bullet shouldn't be demoted; push back and offer **Tighten** or **Split** instead.
+- **Split** — run the protocol on both halves of the proposed split; both must be confirmable independently.
+- **Add** and **Exclude** — no verification needed (Add declares new intent; Exclude removes scope).
+
+If LSP is unavailable, fall back to grep + Read alone per the protocol; flag the edit with "LSP unavailable — verification is text-only" in the paired `findings.md` decision entry so the user knows confidence is lower.
+
 ## Hard constraints on the edit
 
 - **Single surgical edit**: minimum lines changed. Multi-section rewrites must go through `/super-manus:brainstorm` instead — refuse and redirect if the change would cross more than one section of `prd/<module>.md`.

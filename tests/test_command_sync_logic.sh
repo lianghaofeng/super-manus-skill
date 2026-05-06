@@ -22,6 +22,11 @@ grep -qF "scripts/sm-update.sh" "$F" || { echo "FAIL: sync.md must invoke script
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: sync.md must reference per-module PRD"; exit 1; }
 grep -qiF "drift" "$F" || { echo "FAIL: sync.md must mention drift detection"; exit 1; }
 
+# Drift check uses the using-sm Drift check protocol (LSP + grep cooperation, not pure text)
+grep -qF "Drift check protocol" "$F" || { echo "FAIL: sync.md must reference using-sm's Drift check protocol"; exit 1; }
+grep -qF "LSP" "$F" || { echo "FAIL: sync.md drift check must invoke LSP, not just text scan"; exit 1; }
+grep -qiE "double-source|cross-check|both LSP and" "$F" || { echo "FAIL: sync.md must keep the double-source rule visible"; exit 1; }
+
 # Case B: invalid args
 if sm_update 2>/dev/null; then echo "FAIL: missing args should be rejected"; exit 1; fi
 if sm_update "api" 2>/dev/null; then echo "FAIL: single arg should be rejected"; exit 1; fi

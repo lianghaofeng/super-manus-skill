@@ -18,14 +18,22 @@ Then ask the user **once** for an update name: "Short kebab-case name for this u
 
 ## Drift check
 
-Before scaffolding, read `<feature>/prd/<module>.md`:
+Run the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/using-sm/SKILL.md). The protocol defines how PRD claims are verified against actual code via LSP + grep cooperation; this command consumes it before scaffolding the update folder.
 
-- Skim `## Surface`, `## Constraints`, `## Out of scope`. If the user described an intent that conflicts with `## Out of scope`, or appears to introduce a capability not declared in `## Surface`, append one row to `<feature>/prd_drift.md`:
+Concretely:
+
+1. Read `<feature>/prd/<module>.md` `## Surface` / `## Constraints` / `## Out of scope` to know what PRD currently declares.
+2. Apply the protocol against the user's stated intent for this milestone. **LSP** (`workspace symbols`, `document symbols` on the affected files, `find-references` on the relevant exports) confirms whether the intent's surface already exists in code; **grep** confirms wiring (imports, env vars, config-driven dispatch) and textual constraints. The double-source rule applies — only append a drift row when both LSP and grep (where applicable) agree the intent diverges from PRD.
+3. If LSP is unavailable, apply the protocol's fallback (grep + Read only, drift verdict treated as `(audit)`-grade), and surface "LSP unavailable — drift verdict is text-only inference" in the row's Conflict cell so the user knows confidence is lower.
+
+If the protocol concludes the intent conflicts with `## Out of scope`, or introduces a capability not in `## Surface`:
+
+- Append one row to `<feature>/prd_drift.md`:
   ```
   | <YYYY-MM-DD> | <module> | <one-line conflict description> | pending |
   ```
-  Then tell the user: "Drift detected — the intent looks outside the current PRD. Two paths: revert the intent, or run `/super-manus:prd-update <module>` first to update the PRD, then re-run `/super-manus:sync <module>`."
-  Stop. Do not scaffold the update folder.
+- Tell the user: "Drift detected — the intent looks outside the current PRD. Two paths: revert the intent, or run `/super-manus:prd-update <module>` first to update the PRD, then re-run `/super-manus:sync <module>`."
+- Stop. Do not scaffold the update folder.
 
 If no drift, continue.
 

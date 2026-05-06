@@ -36,4 +36,8 @@ grep -qiF "progress.md" "$F" || { echo "FAIL: must mention progress.md (specific
 # Must redirect tech-design changes back to impl/<module>/<update>/tasks/
 grep -qiF "tech" "$F" || { echo "FAIL: must distinguish product vs tech changes"; exit 1; }
 
+# Tighten / Demote options must verify the affected bullet against the actual code via using-sm's Drift check protocol
+grep -qF "Drift check protocol" "$F" || { echo "FAIL: prd-update.md must reference using-sm's Drift check protocol for Tighten/Demote verification"; exit 1; }
+grep -qF "LSP" "$F" || { echo "FAIL: prd-update.md must use LSP to verify the bullet against current code (not just trust the user)"; exit 1; }
+
 echo OK

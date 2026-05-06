@@ -48,7 +48,14 @@ If the file already exists, leave it untouched (idempotent).
 
 ## Drift check (BEFORE drafting impl plan or writing code)
 
-Read the per-module PRD `<feature>/prd/<module>.md` (i.e. `<feature>/prd/$MODULE.md`) — focus on `## Surface`, `## Constraints`, `## Out of scope`. Read the just-seeded or already-existing `$UPDATE_DIR/tasks/p<n>_impl.md ## Objective` (if non-empty), and the user's stated intent for this turn.
+Run the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/using-sm/SKILL.md). The protocol is the shared LSP + grep cross-check used by `sync` / `impl` / `prd-update` / `reverse-prd` — this command consumes it before any code is drafted.
+
+Concretely:
+
+1. Read the per-module PRD `<feature>/prd/<module>.md` (i.e. `<feature>/prd/$MODULE.md`) — focus on `## Surface`, `## Constraints`, `## Out of scope`.
+2. Read the just-seeded or already-existing `$UPDATE_DIR/tasks/p<n>_impl.md ## Objective` (if non-empty), and the user's stated intent for this turn.
+3. Apply the protocol against the phase intent. **LSP** (`document symbols` on the files the phase will touch; `find-references` on any cross-module export it touches) tells you whether the intent's surface already exists or is brand-new; **grep** covers wiring and constraints LSP can't index. The double-source rule applies — only call drift when both LSP and grep (where applicable) agree the phase diverges from PRD.
+4. If LSP is unavailable for this module's language, fall back per the protocol (grep + Read only) and surface "LSP unavailable — drift verdict is text-only inference" in the appended row's Conflict cell.
 
 Decide: does the phase intent introduce a capability not declared in `## Surface`, or does it conflict with `## Out of scope`?
 

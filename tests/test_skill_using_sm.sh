@@ -42,4 +42,16 @@ done
 # Footer: must credit planning-with-files
 grep -qF "planning-with-files" "$F" || { echo "FAIL: missing planning-with-files credit footer"; exit 1; }
 
+# Drift check protocol: single source of truth for LSP+grep PRD↔code cross-check
+grep -qF "Drift check protocol" "$F" || { echo "FAIL: missing 'Drift check protocol' section heading"; exit 1; }
+grep -qF "LSP" "$F" || { echo "FAIL: drift protocol must mention LSP as primary structural source"; exit 1; }
+grep -qiE "workspace symbols|find-references|document symbols" "$F" || { echo "FAIL: drift protocol must reference concrete LSP operations (workspace symbols / find-references / document symbols)"; exit 1; }
+grep -qiE "double-source|cross-check|both LSP and (grep|text)" "$F" || { echo "FAIL: drift protocol must articulate the double-source / cross-check invariant"; exit 1; }
+grep -qiE "LSP unavailable|LSP not available|no language server" "$F" || { echo "FAIL: drift protocol must specify the LSP-unavailable fallback"; exit 1; }
+grep -qF "(audit)" "$F" || { echo "FAIL: drift protocol must say single-source facts get the (audit) marker"; exit 1; }
+# The four commands that consume the protocol
+for cmd in reverse-prd sync impl prd-update; do
+  grep -qF "$cmd" "$F" || { echo "FAIL: drift protocol must list the consumer command /super-manus:$cmd"; exit 1; }
+done
+
 echo OK

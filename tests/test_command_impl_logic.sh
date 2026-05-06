@@ -35,4 +35,9 @@ grep -qiF "target" "$F" || { echo "FAIL: must document optional target argument"
 # Must NOT touch progress.md by hand (hook-managed)
 grep -qiF "progress.md" "$F" || { echo "FAIL: must mention progress.md (specifically: not to hand-edit)"; exit 1; }
 
+# Drift check uses the using-sm Drift check protocol (LSP + grep cooperation)
+grep -qF "Drift check protocol" "$F" || { echo "FAIL: impl.md must reference using-sm's Drift check protocol"; exit 1; }
+grep -qF "LSP" "$F" || { echo "FAIL: impl.md drift check must invoke LSP, not just text scan"; exit 1; }
+grep -qiE "double-source|cross-check|both LSP and" "$F" || { echo "FAIL: impl.md must keep the double-source rule visible"; exit 1; }
+
 echo OK

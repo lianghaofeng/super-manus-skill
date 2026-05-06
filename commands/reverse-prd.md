@@ -12,15 +12,19 @@ If `<feature>/prd/_index.md` already has substantive content (Problem / Demo / M
 
 ## Scan the project
 
-Read enough of the project to infer module structure. Cheap signals first, expensive ones only if needed:
+Follow the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/using-sm/SKILL.md). The protocol defines the LSP + grep cooperation, the double-source rule, the budget, and the LSP-unavailable fallback — this command consumes it for the bootstrap pass. Specifically:
 
-1. **Top-level layout** — `ls` the project root and a couple of likely source directories (`src/`, `app/`, `packages/`, `services/`, `apps/`).
-2. **Manifest files** — `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod` workspace members. These often declare module / package boundaries.
-3. **README.md / docs/** — high-level prose about what the project does and how its parts split.
-4. **Conventional folders** — `db/` / `migrations/` / `prisma/` (database module), `api/` / `routes/` (api module), `web/` / `frontend/` / `client/` (frontend module), `cli/` / `bin/` (cli module), `infra/` / `deploy/` (infra module).
-5. If the project is tiny / undifferentiated, fall back to a single `core` module rather than inventing structure.
+1. **Intent layer (text, ≤10 of the grep budget)** — `package.json` / `Cargo.toml` / `pyproject.toml` / `go.mod` description fields, `README.md`, top-level `docs/`. These answer Purpose / Demo and never come from LSP.
+2. **Structural layer (LSP-led)** — call **workspace symbols** to enumerate every exported symbol with its file path. Cluster the symbol list by directory; that clustering is your first guess at module boundaries.
+3. **Boundary cross-check** — `ls` the project root and likely source directories (`src/`, `app/`, `packages/`, `services/`, `apps/`). Where the directory layout and the LSP symbol clustering agree, the module is firm. Where they disagree, mark the module name with `(audit)` and add an `## Open questions` line in `prd/_index.md`. Conventional folders (`db/` / `migrations/` / `prisma/` → database module; `api/` / `routes/`; `web/` / `frontend/` / `client/`; `cli/` / `bin/`; `infra/` / `deploy/`) are useful tie-breakers when the LSP signal is ambiguous.
+4. **`## Surface` per module (LSP-led)** — for each inferred module, `document symbols` on its primary files (route file, migration file, CLI entry, top-level component) to read **real** function / endpoint / table names. Only LSP-confirmed names go into `## Surface`; do not rephrase or infer additional ones.
+5. **`## Data flow` per module (LSP + grep)** — `find-references` on each module's exports gives the cross-module call graph. Backstop with grep for import statements / env vars / config-driven dispatch that LSP misses.
+6. **`## Constraints`** — grep-only: TODOs, license headers, declared timeouts, PII comments. LSP irrelevant here.
+7. **Tiny / undifferentiated project** — if neither LSP nor grep produces a coherent multi-module split, fall back to a single `core` module rather than inventing structure.
 
-Limit your scan to roughly 30 grep / read operations. Do NOT exhaustively read every source file.
+If LSP is unavailable (no language server, polyglot repo with no active server for the dominant language), apply the protocol's **LSP unavailable** fallback: continue with grep + Read alone, mark every PRD claim with `(audit)`, and add a "LSP unavailable — text-only inference; treat all `(audit)` markers as load-bearing" line at the top of `prd/_index.md`.
+
+Budget per the protocol: LSP ≤10 workspace-symbol / find-references calls + 1 document-symbol per inferred module; grep / Read ≤30 calls. Do NOT exhaustively read every source file.
 
 ## Infer modules
 
