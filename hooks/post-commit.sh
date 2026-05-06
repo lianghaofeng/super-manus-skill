@@ -42,24 +42,15 @@ case "$cmd_trimmed" in
   *) echo '{}'; exit 0 ;;
 esac
 
-# Resolve active feature; no-op if none
-folder=$(sm_active_folder || true)
-[ -n "$folder" ] || { echo '{}'; exit 0; }
-[ -d "$folder" ] || { echo '{}'; exit 0; }
+# v0.4: super-manus is enabled iff docs/super-manus/prd/ exists. No-op otherwise.
+[ -d "docs/super-manus/prd" ] || { echo '{}'; exit 0; }
 
-# v0.2 detection: prd/ exists as a directory → use the active update's progress.md.
-# v0.1 fallback: feature root has progress.md.
-if [ -d "$folder/prd" ]; then
-  update_rel=$(sm_active_update "$folder")
-  if [ -z "$update_rel" ]; then
-    # v0.2 feature with no impl/<module>/<update>/ yet — nothing to write to.
-    echo '{}'; exit 0
-  fi
-  target_dir="$folder/impl/$update_rel"
-else
-  # v0.1: target progress.md / task_plan.md at the feature root.
-  target_dir="$folder"
-fi
+# Resolve the most recently modified update folder; no-op if none exist yet.
+update_rel=$(sm_active_update || true)
+[ -n "$update_rel" ] || { echo '{}'; exit 0; }
+
+target_dir="docs/super-manus/impl/$update_rel"
+[ -d "$target_dir" ] || { echo '{}'; exit 0; }
 
 text="A \`git commit\` just succeeded. Per the using-sm skill: append a one-line entry to \`$target_dir/progress.md\` under \`## Completed commits\`. Use this format:
 

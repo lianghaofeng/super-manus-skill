@@ -1,26 +1,19 @@
 # super-manus shared hook helpers — source from any hook script.
 # Defines:
-#   sm_active_folder      — echoes active feature folder path or empty string
+#   sm_active_update      — echoes "<module>/<update-folder>" of the most recently
+#                           modified update under docs/super-manus/impl/<module>/*/,
+#                           or empty if none exist
 #   emit_context EVENT TEXT — emits a hook JSON object on stdout
+#
+# v0.4 layout: PRD / roadmap / prd_drift live at docs/super-manus/ (project-global).
+# There is no per-feature wrapper folder and no .super-manus/active state file.
+# Active update is resolved purely by mtime scan.
 
 # Resolve python interpreter (some Git Bash installs only have `python`)
 if ! command -v python3 >/dev/null 2>&1; then
   python3() { python "$@"; }
   export -f python3 2>/dev/null || true
 fi
-
-# Returns the path even if the directory does not exist on disk; callers must check.
-sm_active_folder() {
-  local active_file=".super-manus/active"
-  [ -f "$active_file" ] || return 0
-  local name
-  name=$(tr -d '[:space:]' < "$active_file")
-  [ -n "$name" ] || return 0
-  case "$name" in
-    */*|..*|*/..*) return 0 ;;
-  esac
-  echo "docs/super-manus/$name"
-}
 
 emit_context() {
   local event="$1" text="$2"
@@ -79,14 +72,14 @@ if isinstance(v, str):
 }
 
 # Echoes "<module>/<update-folder-name>" of the most recently modified update folder
-# under the given feature folder's impl/ tree, or nothing if there are no update
-# folders. Used by hooks (post-commit, session-end) and the /super-manus:impl /
-# /super-manus:drive commands to resolve "where do I write progress.md right now?"
-# without a separate active-update state file.
+# under docs/super-manus/impl/<module>/*/, or nothing if there are no update folders.
+# Used by hooks (post-commit, session-end) and /super-manus:impl / /super-manus:drive
+# / /super-manus:catchup to resolve "where do I write progress.md right now?" — there
+# is no separate active-update state file in v0.4.
 sm_active_update() {
-  local feature="${1:-}"
-  [ -n "$feature" ] && [ -d "$feature/impl" ] || return 0
-  python3 - "$feature/impl" <<'PY'
+  local impl_root="docs/super-manus/impl"
+  [ -d "$impl_root" ] || return 0
+  python3 - "$impl_root" <<'PY'
 import os, sys
 root = sys.argv[1]
 best = None

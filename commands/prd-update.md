@@ -6,17 +6,15 @@ The user has decided that a PRD module should move (rather than the implementati
 
 ## Setup
 
-Resolve the active feature folder by reading `.super-manus/active`. The folder is `docs/super-manus/<that-name>/`. If `.super-manus/active` is missing or empty, tell the user there is no active feature and suggest `/super-manus:start` or `/super-manus:switch`; then stop.
+Confirm `docs/super-manus/prd/` is a directory. If absent, tell the user super-manus is not enabled and suggest `/super-manus:start`; then stop.
 
-If `<feature>/prd/` is not a directory, this is a v0.1 feature — tell the user `/super-manus:prd-update` is v0.2-only and stop.
-
-The user may pass the module as `$ARGUMENTS` (e.g. `/super-manus:prd-update api`). If empty, list `prd/<module>.md` files (excluding `_index.md`) and ask the user to pick. The module argument must match `^[a-z0-9][a-z0-9-]*$` and the file `<feature>/prd/<module>.md` must exist.
+The user may pass the module as `$ARGUMENTS` (e.g. `/super-manus:prd-update api`). If empty, list `docs/super-manus/prd/<module>.md` files (excluding `_index.md`) and ask the user to pick. The module argument must match `^[a-z0-9][a-z0-9-]*$` and the file `docs/super-manus/prd/<module>.md` must exist.
 
 Read in this order:
 
-1. `<feature>/prd/<module>.md` — full file
-2. `<feature>/prd_drift.md` — find the most recent row whose `Module` column matches and `Resolution` is `pending`. If none, ask the user once: "What's the deviation you want PRD to absorb? One sentence."
-3. The active update for this module — resolved by the most recently modified subfolder under `<feature>/impl/<module>/`. Read its `task_plan.md ## Goal` and most recent `tasks/p<n>_impl.md ## Objective` if present, just to ground the conflict.
+1. `docs/super-manus/prd/<module>.md` — full file
+2. `docs/super-manus/prd_drift.md` — find the most recent row whose `Module` column matches and `Resolution` is `pending`. If none, ask the user once: "What's the deviation you want PRD to absorb? One sentence."
+3. The active update for this module — resolved by the most recently modified subfolder under `docs/super-manus/impl/<module>/`. Read its `task_plan.md ## Goal` and most recent `tasks/p<n>_impl.md ## Objective` if present, just to ground the conflict.
 
 ## The one question
 
@@ -53,11 +51,11 @@ If LSP is unavailable, fall back to grep + Read alone per the protocol; flag the
 
 ## Writing the edit
 
-Use the Edit tool on `<feature>/prd/<module>.md` with the smallest old_string / new_string pair that captures the change. Do not rewrite the whole file.
+Use the Edit tool on `docs/super-manus/prd/<module>.md` with the smallest old_string / new_string pair that captures the change. Do not rewrite the whole file.
 
 ## After the edit lands
 
-1. Append one entry to `<feature>/impl/<module>/<latest-update>/findings.md ## Decisions` in the standard 3-line shape:
+1. Append one entry to `docs/super-manus/impl/<module>/<latest-update>/findings.md ## Decisions` in the standard 3-line shape:
 
    ```
    ### <YYYY-MM-DD>: PRD revision (<module>, option <a–e>)
@@ -68,9 +66,9 @@ Use the Edit tool on `<feature>/prd/<module>.md` with the smallest old_string / 
 
    Keep each line ≤ 1 sentence. No file paths, no code identifiers, no diff snippets.
 
-2. If a row in `<feature>/prd_drift.md` had `Resolution = pending` for this module and matches the conflict, mark its Resolution column as `prd-update: <option-letter>`. Keep all other rows untouched.
+2. If a row in `docs/super-manus/prd_drift.md` had `Resolution = pending` for this module and matches the conflict, mark its Resolution column as `prd-update: <option-letter>`. Keep all other rows untouched.
 
-3. Do **not** write to `<feature>/impl/<module>/<latest-update>/progress.md` — it is hook-managed.
+3. Do **not** write to `docs/super-manus/impl/<module>/<latest-update>/progress.md` — it is hook-managed.
 
 4. Tell the user, in one line: "PRD `<module>` updated — `<section>` `<option>`. Decision logged to `findings.md`. Resume the update."
 

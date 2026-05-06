@@ -3,18 +3,19 @@ set -euo pipefail
 
 # /super-manus:sm-update.sh <module> <update-name>
 #
-# Seeds a new milestone-update folder under the active v0.2 feature:
-#   docs/super-manus/<feature>/impl/<module>/<YYYY-MM-DD>-<update-name>/
-#     ├── task_plan.md        (from templates/task_plan.md, prd.md ref → ../../../prd/<module>.md)
+# v0.4 layout (project-global PRD; no per-feature wrapper). Seeds a new
+# milestone-update folder:
+#   docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/
+#     ├── task_plan.md        (from templates/task_plan.md, prd ref → ../../../prd/<module>.md)
 #     ├── findings.md         (from templates/findings.md)
 #     ├── progress.md         (from templates/progress.md)
 #     └── tasks/              (empty; populated by /super-manus:impl)
 #
-# Also flips the module's row in roadmap.md from `not-started` → `iterating`
-# (a no-op if the row is already in another state — user-set state is preserved).
+# Also flips the module's row in docs/super-manus/roadmap.md from `not-started`
+# → `iterating` (a no-op if the row is already in another state — user-set state
+# is preserved).
 #
-# Reads the active feature from .super-manus/active. Errors if no active feature
-# or if the feature is not v0.2 layout (no prd/ folder).
+# Errors if super-manus is not enabled (no docs/super-manus/prd/ folder).
 #
 # Used by /super-manus:brainstorm (seeds the first MVP update for the first module
 # after Q&A) and /super-manus:sync (seeds a new update after a PRD edit).
@@ -43,22 +44,14 @@ if [ ! -d "$ROOT/templates" ]; then
   exit 1
 fi
 
-if [ ! -f .super-manus/active ]; then
-  echo "sm-update: no active feature (.super-manus/active missing) — run /super-manus:start <name> first" >&2
+base="docs/super-manus"
+[ -d "$base/prd" ] || {
+  echo "sm-update: super-manus is not enabled in this project (missing $base/prd/) — run /super-manus:start first" >&2
   exit 1
-fi
-feature_name=$(tr -d '[:space:]' < .super-manus/active)
-[ -n "$feature_name" ] || { echo "sm-update: .super-manus/active is empty" >&2; exit 1; }
-case "$feature_name" in
-  */*|..*|*/..*) echo "sm-update: invalid feature name in .super-manus/active: '$feature_name'" >&2; exit 1 ;;
-esac
-
-feature="docs/super-manus/$feature_name"
-[ -d "$feature" ] || { echo "sm-update: feature folder missing: $feature" >&2; exit 1; }
-[ -d "$feature/prd" ] || { echo "sm-update: feature is not v0.2 layout (no prd/ folder): $feature — sm-update only operates on v0.2 features" >&2; exit 1; }
+}
 
 today=$(date +%F)
-update_folder="$feature/impl/$module/${today}-${update_name}"
+update_folder="$base/impl/$module/${today}-${update_name}"
 
 if [ -e "$update_folder" ]; then
   echo "sm-update: update folder already exists: $update_folder" >&2
@@ -77,7 +70,7 @@ mkdir -p "$update_folder/tasks"
 # (impl/<module>/<update>/task_plan.md → ../../../prd/<module>.md).
 src="$ROOT/templates/task_plan.md"
 [ -f "$src" ] || { echo "sm-update: template missing: $src" >&2; cleanup_partial; exit 1; }
-sed -e "s|<feature title>|${feature_name} / ${module} / ${update_name}|g" \
+sed -e "s|<feature title>|${module} / ${update_name}|g" \
     -e "s|prd.md|../../../prd/${module}.md|g" \
     "$src" > "$update_folder/task_plan.md"
 
@@ -85,14 +78,14 @@ sed -e "s|<feature title>|${feature_name} / ${module} / ${update_name}|g" \
 for f in findings.md progress.md; do
   src="$ROOT/templates/$f"
   [ -f "$src" ] || { echo "sm-update: template missing: $src" >&2; cleanup_partial; exit 1; }
-  sed "s|<feature title>|${feature_name} / ${module} / ${update_name}|g" "$src" > "$update_folder/$f"
+  sed "s|<feature title>|${module} / ${update_name}|g" "$src" > "$update_folder/$f"
 done
 
 trap - ERR
 
 # Update roadmap.md: ensure the module has a row, and flip not-started → iterating
 # without overwriting any user-set Note. If the module isn't in the table yet, append it.
-roadmap="$feature/roadmap.md"
+roadmap="$base/roadmap.md"
 if [ -f "$roadmap" ]; then
   python3 - "$roadmap" "$module" <<'PY'
 import sys, re, pathlib

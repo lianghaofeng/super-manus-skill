@@ -5,35 +5,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
-folder=$(sm_active_folder || true)
-
-if [ -z "$folder" ] || [ ! -d "$folder" ]; then
-  emit_context "SessionStart" "No active super-manus feature in this project. Run \`/super-manus:start <name>\` to begin a new feature, or \`/super-manus:switch <name>\` to resume an existing one."
+# v0.4: super-manus is enabled iff docs/super-manus/prd/ exists.
+if [ ! -d "docs/super-manus/prd" ]; then
+  emit_context "SessionStart" "super-manus is not enabled in this project. Run \`/super-manus:start\` to seed \`docs/super-manus/{prd,impl}/\`, \`roadmap.md\`, and \`prd_drift.md\`."
   exit 0
 fi
 
-# v0.2 detection: prd/ as a directory.
-if [ -d "$folder/prd" ]; then
-  update_rel=$(sm_active_update "$folder")
-  if [ -z "$update_rel" ]; then
-    text=$(printf 'Active super-manus v0.2 feature: %s. No impl/<module>/<update>/ folder yet.\n\nNext: run `/super-manus:brainstorm` to define product spec and split modules, or `/super-manus:sync <module>` to begin a milestone in an already-defined module.' "$folder")
-  else
-    target_dir="$folder/impl/$update_rel"
-    plan=$(cat "$target_dir/task_plan.md" 2>/dev/null || echo "(task_plan.md missing in active update)")
-    text=$(printf 'Active super-manus v0.2 feature: %s\nActive update: %s\n\n--- task_plan.md ---\n%s\n\n---\n\nFurther context lives in:\n- %s/findings.md (decisions, errors, research)\n- %s/progress.md (commit log, session log, outstanding phases)\n- %s/prd/_index.md (feature manifest + module list)\n- %s/prd/<module>.md (target state for this update'"'"'s module)\n\nRun `/super-manus:drive` if you want a one-line decision on the next action. Do not hand-edit progress.md — hooks own it.' \
-      "$folder" "$update_rel" "$plan" "$target_dir" "$target_dir" "$folder" "$folder")
-  fi
+update_rel=$(sm_active_update || true)
+if [ -z "$update_rel" ]; then
+  text='super-manus enabled (project-global PRD at docs/super-manus/prd/). No impl/<module>/<update>/ folder yet.
+
+Next: run `/super-manus:brainstorm` to define product spec and split modules, or `/super-manus:sync <module>` to begin a milestone in an already-defined module.'
   emit_context "SessionStart" "$text"
   exit 0
 fi
 
-# v0.1 fallback: feature root has task_plan.md.
-if [ ! -f "$folder/task_plan.md" ]; then
-  emit_context "SessionStart" "No active super-manus feature in this project. Run \`/super-manus:start <name>\` to begin a new feature, or \`/super-manus:switch <name>\` to resume an existing one."
-  exit 0
-fi
-
-plan=$(cat "$folder/task_plan.md")
-text=$(printf '%s\n\n---\n\nFurther context for this feature lives in:\n- %s/findings.md (decisions, errors, research notes)\n- %s/progress.md (commit log, session log, outstanding phases)\n\nRead and update these per the using-sm skill conventions. Do not hand-edit progress.md — hooks own it.' "$plan" "$folder" "$folder")
+target_dir="docs/super-manus/impl/$update_rel"
+plan=$(cat "$target_dir/task_plan.md" 2>/dev/null || echo "(task_plan.md missing in active update)")
+prd_index=$(cat "docs/super-manus/prd/_index.md" 2>/dev/null || echo "(prd/_index.md missing)")
+text=$(printf 'super-manus active update: %s\n\n--- prd/_index.md ---\n%s\n\n--- task_plan.md ---\n%s\n\n---\n\nFurther context lives in:\n- %s/findings.md (decisions, errors, research)\n- %s/progress.md (commit log, session log, outstanding phases)\n- docs/super-manus/prd/<module>.md (target state per module)\n- docs/super-manus/roadmap.md (module status table)\n- docs/super-manus/prd_drift.md (PRD ↔ implementation drift log)\n\nRun `/super-manus:drive` if you want a one-line decision on the next action. Do not hand-edit progress.md — hooks own it.' \
+  "$update_rel" "$prd_index" "$plan" "$target_dir" "$target_dir")
 
 emit_context "SessionStart" "$text"

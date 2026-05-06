@@ -1,95 +1,96 @@
 ---
 name: using-sm
-description: How to read and write super-manus state files (v0.2 two-axis model — module × milestone — with prd/ folder, impl/<module>/<update>/ folders, roadmap.md, prd_drift.md). Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
+description: How to read and write super-manus state files (v0.4 project-global PRD model — module × milestone — with project-global prd/ folder, impl/<module>/<update>/ folders, roadmap.md, prd_drift.md). Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
 user-invocable: false
 ---
 
-# using-sm (v0.2)
+# using-sm (v0.4)
 
-The super-manus plugin keeps a per-feature folder on disk so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol for the **v0.2** layout. Follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions".
+The super-manus plugin keeps a project-global folder on disk so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol for the **v0.4** layout. Follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions".
 
-The v0.2 model has **two axes**: `module` (space) and `milestone update` (time). PRD is per-module target state; implementation work is per-module per-milestone time series. v0.1 features (a flat folder with single `prd.md` + four-file set at the root) keep working through hook fallbacks; this skill describes v0.2 first, with a v0.1 compatibility note at the end.
+The v0.4 model has **two axes**: `module` (space) and `milestone update` (time). PRD is per-module target state (project-global, one snapshot for the whole project); implementation work is per-module per-milestone time series.
+
+The "feature" abstraction from v0.2/v0.3 is gone. There is one project = one PRD. The per-feature timestamped wrapper folder (`<YYYY-MM-DD>-<feature>/`) was removed because it conflated two concepts: the PRD (a current-state snapshot of the whole project) and the impl time series (per-update milestones). Multi-product monorepos need multiple super-manus-enabled subdirectories (one per product).
 
 User-facing commands (all in the `/super-manus:` namespace):
 
-- `/super-manus:start <name>` — create a new feature folder + activate it
-- `/super-manus:brainstorm` — 6-question Q&A; writes `prd/_index.md` + per-module `prd/<module>.md` stubs + auto-seeds the first MVP update for the first listed module
+- `/super-manus:start` — enable super-manus in this project (no-arg, idempotent; seeds `docs/super-manus/{prd,impl}/`, `roadmap.md`, `prd_drift.md`)
+- `/super-manus:brainstorm` — 6-question Q&A; writes project-global `prd/_index.md` + per-module `prd/<module>.md` stubs (does NOT seed an update folder; user runs `sync` after audit)
 - `/super-manus:reverse-prd` — one-shot: scan an existing project, infer module split, generate `prd/_index.md` + per-module PRD stubs (user audits)
 - `/super-manus:sync <module>` — after a PRD edit, scaffold a new milestone-update folder for the chosen module, drift-checked against `prd/<module>.md`
 - `/super-manus:prd-update <module>` — surgical 5-option edit on a single per-module PRD (no changelog markers, ≤2000 words, single-section)
 - `/super-manus:impl [target]` — resume / advance work in the active update; auto-selects next pending phase, seeds `tasks/p<n>_impl.md`, drift-checks, then executes
-- `/super-manus:drive` — global next-action switch: read full feature state, decide one of brainstorm / sync / prd-update / impl, announce decision + reason, execute inline
+- `/super-manus:drive` — global next-action switch: read full project state, decide one of brainstorm / sync / prd-update / impl, announce decision + reason, execute inline
+- `/super-manus:catchup` — re-inject project-global `prd/_index.md` + most-recent update's `task_plan.md` into context
+- `/super-manus:log` — manually append a session log entry to the active update's `progress.md` now
 
-The recommended flow for a non-trivial v0.2 feature: `start` → `brainstorm` → audit `prd/<module>.md` files → `impl` (or `drive`) → commit → … → on PRD change: `prd-update` or hand-edit `prd/<module>.md` → `sync` → `impl`.
+The recommended flow for a non-trivial project: `start` → `brainstorm` → audit `prd/<module>.md` files → `sync <module>` → `impl` (or `drive`) → commit → … → on PRD change: `prd-update` or hand-edit `prd/<module>.md` → `sync` → `impl`.
 
 ## 1. Where state lives
 
 ```
 <project-root>/
-├── .super-manus/
-│   └── active                                   # text file: current feature folder name
 └── docs/super-manus/
-    └── <YYYY-MM-DD>-<feature-name>/
-        ├── prd/
-        │   ├── _index.md                        # feature-level: Problem / Audience / Success metrics / Demo / Must / Not / Modules / Data flow (≤700 words)
-        │   └── <module>.md                      # per-module: Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions (≤2000 words)
-        ├── impl/
-        │   └── <module>/
-        │       └── <YYYY-MM-DD>-<update-name>/
-        │           ├── task_plan.md             # phase index for THIS update (Goal + Phases table)
-        │           ├── findings.md              # decisions / errors / data points for THIS update
-        │           ├── progress.md              # commits + session log for THIS update (hook-managed)
-        │           └── tasks/
-        │               └── p<n>_impl.md         # per-phase technical plan, lazy-created by /super-manus:impl
-        ├── roadmap.md                           # module status table (auto-managed)
-        └── prd_drift.md                         # PRD ↔ implementation conflict log (append-only)
+    ├── prd/                                     ← project-global, ONE source of truth
+    │   ├── _index.md                            ← 8 PM-flavored H2 sections (Problem / Audience / Success metrics / Demo / Must / Not doing / Modules / Data flow overview); ≤700 words
+    │   └── <module>.md                          ← 9 PM-flavored H2 sections (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions); ≤2000 words
+    ├── roadmap.md                               ← project-global, module status table (auto-managed)
+    ├── prd_drift.md                             ← project-global, append-only PRD ↔ implementation drift log
+    └── impl/                                    ← time series of milestones, per module
+        └── <module>/
+            └── <YYYY-MM-DD>-<update-name>/      ← only place timestamps appear
+                ├── task_plan.md                 ← phase index for THIS update (Goal + Phases table)
+                ├── findings.md                  ← decisions / errors / data points for THIS update
+                ├── progress.md                  ← commits + session log for THIS update (hook-managed)
+                └── tasks/
+                    └── p<n>_impl.md             ← per-phase technical plan, lazy-created by /super-manus:impl
 ```
 
-**Two axes**: `prd/<module>.md` is the module's TARGET STATE (does not move with implementation). `impl/<module>/<update>/` is the module's TIME SERIES (each milestone update is a folder; old updates are immutable historical record). The internal four-file set inside an update folder uses the same schema as v0.1's feature-root files — `task_plan.md ## Goal` is a one-sentence summary + pointer to the per-module PRD; everything else follows v0.1 conventions inside that update.
+**Two axes**: `prd/<module>.md` is the module's TARGET STATE (does not move with implementation). `impl/<module>/<update>/` is the module's TIME SERIES (each milestone update is a folder; old updates are immutable historical record).
 
-`.super-manus/active` contains just the feature folder basename. Switch features with `/super-manus:switch`; create new ones with `/super-manus:start`. Always resolve the active feature folder by reading `.super-manus/active` first — never hard-code a path.
+**No active-state file.** There is NO `.super-manus/active` and no second active-state file. Hooks and commands resolve "the current active update" by calling `sm_active_update` (sourced from `${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh`, **no arguments** in v0.4), which scans `docs/super-manus/impl/<module>/*/` across all modules and returns `<module>/<update-folder>` of the most recently modified subfolder. If the result is empty, the hook no-ops; the agent suggests `/super-manus:brainstorm` or `/super-manus:sync <module>`.
 
-**Active update resolution.** There is NO second active-state file. Hooks and commands resolve "the current active update" by calling `sm_active_update <feature>` (sourced from `${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh`), which scans `impl/<module>/` across all modules and returns `<module>/<update-folder>` of the most recently modified subfolder. If the result is empty, the hook no-ops; the agent suggests `/super-manus:brainstorm` or `/super-manus:sync <module>`.
+**super-manus enabled?** A project is super-manus-enabled iff `docs/super-manus/prd/` exists as a directory. Hooks check this before doing anything.
 
 ## 2. What goes in which file
 
-**`prd/_index.md`** — feature-level overview + module manifest (`## Problem` / `## Audience` / `## Success metrics` / `## Demo` / `## Must` / `## Not doing` / `## Modules` / `## Data flow overview`).
+**`docs/super-manus/prd/_index.md`** — project-level overview + module manifest (`## Problem` / `## Audience` / `## Success metrics` / `## Demo` / `## Must` / `## Not doing` / `## Modules` / `## Data flow overview`).
 - Total length ≤ 700 words. The `## Modules` table (`| Module | File | Purpose |`) is the source of truth for which modules exist.
 - `## Audience` names primary + secondary users with their trigger moments. `## Success metrics` is the top 3 user/business KPIs (target + measurement method) — NOT infra metrics like "uptime > 99%".
 - **Not for**: per-module schema, endpoints, UX details, per-module risks. Those live in `prd/<module>.md`.
 
-**`prd/<module>.md`** — per-module target state (`## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`).
-- Total length ≤ 2000 words. `## What users get` is the key new section vs v0.1: it lists 3–5 capabilities in PM voice with technical evidence appended (`Backed by: <schema | endpoint | screen | CLI>`) — at the level of "this is what the module IS", not "how this phase MIGRATES to it". Schema sketches (table + field lists), endpoint paths, screen flows go here.
+**`docs/super-manus/prd/<module>.md`** — per-module target state (`## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`).
+- Total length ≤ 2000 words. `## What users get` lists 3–5 capabilities in PM voice with technical evidence appended (`Backed by: <schema | endpoint | screen | CLI>`) — at the level of "this is what the module IS", not "how this phase MIGRATES to it". Schema sketches (table + field lists), endpoint paths, screen flows go here.
 - `## Why this exists` is 2 sentences of PM framing (user pain + business value), NOT "this module wraps X". `## Users` names the persona + trigger moment (internal modules name their upstream callers). `## Success` is 3–5 measurable user-facing outcomes — NOT "tests pass" / "uptime > 99%". `## How it connects` carries upstream/downstream/third-party in plain language plus a precise edge list. `## Quality bar` is user-visible NFRs (perf, scale, compliance) only — internal infra ("uses Postgres") belongs under `## How it connects`. `## Risks` covers Product / Technical / Org+dependency in 2–4 bullets total.
 - **No changelog markers**: no `~~strikethrough~~`, no `(was: ...)`, no dated revision marks, no "moved from <section>" breadcrumbs. PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
 - **Not for**: code snippets, file paths, line numbers, function names — those are tasks/p<n>_impl.md territory. Schema sketches at the level of "table X has fields a, b, c" are fine; raw migration code is not.
 
-**`impl/<module>/<YYYY-MM-DD>-<update-name>/task_plan.md`** — phase index for ONE milestone update.
+**`docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/task_plan.md`** — phase index for ONE milestone update.
 - `## Goal`: ONE SENTENCE distilling this update's intent, ending with a pointer to `../../../prd/<module>.md`.
 - `## Phases`: markdown table with columns `# | Name | Status | Notes`.
 - Status values: `pending` / `in_progress` / `blocked` / `closed` (lowercase, exact). Used by hooks and `scripts/refresh-outstanding.sh`.
 - **Not for**: code, multi-line implementation sketches, OR product-spec details. Product → `prd/<module>.md`. Implementation → `tasks/p<n>_impl.md`.
 
-**`impl/<module>/<YYYY-MM-DD>-<update-name>/findings.md`** — working memory for THIS update. Tight entries.
+**`docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/findings.md`** — working memory for THIS update. Tight entries.
 - `## Decisions`: dated entries, **3 short lines max each**: `Chose: <one sentence>` / `Why: <one sentence>` / `Ruled out: <one sentence, optional>`. **No** code blocks, file paths, line numbers, function names, test command names. The artifact lives in `tasks/p<n>_impl.md` and commit messages — `findings.md` records the *judgment*, not the *artifact*. PRD revisions get a paired entry here when `/super-manus:prd-update <module>` runs.
 - `## Errors`: table `When | What failed | Resolution`. Each cell ≤ one short sentence.
 - `## Data points / research`: bullet form. Smoke numbers, eval scores, links.
 
-**`impl/<module>/<YYYY-MM-DD>-<update-name>/progress.md`** — auto-managed; treat as read-only by default.
+**`docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/progress.md`** — auto-managed; treat as read-only by default.
 - `## Completed commits`: post-commit hook appends one line per `git commit` (Bash-tool calls only).
 - `## Session log`: Stop hook surfaces a checkpoint every N turns OR when there are commits since the latest entry; agent judges whether to write.
 - `## Outstanding`: regenerated from THIS update's `task_plan.md` by `scripts/refresh-outstanding.sh "<update-folder>"` — never edit by hand.
 
-**`impl/<module>/<YYYY-MM-DD>-<update-name>/tasks/p<n>_impl.md`** — per-phase technical plan (lazy).
+**`docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/tasks/p<n>_impl.md`** — per-phase technical plan (lazy).
 - Created by `/super-manus:impl` when the next pending phase needs a plan. Trivial phases don't need one.
 - Sections: `## Objective` (what "done" means) / `## Approach` (chosen technical route — DB schema, API endpoints, code snippets, file diffs all live here) / `## Files touched` / `## Verification`.
 - Lifecycle: fill `## Objective` first, evolve `## Approach` in place, leave the file as historical record when the phase closes.
 
-**`roadmap.md`** — module status table. `| Module | Status | Note |`. Status values: `not-started` / `iterating` / `stable` / `blocked`.
+**`docs/super-manus/roadmap.md`** — module status table. `| Module | Status | Note |`. Status values: `not-started` / `iterating` / `stable` / `blocked`.
 - Auto-managed by `/super-manus:start` (empty), `/super-manus:brainstorm` (rows added at `not-started`), `/super-manus:sync` (flips `not-started` → `iterating`), `/super-manus:impl` (flips `iterating` → `stable` once an update's phases are all `closed` AND no pending drift remains).
 - The Note column is **user-owned** — agent must not overwrite a user-written note.
 
-**`prd_drift.md`** — append-only PRD ↔ implementation conflict log. `| When | Module | Conflict | Resolution |`.
+**`docs/super-manus/prd_drift.md`** — append-only PRD ↔ implementation conflict log. `| When | Module | Conflict | Resolution |`.
 - Rows appended by `/super-manus:sync`, `/super-manus:impl`, and `/super-manus:drive` when they detect a conflict.
 - Resolution column is updated by `/super-manus:prd-update <module>` when the user takes the "update PRD" path; left as `pending` otherwise.
 
@@ -106,7 +107,7 @@ The recommended flow for a non-trivial v0.2 feature: `start` → `brainstorm` �
 | `progress.md` (per update) | NEVER directly. Wait for a hook reminder. Post-commit hook tells you to append to `## Completed commits`; Stop hook checkpoint asks you to consider writing to `## Session log`. |
 | `tasks/p<n>_impl.md` (per update) | A phase entered `in_progress`; the approach / DB schema / API design changes mid-phase; the verification step changes. |
 
-**Drift detection responsibility (new in v0.2).** When running `/super-manus:impl`, `/super-manus:sync`, or `/super-manus:drive`, you must compare the user's stated intent / commit messages against `prd/<module>.md ## What users get` / `## Quality bar` / `## Out of scope`. If you see a capability that PRD doesn't declare (or one that violates the Quality bar), append one row to `prd_drift.md` with `Resolution = pending` and stop the user with two paths: (1) revert implementation, or (2) `/super-manus:prd-update <module>`. Do **not** silently update PRD. The mechanics of *how* to compare PRD claims against actual code are defined in §4 (Drift check protocol).
+**Drift detection responsibility.** When running `/super-manus:impl`, `/super-manus:sync`, or `/super-manus:drive`, you must compare the user's stated intent / commit messages against `prd/<module>.md ## What users get` / `## Quality bar` / `## Out of scope`. If you see a capability that PRD doesn't declare (or one that violates the Quality bar), append one row to `prd_drift.md` with `Resolution = pending` and stop the user with two paths: (1) revert implementation, or (2) `/super-manus:prd-update <module>`. Do **not** silently update PRD. The mechanics of *how* to compare PRD claims against actual code are defined in §4 (Drift check protocol).
 
 ## 4. Drift check protocol
 
@@ -147,9 +148,9 @@ If no language server is available (cold project, missing toolchain, polyglot re
 
 ### Per-command application
 
-- `/super-manus:reverse-prd` — full-codebase pass to bootstrap PRD; module boundaries and `## What users get` are LSP-led, `## Why this exists` / `## Users` / `## Success` / Demo are README-led.
-- `/super-manus:sync <module>` — runs against the user's stated intent before scaffolding the update folder; LSP confirms whether the intent's capability already exists, grep confirms wiring.
-- `/super-manus:impl` — runs against the next phase's intent and `tasks/p<n>_impl.md ## Objective` before drafting code; conflict appends `prd_drift.md`.
+- `/super-manus:reverse-prd` — full-codebase pass to bootstrap PRD; module boundaries and `## What users get` are LSP-led, `## Why this exists` / `## Users` / `## Success` / Demo are README-led. Writes to `docs/super-manus/prd/`.
+- `/super-manus:sync <module>` — runs against the user's stated intent before scaffolding the update folder under `docs/super-manus/impl/<module>/`; LSP confirms whether the intent's capability already exists, grep confirms wiring.
+- `/super-manus:impl` — runs against the next phase's intent and `tasks/p<n>_impl.md ## Objective` before drafting code; conflict appends `docs/super-manus/prd_drift.md`.
 - `/super-manus:prd-update <module>` — for **Tighten** and **Demote**, verify the affected bullet against current code; **Split** runs on both halves; **Add** and **Exclude** don't need verification (they declare new intent or remove scope, not align).
 
 ## 5. The 2-action rule
@@ -179,13 +180,24 @@ The point is to surface tarpits early, not slog through them silently.
 - **Hand-editing `prd_drift.md`** — only `sync` / `impl` / `drive` append; only `prd-update` resolves. Never reorder rows or rewrite history here.
 - **Overwriting the user's Note column in `roadmap.md`** — flip Status, leave Note alone unless the user explicitly asked.
 - **Silently updating PRD** when implementation diverges — always log a drift row and let the user decide.
+- **Inventing a per-feature wrapper folder** — v0.4 has none. PRD lives at `docs/super-manus/prd/`, not `docs/super-manus/<something>/prd/`. If you find yourself constructing a feature-prefixed path, you're working from outdated v0.2/v0.3 instructions.
+- **Writing or reading `.super-manus/active`** — the file does not exist in v0.4. Always resolve via `sm_active_update` (no args).
 - Reordering or renaming schema headings — hooks parse by exact heading name (`## Phases`, `## Outstanding`, `## Completed commits`, `## Session log`, `## Modules`, etc.) and will silently produce wrong output if you rename them.
-- Creating ad-hoc files (`notes.md`, `decisions.md`, `todo.md`, `tests.md`) inside the feature folder — keep state in the canonical files.
+- Creating ad-hoc files (`notes.md`, `decisions.md`, `todo.md`, `tests.md`) inside the super-manus folder — keep state in the canonical files.
 - Hand-editing `## Outstanding` in any `progress.md` — `scripts/refresh-outstanding.sh` overwrites it on the next refresh.
 
-## 8. v0.1 compatibility
+## 8. Migration from v0.2/v0.3
 
-If the active feature folder has `prd.md` as a *file* (not `prd/` as a directory), it's v0.1. The hooks fall back to v0.1 paths automatically (`<feature>/progress.md`, `<feature>/task_plan.md`). The legacy commands `/super-manus:phase <n>`, `/super-manus:catchup`, and `/super-manus:log` keep working on v0.1 features. There is no automatic migration — v0.2 only applies to features started with the v0.2 `/super-manus:start`.
+v0.4 has no automatic migration command. If you have a project still on the v0.2/v0.3 layout (per-feature wrapper folder), move things by hand:
+
+1. Pick the canonical feature whose PRD will become the project-global PRD.
+2. Move `docs/super-manus/<feature>/prd/` → `docs/super-manus/prd/`.
+3. Move `docs/super-manus/<feature>/{roadmap.md,prd_drift.md}` → `docs/super-manus/`.
+4. Move `docs/super-manus/<feature>/impl/<module>/<update>/` → `docs/super-manus/impl/<module>/<update>/`.
+5. Delete the now-empty `docs/super-manus/<feature>/` folder and `.super-manus/` directory.
+6. Hooks and scripts pick up the new layout immediately; no further action needed.
+
+Multi-feature projects should pick one feature as the project PRD and either fold the others in as additional modules, archive their docs, or split them into separate super-manus-enabled subdirectories.
 
 ---
 

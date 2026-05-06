@@ -1,8 +1,15 @@
-# super-manus — Design Doc (v0.2)
+# super-manus — Design Doc (v0.2 / v0.3)
 
-> **This is the current design. v0.1 (`design.md`) is superseded.**
+> **SUPERSEDED — v0.4 ([docs/design-v0.4.md](design-v0.4.md)) is the current design.**
+> v0.4 hoists PRD / roadmap / prd_drift to project-global level and removes the
+> per-feature timestamped wrapper folder; the `.super-manus/active` pointer is
+> gone, and hooks resolve the active update purely by mtime scan. The layout
+> invariants in this document (per-feature wrapper, `<feature>/` path prefix)
+> NO LONGER APPLY — read this only for historical context. v0.1 (`design-v0.1.md`)
+> is also superseded.
+>
 > Validated through brainstorming session 2026-05-06.
-> Status: design locked, ready to enter writing-plans.
+> Status: superseded by v0.4.
 
 ## 1. What changed from v0.1
 

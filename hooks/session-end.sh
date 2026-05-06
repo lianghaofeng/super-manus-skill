@@ -8,21 +8,13 @@ source "${SCRIPT_DIR}/lib.sh"
 # Read Claude Code's stdin payload (may be empty in tests / direct invocation).
 payload=$(cat 2>/dev/null || true)
 
-folder=$(sm_active_folder || true)
-[ -n "$folder" ] || { echo '{}'; exit 0; }
+# v0.4: super-manus is enabled iff docs/super-manus/prd/ exists.
+[ -d "docs/super-manus/prd" ] || { echo '{}'; exit 0; }
 
-# v0.2 detection: prd/ exists as a directory → target the active update's progress.md.
-# v0.1 fallback: target feature root.
-if [ -d "$folder/prd" ]; then
-  update_rel=$(sm_active_update "$folder")
-  if [ -z "$update_rel" ]; then
-    # v0.2 feature with no impl/<module>/<update>/ yet — nothing to log to.
-    echo '{}'; exit 0
-  fi
-  target_dir="$folder/impl/$update_rel"
-else
-  target_dir="$folder"
-fi
+update_rel=$(sm_active_update || true)
+[ -n "$update_rel" ] || { echo '{}'; exit 0; }
+
+target_dir="docs/super-manus/impl/$update_rel"
 [ -f "$target_dir/progress.md" ] || { echo '{}'; exit 0; }
 
 # Stop hooks fire at the end of EACH agent reply, not just at session end.
@@ -30,7 +22,7 @@ fi
 # turns and only trigger every N turns (default 5; override via SUPER_MANUS_LOG_EVERY_N_TURNS).
 # Cadence policy is governed by SUPER_MANUS_LOG_MODE (turns / commit / both / off).
 # State file format: "<session_id> <turn_count>" on a single line.
-# State file lives next to progress.md so it tracks per-update state in v0.2.
+# State file lives next to progress.md so it tracks per-update state.
 state_file="$target_dir/.session-state"
 session_id=$(sm_payload_field "$payload" "session_id")
 [ -n "$session_id" ] || session_id="unknown"

@@ -17,13 +17,49 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
   - `roadmap.md` (v0.2): `## Modules`
   - `prd_drift.md` (v0.2): `# PRD drift log` (single H1; the table is the body)
   - These headings are parsed by hooks and scripts; renaming them silently breaks the runtime.
-- v0.1 templates (`templates/prd.md` — the flat-folder PRD) are kept for legacy v0.1 features and must not be removed; v0.2 uses `prd_index.md` + `prd_module.md` instead.
+- v0.1 templates (`templates/prd.md` — the flat-folder PRD) are kept for legacy v0.1 features and must not be removed; v0.2/v0.4 use `prd_index.md` + `prd_module.md` instead.
 - Plugin manifest (`.claude-plugin/plugin.json`) and hook configuration (`hooks/hooks.json`) are load-bearing. Validate JSON before committing.
-- The two-axis v0.2 model has its own invariants:
-  - PRD files are **target state** (current snapshot, no changelog markers).
-  - `impl/<module>/<update>/` is the **time series**; old updates are immutable historical record.
-  - Hooks resolve the active update via `sm_active_update <feature>` (in `hooks/lib.sh`) — never invent a second active-state file.
-  - Drift between PRD and implementation is **always** logged to `prd_drift.md`; the agent must not silently update PRD.
+
+## v0.4 layout (PROJECT-GLOBAL PRD; current target)
+
+The v0.3 layout wrapped everything in a per-feature timestamped folder (`docs/super-manus/<YYYY-MM-DD>-<feature>/`) which conflated two concepts: the PRD (a current-state snapshot of the project) and the impl time-series (per-update milestones). v0.4 separates them:
+
+```
+docs/super-manus/
+├── prd/                                     ← project-global, ONE source of truth
+│   ├── _index.md                            ← 8 PM-flavored H2 sections
+│   └── <module>.md                          ← 9 PM-flavored H2 sections
+├── roadmap.md                               ← project-global, module status table
+├── prd_drift.md                             ← project-global, append-only drift log
+└── impl/                                    ← time series of milestones, per module
+    └── <module>/
+        └── <YYYY-MM-DD>-<update-name>/      ← only place timestamps appear
+            ├── task_plan.md
+            ├── findings.md
+            ├── progress.md
+            └── tasks/
+                └── p<n>_impl.md
+```
+
+Invariants:
+- PRD files are **target state** (current snapshot, no changelog markers).
+- `impl/<module>/<update>/` is the **time series**; old updates are immutable historical record.
+- There is NO `.super-manus/active` state file in v0.4. Hooks resolve the active update purely via `sm_active_update` (mtime scan of `docs/super-manus/impl/<module>/*/`) — never invent a second active-state file.
+- Drift between PRD and implementation is **always** logged to `prd_drift.md`; the agent must not silently update PRD.
+- The "feature" abstraction is gone. There is one project = one PRD. Multi-product monorepos must use multiple super-manus-enabled subdirectories (one per product) or stay on v0.3.
+
+## v0.3 → v0.4 path migration
+
+| v0.3 path | v0.4 path |
+| --- | --- |
+| `docs/super-manus/<feature>/prd/_index.md` | `docs/super-manus/prd/_index.md` |
+| `docs/super-manus/<feature>/prd/<module>.md` | `docs/super-manus/prd/<module>.md` |
+| `docs/super-manus/<feature>/roadmap.md` | `docs/super-manus/roadmap.md` |
+| `docs/super-manus/<feature>/prd_drift.md` | `docs/super-manus/prd_drift.md` |
+| `docs/super-manus/<feature>/impl/<m>/<u>/` | `docs/super-manus/impl/<m>/<u>/` |
+| `.super-manus/active` (feature folder name) | (removed; mtime resolve only) |
+
+Slash command surface area also shrinks: `/super-manus:start` becomes a no-arg "enable in this project" command, `/super-manus:switch` is removed, `/super-manus:phase` (legacy v0.1) is removed. `/super-manus:catchup` re-injects the most-recently-modified update's task_plan plus the project-global `prd/_index.md`.
 
 ## PR governance
 
@@ -35,7 +71,8 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
 
 ## Where to look
 
-- **Current design** lives in `docs/design-v0.2.md` — the source of truth for v0.2 and the active development target.
+- **Current design** lives in `docs/design-v0.4.md` — source of truth for the project-global layout and the active development target.
+- v0.2/v0.3 design is preserved at `docs/design-v0.2.md` for historical reference (with a SUPERSEDED banner — its layout invariants no longer apply).
 - v0.1 design is preserved at `docs/design-v0.1.md` for historical reference (with a SUPERSEDED banner).
 - Plans (task-by-task implementation breakdown) live in `docs/plans/`.
-- When in doubt about scope, re-read `design-v0.2.md §3` (Scope) and `§12` (Out-of-scope clarifications) before adding anything.
+- When in doubt about scope or layout, re-read `design-v0.4.md` before adding anything.
