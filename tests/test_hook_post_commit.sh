@@ -6,18 +6,15 @@ REPO_ROOT="$(pwd)"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# Set up an isolated project with hooks + a v0.2 feature with one update folder
+# Set up an isolated v0.4 project (project-global super-manus)
 cp -r hooks "$TMP/"
 cp -r scripts "$TMP/"
 cp -r templates "$TMP/"
 cd "$TMP"
-mkdir -p .super-manus
-SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh "demo" >/dev/null
-TODAY=$(date +%F)
-FEATURE="docs/super-manus/${TODAY}-demo"
+SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh >/dev/null
 SUPER_MANUS_ROOT="$TMP" bash scripts/sm-update.sh "api" "mvp" >/dev/null
-UPDATE_REL="api/${TODAY}-mvp"
-UPDATE_DIR="$FEATURE/impl/$UPDATE_REL"
+TODAY=$(date +%F)
+UPDATE_DIR="docs/super-manus/impl/api/${TODAY}-mvp"
 
 # Helper: run hook with given JSON payload, return its stdout
 run_hook() {
@@ -53,7 +50,7 @@ assert f'"{expected}"' in ctx, f"{label}: refresh-outstanding should be passed {
 PY
 }
 
-# === v0.2 cases (active update is api/${TODAY}-mvp) ===
+# === v0.4 cases ===
 
 # Case 1: non-Bash tool call → no-op
 out=$(run_hook '{"tool_name":"Read","tool_input":{"file_path":"/foo"},"tool_response":{"interrupted":false}}')
@@ -67,55 +64,40 @@ assert_noop "$out" "Case 2 (Bash ls)"
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"},"tool_response":{"stdout":"","stderr":"nothing to commit","interrupted":false},"exit_code":1}')
 assert_noop "$out" "Case 3 (failed commit)"
 
-# Case 4: successful git commit on v0.2 → reminder targets the active update folder
+# Case 4: successful git commit → reminder targets the v0.4 active update folder
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"feat: add x\""},"tool_response":{"stdout":"[main abc1234] feat: add x","stderr":"","interrupted":false},"exit_code":0}')
-assert_reminder_at "$out" "$UPDATE_DIR" "Case 4 (v0.2 successful commit → impl/<m>/<u>/progress.md)"
+assert_reminder_at "$out" "$UPDATE_DIR" "Case 4 (v0.4 successful commit → impl/<m>/<u>/progress.md)"
 
-# Case 5: --amend on v0.2 → still targets active update
+# Case 5: --amend on v0.4 → still targets active update
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit --amend --no-edit"},"tool_response":{"stdout":"[main abc1234] amended","stderr":"","interrupted":false},"exit_code":0}')
-assert_reminder_at "$out" "$UPDATE_DIR" "Case 5 (v0.2 --amend)"
+assert_reminder_at "$out" "$UPDATE_DIR" "Case 5 (v0.4 --amend)"
 
 # Case 6: aliased commit → no-op
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git ci -m foo"},"tool_response":{"stdout":"","stderr":"","interrupted":false},"exit_code":0}')
 assert_noop "$out" "Case 6 (git alias 'ci' should not trigger)"
 
-# Case 7: leading whitespace + git commit → still triggers v0.2 reminder
+# Case 7: leading whitespace + git commit → still triggers v0.4 reminder
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"  git commit -m foo"},"tool_response":{"stdout":"[main abc1234] foo","stderr":"","interrupted":false},"exit_code":0}')
-assert_reminder_at "$out" "$UPDATE_DIR" "Case 7 (v0.2 leading whitespace)"
+assert_reminder_at "$out" "$UPDATE_DIR" "Case 7 (v0.4 leading whitespace)"
 
-# Case 8: multiline commit message → still triggers v0.2 reminder
+# Case 8: multiline commit message → still triggers v0.4 reminder
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(cat <<EOF\nfoo\nEOF\n)\""},"tool_response":{"stdout":"[main abc1234] foo","stderr":"","interrupted":false},"exit_code":0}')
-assert_reminder_at "$out" "$UPDATE_DIR" "Case 8 (v0.2 multiline)"
+assert_reminder_at "$out" "$UPDATE_DIR" "Case 8 (v0.4 multiline)"
 
-# Case 9: no active feature → no-op
-mv .super-manus/active "$TMP/active.bak"
+# Case 9: super-manus disabled (no docs/super-manus/prd/) → no-op
+mv docs/super-manus "$TMP/super-manus.bak"
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"},"tool_response":{"stdout":"[main abc1234] foo","stderr":"","interrupted":false},"exit_code":0}')
-assert_noop "$out" "Case 9 (no active feature)"
-mv "$TMP/active.bak" .super-manus/active
+assert_noop "$out" "Case 9 (super-manus not enabled)"
+mv "$TMP/super-manus.bak" docs/super-manus
 
 # Case 10: malformed JSON → no-op
 out=$(printf '%s' '{not valid json' | bash hooks/post-commit.sh)
 assert_noop "$out" "Case 10 (malformed JSON)"
 
-# Case 11: v0.2 feature but NO impl/<m>/<u>/ yet → no-op
-SECOND_FEATURE="docs/super-manus/${TODAY}-empty-v02"
-mkdir -p "$SECOND_FEATURE/prd" "$SECOND_FEATURE/impl"
-echo "${TODAY}-empty-v02" > .super-manus/active
+# Case 11: super-manus enabled but no impl/<m>/<u>/ yet → no-op
+rm -rf docs/super-manus
+SUPER_MANUS_ROOT="$TMP" bash scripts/sm-start.sh >/dev/null
 out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"},"tool_response":{"stdout":"[main abc1234] foo","stderr":"","interrupted":false},"exit_code":0}')
-assert_noop "$out" "Case 11 (v0.2 feature with no impl/<m>/<u>/ yet)"
-echo "${TODAY}-demo" > .super-manus/active
-
-# === v0.1 fallback case (legacy feature with prd.md as a file, no prd/ folder) ===
-V01_NAME="${TODAY}-legacy"
-V01_FOLDER="docs/super-manus/$V01_NAME"
-mkdir -p "$V01_FOLDER"
-for f in task_plan.md prd.md findings.md progress.md; do
-  sed "s|<feature title>|legacy|g" "templates/$f" > "$V01_FOLDER/$f"
-done
-echo "$V01_NAME" > .super-manus/active
-
-# Case 12: v0.1 feature → reminder targets feature root (legacy behavior unchanged)
-out=$(run_hook '{"tool_name":"Bash","tool_input":{"command":"git commit -m foo"},"tool_response":{"stdout":"[main abc1234] foo","stderr":"","interrupted":false},"exit_code":0}')
-assert_reminder_at "$out" "$V01_FOLDER" "Case 12 (v0.1 fallback — reminder at feature root)"
+assert_noop "$out" "Case 11 (v0.4 enabled but no impl/<m>/<u>/ yet)"
 
 echo OK

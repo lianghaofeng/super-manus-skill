@@ -7,13 +7,14 @@ F=commands/brainstorm.md
 # Frontmatter
 grep -qF "description:" "$F" || { echo "FAIL: missing frontmatter description"; exit 1; }
 
-# Must reference active feature resolution
-grep -qF ".super-manus/active" "$F" || { echo "FAIL: must instruct agent to read .super-manus/active"; exit 1; }
-grep -qF "/super-manus:start" "$F" || { echo "FAIL: must point users without active feature to /super-manus:start"; exit 1; }
+# v0.4: project-global PRD; no .super-manus/active concept anywhere
+grep -qF ".super-manus/active" "$F" && { echo "FAIL: brainstorm.md must NOT reference .super-manus/active in v0.4"; exit 1; } || true
+grep -qF "/super-manus:start" "$F" || { echo "FAIL: must point users at /super-manus:start when super-manus is not enabled"; exit 1; }
 
-# v0.2: must operate on prd/_index.md and per-module prd/<module>.md
-grep -qF "prd/_index.md" "$F" || { echo "FAIL: must reference prd/_index.md (v0.2 manifest)"; exit 1; }
-grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must reference prd/<module>.md (v0.2 per-module file)"; exit 1; }
+# v0.4: must operate on project-global prd/_index.md + per-module prd/<module>.md
+grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must reference docs/super-manus/prd/ (v0.4 project-global PRD root)"; exit 1; }
+grep -qF "prd/_index.md" "$F" || { echo "FAIL: must reference prd/_index.md (v0.4 manifest)"; exit 1; }
+grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must reference prd/<module>.md (v0.4 per-module file)"; exit 1; }
 
 # Must reference the prd_index sections it writes
 for section in Problem Audience "Success metrics" Demo Must "Not doing" "Modules" "Data flow overview"; do
@@ -25,7 +26,7 @@ for section in "Why this exists" Users Success "What users get" "How it connects
   grep -qF "## $section" "$F" || { echo "FAIL: must reference '## $section' section for per-module PRD"; exit 1; }
 done
 
-# v0.2 hard constraints — keep _index.md ≤700 words, per-module ≤2000
+# v0.2/v0.4 hard constraints — keep _index.md ≤700 words, per-module ≤2000
 grep -qF "700" "$F" || { echo "FAIL: must mention 700-word ceiling for prd/_index.md"; exit 1; }
 grep -qF "2000" "$F" || { echo "FAIL: must mention 2000-word ceiling for prd/<module>.md"; exit 1; }
 
@@ -34,18 +35,21 @@ for forbidden in "database" "API" "architecture"; do
   grep -qiF "$forbidden" "$F" || { echo "FAIL: must explicitly forbid asking about $forbidden"; exit 1; }
 done
 
-# 6-question Q&A (PM-flavored schema bumped from 5 → 6 to elicit Risks): must mention 6 questions and last question is module split
+# 6-question Q&A: must mention 6 questions and module split is final question
 grep -qiE "6 questions|six questions" "$F" || { echo "FAIL: must mention the 6-question contract"; exit 1; }
 grep -qiF "module" "$F" || { echo "FAIL: must mention module-split as the final question"; exit 1; }
 
-# Must auto-seed the first MVP update folder via sm-update.sh
-grep -qF "scripts/sm-update.sh" "$F" || { echo "FAIL: must invoke scripts/sm-update.sh to seed first MVP update"; exit 1; }
-grep -qiF "mvp" "$F" || { echo "FAIL: must name the first update 'mvp' (or close)"; exit 1; }
+# v0.4: must NOT auto-seed the first MVP update folder. Brainstorm produces PRD content only.
+# /super-manus:sync is what scaffolds impl/<module>/<update>/.
+grep -qF "scripts/sm-update.sh" "$F" && { echo "FAIL: brainstorm.md must NOT invoke sm-update.sh in v0.4 — that's /super-manus:sync's job"; exit 1; } || true
 
-# Must NOT recommend writing tasks/p<n>_impl.md from brainstorm (that's /super-manus:impl)
+# Must explicitly forbid proposing architecture
 grep -qiF "Do not propose architecture" "$F" || { echo "FAIL: must prohibit proposing architecture"; exit 1; }
 
 # Must update roadmap.md with the module list
 grep -qF "roadmap.md" "$F" || { echo "FAIL: must reference roadmap.md update"; exit 1; }
+
+# Must redirect to /super-manus:sync for first MVP scaffolding (since brainstorm no longer auto-seeds)
+grep -qF "/super-manus:sync" "$F" || { echo "FAIL: must redirect to /super-manus:sync for first MVP update folder"; exit 1; }
 
 echo OK

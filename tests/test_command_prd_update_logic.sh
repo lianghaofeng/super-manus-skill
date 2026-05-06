@@ -7,8 +7,11 @@ F=commands/prd-update.md
 # Frontmatter
 grep -qF "description:" "$F" || { echo "FAIL: missing frontmatter description"; exit 1; }
 
-# Must resolve active feature from .super-manus/active
-grep -qF ".super-manus/active" "$F" || { echo "FAIL: must read .super-manus/active"; exit 1; }
+# v0.4: no .super-manus/active state file
+grep -qF ".super-manus/active" "$F" && { echo "FAIL: prd-update.md must NOT reference .super-manus/active in v0.4"; exit 1; } || true
+
+# v0.4: project-global PRD root
+grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must reference docs/super-manus/prd/ as the v0.4 project-global PRD root"; exit 1; }
 
 # Must operate on a single per-module PRD file
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must reference prd/<module>.md (per-module PRD)"; exit 1; }
@@ -30,11 +33,11 @@ grep -qF "findings.md" "$F" || { echo "FAIL: must write a paired findings.md dec
 # Must NOT write to progress.md (hook-managed)
 grep -qiF "progress.md" "$F" || { echo "FAIL: must mention progress.md (specifically: not to write to it)"; exit 1; }
 
-# Must NOT touch prd_drift.md directly here either (drift is logged by /sync or /impl, resolved by prd-update via the findings.md entry)
-# (No grep needed — this is a forbidden behavior; just check the file exists and doesn't claim to write drift)
-
 # Must redirect tech-design changes back to impl/<module>/<update>/tasks/
 grep -qiF "tech" "$F" || { echo "FAIL: must distinguish product vs tech changes"; exit 1; }
+
+# v0.4: per-module impl path is project-global (no <feature>/ wrapper)
+grep -qF "docs/super-manus/impl/<module>" "$F" || { echo "FAIL: must reference docs/super-manus/impl/<module>/ (v0.4 path, no feature wrapper)"; exit 1; }
 
 # Tighten / Demote options must verify the affected bullet against the actual code via using-sm's Drift check protocol
 grep -qF "Drift check protocol" "$F" || { echo "FAIL: prd-update.md must reference using-sm's Drift check protocol for Tighten/Demote verification"; exit 1; }

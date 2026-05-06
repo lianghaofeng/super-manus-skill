@@ -7,13 +7,17 @@ F=commands/impl.md
 # Frontmatter
 grep -qF "description:" "$F" || { echo "FAIL: missing frontmatter description"; exit 1; }
 
-# Resolves active feature + active update via sm_active_update
-grep -qF ".super-manus/active" "$F" || { echo "FAIL: must read .super-manus/active"; exit 1; }
-grep -qF "sm_active_update" "$F" || { echo "FAIL: must use sm_active_update helper to resolve active update"; exit 1; }
+# v0.4: there is no .super-manus/active state file. Active update is resolved by mtime scan via sm_active_update.
+grep -qF "sm_active_update" "$F" || { echo "FAIL: must use sm_active_update helper to resolve active update (v0.4)"; exit 1; }
 
-# Operates on v0.2 layout (per-update task_plan.md, tasks/p<n>_impl.md inside the update folder)
+# Operates on v0.4 layout (per-update task_plan.md, tasks/p<n>_impl.md inside the update folder)
 grep -qF "task_plan.md" "$F" || { echo "FAIL: must reference task_plan.md (per-update)"; exit 1; }
 grep -qF "tasks/p" "$F" || { echo "FAIL: must reference tasks/p<n>_impl.md path"; exit 1; }
+
+# v0.4 path invariants — project-global, no <feature>/ prefix
+grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must use v0.4 project-global prd path docs/super-manus/prd/"; exit 1; }
+grep -qF "docs/super-manus/prd_drift.md" "$F" || { echo "FAIL: must reference docs/super-manus/prd_drift.md (project-global drift log)"; exit 1; }
+grep -qF "docs/super-manus/roadmap.md" "$F" || { echo "FAIL: must reference docs/super-manus/roadmap.md (project-global roadmap)"; exit 1; }
 
 # Drift detection: must read prd/<module>.md and append a prd_drift.md row on conflict
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must read per-module PRD"; exit 1; }
@@ -26,8 +30,16 @@ grep -qiF "/super-manus:prd-update" "$F" || { echo "FAIL: must point user at prd
 # Must auto-find next pending phase
 grep -qiF "pending" "$F" || { echo "FAIL: must mention pending phase auto-selection"; exit 1; }
 
-# Replaces /phase: handles seeding tasks/p<n>_impl.md when missing
+# Must seed the per-phase plan via the impl-architect subagent (no inline persona)
 grep -qF "phase_plan.md" "$F" || { echo "FAIL: must use phase_plan.md template to seed missing impl plan"; exit 1; }
+grep -qF "agents/impl-architect.md" "$F" || { echo "FAIL: must link to agents/impl-architect.md"; exit 1; }
+grep -qF "impl-architect" "$F" || { echo "FAIL: must reference the impl-architect agent by name"; exit 1; }
+grep -qE 'subagent_type="impl-architect"' "$F" || { echo "FAIL: must spawn the agent via subagent_type=\"impl-architect\""; exit 1; }
+
+# Spawning prompt must enumerate the ten inputs the impl-architect agent expects
+for input in project_root module update_dir phase_number phase_name module_prd_path task_plan_path findings_path progress_path lsp_available; do
+  grep -qF "$input" "$F" || { echo "FAIL: spawning prompt must include input '$input'"; exit 1; }
+done
 
 # Argument flexibility: target may be omitted, an update name, or a module name
 grep -qiF "target" "$F" || { echo "FAIL: must document optional target argument"; exit 1; }

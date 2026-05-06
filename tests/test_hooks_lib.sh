@@ -6,47 +6,27 @@ cd "$(dirname "$0")/.."
 # (lib expects to be sourced; functions become available)
 source hooks/lib.sh
 
-# Set up a temp project and exercise sm_active_folder()
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-cd "$TMP"
+# v0.4: hooks/lib.sh must define sm_active_update and must NOT define sm_active_feature.
+# .super-manus/active is gone in v0.4 — active update is resolved purely by mtime scan
+# under docs/super-manus/impl/<module>/*/.
+if declare -f sm_active_feature >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must NOT define sm_active_feature in v0.4 (state file is gone)"; exit 1
+fi
+if ! declare -f sm_active_update >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_active_update in v0.4"; exit 1
+fi
 
-# Case A: no .super-manus/active → empty result
-got=$(sm_active_folder || true)
-[ -z "$got" ] || { echo "FAIL: sm_active_folder should be empty when no active file, got: $got"; exit 1; }
+# v0.4: lib.sh source must NOT read .super-manus/active in any executable code path.
+# Comments mentioning the removed state file are allowed (they document the migration);
+# only actual file reads (cat / read / grep / [ -f ... ]) are forbidden.
+non_comment_active=$(grep -nF ".super-manus/active" hooks/lib.sh | grep -vE '^[0-9]+:\s*#' || true)
+if [ -n "$non_comment_active" ]; then
+  echo "FAIL: hooks/lib.sh must NOT read .super-manus/active in v0.4 (found in non-comment lines):"
+  echo "$non_comment_active"
+  exit 1
+fi
 
-# Case B: active file exists, folder exists → returns the path
-mkdir -p .super-manus docs/super-manus/2026-05-04-foo
-echo "2026-05-04-foo" > .super-manus/active
-got=$(sm_active_folder)
-[ "$got" = "docs/super-manus/2026-05-04-foo" ] || { echo "FAIL: expected docs/super-manus/2026-05-04-foo, got: $got"; exit 1; }
-
-# Case C: active file exists but content has trailing whitespace → still works
-printf "2026-05-04-foo\n  \n" > .super-manus/active
-got=$(sm_active_folder)
-[ "$got" = "docs/super-manus/2026-05-04-foo" ] || { echo "FAIL: whitespace-tolerant, got: $got"; exit 1; }
-
-# Case D: active file exists but is empty → empty result
-> .super-manus/active
-got=$(sm_active_folder || true)
-[ -z "$got" ] || { echo "FAIL: empty active file should yield empty, got: $got"; exit 1; }
-
-# Case E: active file names a folder that doesn't exist on disk → still returns the path (caller checks)
-echo "2026-05-04-ghost" > .super-manus/active
-got=$(sm_active_folder)
-[ "$got" = "docs/super-manus/2026-05-04-ghost" ] || { echo "FAIL: should return path even when folder absent, got: $got"; exit 1; }
-
-# Case F: active file with embedded slash (path-traversal attempt) → empty result
-echo "2026-05-04-foo/extra" > .super-manus/active
-got=$(sm_active_folder || true)
-[ -z "$got" ] || { echo "FAIL: path-traversal name should yield empty, got: $got"; exit 1; }
-
-# Case G: active file with .. (path-traversal attempt) → empty result
-echo "../../etc/passwd" > .super-manus/active
-got=$(sm_active_folder || true)
-[ -z "$got" ] || { echo "FAIL: parent-dir name should yield empty, got: $got"; exit 1; }
-
-# Exercise emit_context: takes hook event name + text, prints valid JSON to stdout
+# emit_context: takes hook event name + text, prints valid JSON to stdout
 out=$(emit_context "SessionStart" "hello world")
 printf '%s' "$out" | python3 -c '
 import json, sys
@@ -106,14 +86,14 @@ sm_stop_hook_active '{"foo": "bar", "stop_hook_active": true, "session_id": "abc
 
 # sm_has_unlogged_commits: progress.md timestamp comparison
 TMP_PROG=$(mktemp)
-trap 'rm -f "$TMP_PROG"' RETURN
+cleanup_prog() { rm -f "$TMP_PROG"; }
 
 # Missing file → false
-sm_has_unlogged_commits "/nonexistent/$$.md" && { echo "FAIL: missing file should be false"; exit 1; } || true
+sm_has_unlogged_commits "/nonexistent/$$.md" && { echo "FAIL: missing file should be false"; cleanup_prog; exit 1; } || true
 
 # Empty progress.md (no sections) → false
 > "$TMP_PROG"
-sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: empty progress should be false"; exit 1; } || true
+sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: empty progress should be false"; cleanup_prog; exit 1; } || true
 
 # Only commits, no session log → true (commits exist, none narrated)
 cat > "$TMP_PROG" <<'EOF'
@@ -122,7 +102,7 @@ cat > "$TMP_PROG" <<'EOF'
 - 2026-05-05 09:00 · `abc123` · advanced P1
 ## Session log
 EOF
-sm_has_unlogged_commits "$TMP_PROG" || { echo "FAIL: commits without log should be true"; exit 1; }
+sm_has_unlogged_commits "$TMP_PROG" || { echo "FAIL: commits without log should be true"; cleanup_prog; exit 1; }
 
 # Commit older than latest log entry → false (already narrated)
 cat > "$TMP_PROG" <<'EOF'
@@ -133,7 +113,7 @@ cat > "$TMP_PROG" <<'EOF'
 ### Session 2026-05-05 #1 (10:00 – 11:00)
 - closed P1
 EOF
-sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: commit older than log should be false"; exit 1; } || true
+sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: commit older than log should be false"; cleanup_prog; exit 1; } || true
 
 # New commit after the latest log entry → true (unlogged)
 cat > "$TMP_PROG" <<'EOF'
@@ -145,7 +125,7 @@ cat > "$TMP_PROG" <<'EOF'
 ### Session 2026-05-05 #1 (10:00 – 11:00)
 - closed P1
 EOF
-sm_has_unlogged_commits "$TMP_PROG" || { echo "FAIL: newer commit than latest log should be true"; exit 1; }
+sm_has_unlogged_commits "$TMP_PROG" || { echo "FAIL: newer commit than latest log should be true"; cleanup_prog; exit 1; }
 
 # No commits at all → false (nothing to log)
 cat > "$TMP_PROG" <<'EOF'
@@ -155,54 +135,48 @@ cat > "$TMP_PROG" <<'EOF'
 ### Session 2026-05-05 #1 (10:00 – 11:00)
 - nothing happened
 EOF
-sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: no commits should be false"; exit 1; } || true
+sm_has_unlogged_commits "$TMP_PROG" && { echo "FAIL: no commits should be false"; cleanup_prog; exit 1; } || true
 
-# sm_active_update: returns "<module>/<update>" of most recently modified update folder,
-# or empty if feature folder has no impl/<module>/<update> structure yet.
-TMP_FEAT=$(mktemp -d)
-trap 'rm -f "$TMP_PROG"; rm -rf "$TMP_FEAT"' RETURN
+cleanup_prog
 
-# Case A: feature folder has no impl/ dir → empty
-got=$(sm_active_update "$TMP_FEAT" || true)
-[ -z "$got" ] || { echo "FAIL: missing impl/ should give empty, got: $got"; exit 1; }
+# sm_active_update: in v0.4, takes ZERO arguments and scans
+# docs/super-manus/impl/<module>/<update>/ relative to cwd. Returns "<module>/<update>"
+# of the most recently modified update folder, or empty if there are none.
+TMP_PROJ=$(mktemp -d)
+trap 'rm -rf "$TMP_PROJ"' EXIT
+pushd "$TMP_PROJ" >/dev/null
+
+# Case A: no docs/super-manus/impl/ dir → empty
+got=$(sm_active_update || true)
+[ -z "$got" ] || { echo "FAIL: missing docs/super-manus/impl/ should give empty, got: $got"; exit 1; }
 
 # Case B: empty impl/ dir → empty
-mkdir -p "$TMP_FEAT/impl"
-got=$(sm_active_update "$TMP_FEAT" || true)
+mkdir -p docs/super-manus/impl
+got=$(sm_active_update || true)
 [ -z "$got" ] || { echo "FAIL: empty impl/ should give empty, got: $got"; exit 1; }
 
 # Case C: module dir exists but no update folders → empty
-mkdir -p "$TMP_FEAT/impl/api"
-got=$(sm_active_update "$TMP_FEAT" || true)
+mkdir -p docs/super-manus/impl/api
+got=$(sm_active_update || true)
 [ -z "$got" ] || { echo "FAIL: module without updates should give empty, got: $got"; exit 1; }
 
 # Case D: single update folder → returns "<module>/<update>"
-mkdir -p "$TMP_FEAT/impl/api/2026-05-06-foo"
-got=$(sm_active_update "$TMP_FEAT")
+mkdir -p docs/super-manus/impl/api/2026-05-06-foo
+got=$(sm_active_update)
 [ "$got" = "api/2026-05-06-foo" ] || { echo "FAIL: single update, expected api/2026-05-06-foo, got: $got"; exit 1; }
 
 # Case E: two updates same module → most recently modified wins
-mkdir -p "$TMP_FEAT/impl/api/2026-05-07-bar"
-# Force older mtime on the first folder
-touch -t 202504010800 "$TMP_FEAT/impl/api/2026-05-06-foo"
-got=$(sm_active_update "$TMP_FEAT")
+mkdir -p docs/super-manus/impl/api/2026-05-07-bar
+touch -t 202504010800 docs/super-manus/impl/api/2026-05-06-foo
+got=$(sm_active_update)
 [ "$got" = "api/2026-05-07-bar" ] || { echo "FAIL: expected api/2026-05-07-bar, got: $got"; exit 1; }
 
 # Case F: two modules with updates → most recently modified across all wins
-mkdir -p "$TMP_FEAT/impl/frontend/2026-05-08-baz"
-# Make api/2026-05-07-bar older than frontend/2026-05-08-baz
-touch -t 202504020800 "$TMP_FEAT/impl/api/2026-05-07-bar"
-got=$(sm_active_update "$TMP_FEAT")
+mkdir -p docs/super-manus/impl/frontend/2026-05-08-baz
+touch -t 202504020800 docs/super-manus/impl/api/2026-05-07-bar
+got=$(sm_active_update)
 [ "$got" = "frontend/2026-05-08-baz" ] || { echo "FAIL: expected frontend/2026-05-08-baz, got: $got"; exit 1; }
 
-# Case G: feature path that does not exist on disk → empty
-got=$(sm_active_update "/nonexistent/feature/$$" || true)
-[ -z "$got" ] || { echo "FAIL: nonexistent feature path should give empty, got: $got"; exit 1; }
-
-# Case H: empty / missing argument → empty
-got=$(sm_active_update "" || true)
-[ -z "$got" ] || { echo "FAIL: empty arg should give empty, got: $got"; exit 1; }
-got=$(sm_active_update || true)
-[ -z "$got" ] || { echo "FAIL: missing arg should give empty, got: $got"; exit 1; }
+popd >/dev/null
 
 echo OK

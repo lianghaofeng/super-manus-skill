@@ -11,10 +11,11 @@ F=commands/reverse-prd.md
 # Frontmatter
 grep -qF "description:" "$F" || { echo "FAIL: missing frontmatter description"; exit 1; }
 
-# Must operate within an active super-manus feature
-grep -qF ".super-manus/active" "$F" || { echo "FAIL: must read .super-manus/active"; exit 1; }
+# v0.4: project-global super-manus enablement check (no .super-manus/active state file)
+grep -qF ".super-manus/active" "$F" && { echo "FAIL: reverse-prd.md must NOT reference .super-manus/active in v0.4"; exit 1; } || true
+grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must reference docs/super-manus/prd/ as the v0.4 project-global PRD root"; exit 1; }
 
-# Must produce v0.2 PRD-folder layout: prd/_index.md + per-module prd/<module>.md
+# Must produce v0.4 PRD-folder layout: prd/_index.md + per-module prd/<module>.md
 grep -qF "prd/_index.md" "$F" || { echo "FAIL: must produce prd/_index.md"; exit 1; }
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must produce per-module prd/<module>.md files"; exit 1; }
 
