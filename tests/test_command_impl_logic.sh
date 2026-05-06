@@ -63,4 +63,39 @@ grep -qiF "stable" "$F" || { echo "FAIL: must mention 'stable' as the roadmap st
 grep -qiE "reverted|revert.*implementation" "$F" || { echo "FAIL: gate must document the 'revert implementation' resolution path (with Resolution=reverted)"; exit 1; }
 grep -qiF "findings.md" "$F" || { echo "FAIL: revert path must require a findings.md ## Decisions entry"; exit 1; }
 
+# === v0.5 additive assertions ============================================
+# v0.5 splits the v0.4 single impl-executor into a 3-agent pipeline (architect →
+# test-writer → code-writer). The orchestrator hashes test files between
+# test-writer and code-writer; tamper aborts the phase. End-of-update gate gains
+# a Pass 2 (e2e coverage). Per-phase terminal: more pending → STOP; no pending →
+# end-of-update gate. /super-manus:impl-all is the loop alternative.
+
+# Spawns ALL THREE agents (existing test only checks impl-architect).
+for sub in impl-architect impl-test-writer impl-code-writer; do
+  grep -qE "subagent_type=\"${sub}\"" "$F" \
+    || { echo "FAIL: v0.5 must spawn ${sub} via subagent_type=\"${sub}\""; exit 1; }
+done
+
+# Hash check between test-writer and code-writer.
+grep -qE "code-writer modified tests|SHA-256|sha256|sha-256|hash" "$F" \
+  || { echo "FAIL: v0.5 must mention hash check (SHA-256 / 'code-writer modified tests' / hash)"; exit 1; }
+
+# Phase tests path pattern (v0.5 NEW: tests/ subfolder inside the update folder).
+grep -qE "phase_p<n>_|tests/phase" "$F" \
+  || { echo "FAIL: v0.5 must reference phase tests path (phase_p<n>_ or tests/phase)"; exit 1; }
+
+# e2e coverage Pass — Pass 2 of the 3-pass end-of-update gate.
+grep -qiE "e2e coverage|Pass 2|e2e/<module>/" "$F" \
+  || { echo "FAIL: v0.5 must mention e2e coverage Pass (Pass 2) of the end-of-update gate"; exit 1; }
+
+# One-phase terminal behavior: more pending → STOP; no pending → end-of-update gate.
+grep -qiE "more pending|pending phases remain|next pending phase" "$F" \
+  || { echo "FAIL: v0.5 must describe 'more pending phases remain' terminal branch"; exit 1; }
+grep -qiE "no pending|no more pending|fall through to.*end-of-update|fall through.*drift gate" "$F" \
+  || { echo "FAIL: v0.5 must describe 'no pending → end-of-update gate' terminal branch"; exit 1; }
+
+# Cross-link to the loop alternative /super-manus:impl-all.
+grep -qF "/super-manus:impl-all" "$F" \
+  || { echo "FAIL: v0.5 must cross-link the loop alternative /super-manus:impl-all"; exit 1; }
+
 echo OK
