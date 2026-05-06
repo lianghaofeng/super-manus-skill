@@ -112,9 +112,10 @@ Slash command surface area also shrinks: `/super-manus:start` becomes a no-arg "
 
 ## Where to look
 
-- **Current design** lives in `docs/design-v0.5.md` — source of truth for the 3-agent impl flow, the e2e/ regression suite, the three new skills (`tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase`), and the `/super-manus:impl-all` command.
-- v0.4 design is preserved at `docs/design-v0.4.md` for historical reference (with a SUPERSEDED banner). v0.5 keeps the v0.4 project-global PRD layout intact; what changed is the execution discipline (no longer "coexist with superpowers" — super-manus now ships its own self-sufficient execution discipline absorbing TDD / verification / systematic debugging from superpowers).
+- **Current design** lives in `docs/design-v0.6.md` — source of truth for the v0.6 delta: repositioning `/super-manus:prd-update` to handle both forward iteration and drift absorption (mode auto-detected from `prd_drift.md`). Layout, agents, hooks, end-of-update drift gate are unchanged from v0.5.
+- v0.5 design is preserved at `docs/design-v0.5.md` for historical reference (with a SUPERSEDED banner). v0.6 keeps everything in v0.5 (3-agent impl pipeline, e2e suite, three execution skills, `/super-manus:impl-all`) and only widens `/super-manus:prd-update`.
+- v0.4 design is preserved at `docs/design-v0.4.md` for historical reference (with a SUPERSEDED banner). v0.4 is where the project-global PRD layout originated.
 - v0.2/v0.3 design is preserved at `docs/design-v0.2.md` for historical reference (with a SUPERSEDED banner — its layout invariants no longer apply).
 - v0.1 design is preserved at `docs/design-v0.1.md` for historical reference (with a SUPERSEDED banner).
 - Plans (task-by-task implementation breakdown) live in `docs/plans/`.
-- When in doubt about scope or layout, re-read `design-v0.5.md` before adding anything.
+- When in doubt about scope or layout, re-read `design-v0.6.md` before adding anything.

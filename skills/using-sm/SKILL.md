@@ -20,14 +20,14 @@ User-facing commands (all in the `/super-manus:` namespace):
 - `/super-manus:brainstorm` — 6-question Q&A; writes project-global `prd/_index.md` + per-module `prd/<module>.md` stubs (does NOT seed an update folder; user runs `sync` after audit)
 - `/super-manus:reverse-prd` — one-shot: scan an existing project, infer module split, generate `prd/_index.md` + per-module PRD stubs (user audits)
 - `/super-manus:sync <module>` — after a PRD edit, scaffold a new milestone-update folder for the chosen module, drift-checked against `prd/<module>.md`
-- `/super-manus:prd-update <module>` — surgical 5-option edit on a single per-module PRD (no changelog markers, ≤2000 words, single-section)
+- `/super-manus:prd-update <module>` — structured 5-option edit on a single per-module PRD (no changelog markers, ≤2000 words, single-section). Two modes auto-detected from `prd_drift.md`: **forward iteration** (no pending row → user adds/tightens a bullet before coding; no findings.md write) and **drift absorption** (pending row → resolve the divergence; findings.md decision + drift-row Resolution flip)
 - `/super-manus:impl [target]` — run ONE pending phase end-to-end through the 3-agent pipeline (architect → test-writer → code-writer → verify → close), then stop. If that was the last pending phase, runs the end-of-update drift gate. DOGFOOD default — one user invocation = one phase shipped.
 - `/super-manus:impl-all` — POWER MODE. Loop through ALL pending phases of the active update without pausing. Same 3-agent pipeline + same drift checks per phase; the only difference vs `/super-manus:impl` is the orchestrator does not pause between phases. After the last phase, runs the end-of-update drift gate. Aborting it (Ctrl-C, error, drift, tamper, gate fail) leaves on-disk state identical to running `/super-manus:impl` that many times — fallback is safe.
 - `/super-manus:drive` — global next-action switch: read full project state, decide one of brainstorm / sync / prd-update / impl, announce decision + reason, execute inline
 - `/super-manus:catchup` — re-inject project-global `prd/_index.md` + most-recent update's `task_plan.md` into context
 - `/super-manus:log` — manually append a session log entry to the active update's `progress.md` now
 
-The recommended flow for a non-trivial project: `start` → `brainstorm` → audit `prd/<module>.md` files → `sync <module>` → `impl` (or `drive`) → commit → … → on PRD change: `prd-update` or hand-edit `prd/<module>.md` → `sync` → `impl`.
+The recommended flow for a non-trivial project: `start` → `brainstorm` → audit `prd/<module>.md` files → `sync <module>` → `impl` (or `drive`) → commit → … → on PRD change: `prd-update` (forward or drift mode, auto-detected) or hand-edit `prd/<module>.md` → `sync` → `impl`.
 
 ## 1. Where state lives
 

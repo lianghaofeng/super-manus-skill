@@ -46,7 +46,7 @@ CI runs the e2e suite on every commit; phase tests are run only by `/super-manus
 
 **End-of-update drift gate gains Pass 3 — e2e coverage check.** For every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist AND pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
 
-See [docs/design-v0.5.md](docs/design-v0.5.md) for the full design. [docs/design-v0.4.md](docs/design-v0.4.md) (superseded) and [docs/design-v0.2.md](docs/design-v0.2.md) (superseded) are kept for historical reference.
+See [docs/design-v0.6.md](docs/design-v0.6.md) for the current design. [docs/design-v0.5.md](docs/design-v0.5.md) (superseded), [docs/design-v0.4.md](docs/design-v0.4.md) (superseded), and [docs/design-v0.2.md](docs/design-v0.2.md) (superseded) are kept for historical reference.
 
 ### v0.4 — project-global PRD (still in place)
 
@@ -111,9 +111,11 @@ git commit -m "..."                       # post-commit hook prompts agent to lo
 When PRD and implementation diverge:
 
 ```
-/super-manus:prd-update <module>          # surgical edit on a single per-module PRD (5 options:
-                                          # tighten / split / demote / exclude / add). No changelog
-                                          # markers; paired entry in active update's findings.md.
+/super-manus:prd-update <module>          # structured edit on a single per-module PRD (5 options:
+                                          # tighten / split / demote / exclude / add). Two modes:
+                                          # - forward iteration (add a new bullet before coding)
+                                          # - drift absorption (resolve a pending prd_drift row)
+                                          # mode is auto-detected from prd_drift.md.
 /super-manus:sync <module>                # PRD changed — scaffold a new update folder for that module
 ```
 
@@ -145,7 +147,8 @@ For an existing project that has no PRD yet:
 PRD edits in v0.4 follow two paths:
 
 - **Normal iteration**: edit `prd/<module>.md` directly (add a `## What users get` bullet, tighten `## Quality bar`), then run `/super-manus:sync <module>` — sync v2 reads the git diff and drafts Phases for the new capability automatically.
-- **Surgical drift absorption**: when implementation has already deviated and you want PRD to move (rather than reverting code), use `/super-manus:prd-update <module>` for a single-section minimum edit (5 options: tighten / split / demote / exclude / add). The active update's `findings.md` gets a paired Decision entry; `prd_drift.md` row's Resolution flips out of `pending`, unblocking the end-of-update drift gate.
+- **Forward iteration via `/super-manus:prd-update <module>`** (v0.6+): want to add a new `## What users get` bullet or tighten an existing one without leaving the slash-command flow? `prd-update` now handles forward edits too. Mode is auto-detected: if no pending `prd_drift.md` row matches the module, the command prompts for the new intent and runs the same 5-option edit. After landing, run `/super-manus:sync <module>` to scaffold the milestone.
+- **Surgical drift absorption**: when implementation has already deviated and you want PRD to move (rather than reverting code), use `/super-manus:prd-update <module>` — same command, drift mode kicks in automatically when a pending row exists. The active update's `findings.md` gets a paired Decision entry; `prd_drift.md` row's Resolution flips out of `pending`, unblocking the end-of-update drift gate.
 
 Drift between PRD and implementation is always logged to `prd_drift.md` (append-only) and resolved by the user. PRD files cap at ≤2000 words per module / ≤700 words for `_index.md`. No changelog markers anywhere — PRD is a current-state snapshot, history lives in `git log` and `findings.md`.
 
@@ -209,4 +212,4 @@ If you previously ran super-manus alongside `obra/superpowers`, you no longer ne
 
 ## Status
 
-v0.5 — self-sufficient execution discipline (3-agent impl pipeline + 3 absorbed skills) on top of the v0.4 project-global PRD layout, plus a permanent e2e regression suite and the new `/super-manus:impl-all` power-mode command. See [docs/design-v0.5.md](docs/design-v0.5.md) for the full design. [docs/design-v0.4.md](docs/design-v0.4.md) (superseded), [docs/design-v0.2.md](docs/design-v0.2.md) (superseded), and [docs/design-v0.1.md](docs/design-v0.1.md) (superseded) are kept for historical reference.
+v0.6 — additive change on top of v0.5: `/super-manus:prd-update` now handles both forward iteration ("add a new bullet before coding") and drift absorption (resolve a pending `prd_drift.md` row). Mode is auto-detected. Everything else from v0.5 (3-agent impl pipeline, e2e regression suite, three execution skills, `/super-manus:impl-all`) is unchanged. See [docs/design-v0.6.md](docs/design-v0.6.md) for the current design. [docs/design-v0.5.md](docs/design-v0.5.md) (superseded), [docs/design-v0.4.md](docs/design-v0.4.md) (superseded), [docs/design-v0.2.md](docs/design-v0.2.md) (superseded), and [docs/design-v0.1.md](docs/design-v0.1.md) (superseded) are kept for historical reference.

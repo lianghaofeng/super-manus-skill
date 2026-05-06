@@ -46,7 +46,7 @@ CI 每次 commit 跑 e2e 套；phase 测试只在 `/super-manus:impl` 跑 phase 
 
 **End-of-update drift gate 增加 Pass 3 —— e2e 覆盖检查**。本次 update 的 commit 触及的每个 `## What users get` 能力，`e2e/<module>/test_<capability>.<ext>` 必须存在 AND 通过。缺失或红 → `prd_drift.md` 加 `pending` 行，BLOCKING roadmap 翻 `stable`。
 
-完整设计见 [docs/design-v0.5.md](docs/design-v0.5.md)。[docs/design-v0.4.md](docs/design-v0.4.md)（已弃用）和 [docs/design-v0.2.md](docs/design-v0.2.md)（已弃用）保留作历史参考。
+当前设计见 [docs/design-v0.6.md](docs/design-v0.6.md)。[docs/design-v0.5.md](docs/design-v0.5.md)（已弃用）、[docs/design-v0.4.md](docs/design-v0.4.md)（已弃用）、[docs/design-v0.2.md](docs/design-v0.2.md)（已弃用）保留作历史参考。
 
 ### v0.4 —— 项目级全局 PRD（仍然在用）
 
@@ -109,10 +109,11 @@ git commit -m "..."                       # post-commit hook 提示 agent 把 co
 PRD 和实现偏离时：
 
 ```
-/super-manus:prd-update <module>          # 对单份模块 PRD 做外科级编辑（5 选 1：
-                                          # tighten / split / demote / exclude / add）。
-                                          # 不留 changelog 标记；当前 update 的 findings.md
-                                          # 同步加一条 Decision。
+/super-manus:prd-update <module>          # 对单份模块 PRD 做结构化编辑（5 选 1：
+                                          # tighten / split / demote / exclude / add）。两种模式：
+                                          # - forward iteration（写代码前加新 bullet）
+                                          # - drift absorption（解决 prd_drift 的 pending 行）
+                                          # 模式由 prd_drift.md 自动判定。
 /super-manus:sync <module>                # PRD 改了 —— 为该模块 scaffold 新的 update folder
 ```
 
@@ -143,7 +144,8 @@ PRD 和实现偏离时：
 v0.4 下 PRD 编辑有两条路：
 
 - **常规迭代**：直接编辑 `prd/<module>.md`（加一条 `## What users get` bullet，收紧 `## Quality bar`），然后跑 `/super-manus:sync <module>` —— sync v2 读 git diff，自动为新能力草拟 Phases。
-- **外科级吸收 drift**：实现已经偏离，且你想让 PRD 跟过来（而不是回退代码），用 `/super-manus:prd-update <module>` 做单段最小编辑（5 选 1：tighten / split / demote / exclude / add）。当前 update 的 `findings.md` 同步加一条 Decision；`prd_drift.md` 行的 Resolution 翻出 `pending`，解锁 end-of-update drift gate。
+- **Forward iteration（v0.6+）**：想在不离开 slash 命令的前提下加一条 `## What users get` 新 bullet 或收紧已有 bullet？`/super-manus:prd-update <module>` 现在也覆盖前向编辑了。模式自动判定：`prd_drift.md` 没有该模块的 pending 行时，命令会问你想怎么改，然后跑同一套 5 选 1 工作流。改完跑 `/super-manus:sync <module>` scaffold milestone。
+- **外科级吸收 drift**：实现已经偏离，且你想让 PRD 跟过来（而不是回退代码），用同一个 `/super-manus:prd-update <module>` —— 检测到 pending 行时自动进入 drift 模式。当前 update 的 `findings.md` 同步加一条 Decision；`prd_drift.md` 行的 Resolution 翻出 `pending`，解锁 end-of-update drift gate。
 
 PRD 与实现的偏离一律写到 `prd_drift.md`（append-only），由用户解决。PRD 文件每模块 ≤2000 词、`_index.md` ≤700 词。**不留 changelog 标记** —— PRD 是当前态快照，历史在 `git log` 和 `findings.md`。
 
@@ -207,4 +209,4 @@ v0.5 保持精简。以下不在范围：
 
 ## 状态
 
-v0.5 —— 在 v0.4 项目级 PRD 之上，加自给自足的执行纪律（3-agent impl 流水线 + 3 个吸收过来的 skill）、常驻 e2e 回归测试套，以及新的 `/super-manus:impl-all` power-mode 命令。完整设计见 [docs/design-v0.5.md](docs/design-v0.5.md)。[docs/design-v0.4.md](docs/design-v0.4.md)（已弃用）、[docs/design-v0.2.md](docs/design-v0.2.md)（已弃用）、[docs/design-v0.1.md](docs/design-v0.1.md)（已弃用）保留作历史参考。
+v0.6 —— 在 v0.5 之上的小幅增量：`/super-manus:prd-update` 现在覆盖前向编辑（写代码前加新 bullet）和 drift 吸收（解决 `prd_drift.md` 的 pending 行）两种模式，自动判定。v0.5 的 3-agent impl 流水线、e2e 回归测试套、3 个执行纪律 skill、`/super-manus:impl-all` 全部沿用。当前设计见 [docs/design-v0.6.md](docs/design-v0.6.md)。[docs/design-v0.5.md](docs/design-v0.5.md)（已弃用）、[docs/design-v0.4.md](docs/design-v0.4.md)（已弃用）、[docs/design-v0.2.md](docs/design-v0.2.md)（已弃用）、[docs/design-v0.1.md](docs/design-v0.1.md)（已弃用）保留作历史参考。
