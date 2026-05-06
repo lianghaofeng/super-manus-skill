@@ -54,11 +54,19 @@ On first install, restart your Claude Code session so hooks and slash commands r
                                           # docs/super-manus/prd/_index.md + per-module
                                           # prd/<module>.md stubs at not-started in roadmap
 ... user audits prd/<module>.md files, fleshes out ## What users get ...
-/super-manus:sync <module>                # scaffolds docs/super-manus/impl/<module>/<date>-<name>/
-                                          # with the four-file set; flips module to iterating
-/super-manus:impl                         # auto-finds next pending phase in the active update,
-                                          # seeds tasks/p<n>_impl.md, drift-checks against PRD,
-                                          # proceeds to draft + execute
+/super-manus:sync <module>                # reads `git diff prd/<module>.md` to detect the new
+                                          # capability you just added, spawns the sync-planner
+                                          # agent to draft 3-6 candidate Phases (with (audit)
+                                          # markers), scaffolds docs/super-manus/impl/<module>/
+                                          # <date>-<name>/ with the four-file set + planner's
+                                          # Phases; flips module to iterating
+... user reviews task_plan.md Phases (planner-drafted, not blank) ...
+/super-manus:impl                         # auto-finds next pending phase, runs drift check,
+                                          # spawns the impl-architect agent to draft tasks/
+                                          # p<n>_impl.md, then proceeds to write code +
+                                          # commit. End-of-update: BLOCKING drift gate refuses
+                                          # to mark the update done while prd_drift.md has
+                                          # pending rows for the module.
 git commit -m "..."                       # post-commit hook prompts agent to log into the active
                                           # update's progress.md
 /clear                                    # safe — state is on disk
@@ -85,9 +93,13 @@ When you don't know what to do next, use the global switch:
 For an existing project that has no PRD yet:
 
 ```
-/super-manus:reverse-prd                  # one-shot: scan source, infer modules, generate
-                                          # docs/super-manus/prd/_index.md + per-module stubs
-                                          # (audit afterwards, then sync per module)
+/super-manus:reverse-prd                  # one-shot: orchestrator does runtime-first module
+                                          # discovery (compose / Makefile / apps / scripts),
+                                          # then spawns the reverse-prd-architect agent (chief
+                                          # architect + senior PM persona) which writes
+                                          # docs/super-manus/prd/_index.md (with a mandatory
+                                          # ASCII architecture diagram) + per-module stubs.
+                                          # Audit (audit) markers afterwards, then sync per module.
 ```
 
 **Two-axis model** (no overlap):
@@ -96,7 +108,12 @@ For an existing project that has no PRD yet:
 - `impl/<module>/<update>/task_plan.md` is **HOW-overview** for ONE milestone of work on that module.
 - `impl/<module>/<update>/tasks/p<n>_impl.md` is **HOW-detail** — DB migrations, API code, file diffs per phase.
 
-PRD updates only via `/super-manus:prd-update <module>` (single-section, ≤2000 words, no changelog markers). Drift between PRD and implementation is logged to `prd_drift.md` and resolved by the user.
+PRD edits in v0.4 follow two paths:
+
+- **Normal iteration**: edit `prd/<module>.md` directly (add a `## What users get` bullet, tighten `## Quality bar`), then run `/super-manus:sync <module>` — sync v2 reads the git diff and drafts Phases for the new capability automatically.
+- **Surgical drift absorption**: when implementation has already deviated and you want PRD to move (rather than reverting code), use `/super-manus:prd-update <module>` for a single-section minimum edit (5 options: tighten / split / demote / exclude / add). The active update's `findings.md` gets a paired Decision entry; `prd_drift.md` row's Resolution flips out of `pending`, unblocking the end-of-update drift gate.
+
+Drift between PRD and implementation is always logged to `prd_drift.md` (append-only) and resolved by the user. PRD files cap at ≤2000 words per module / ≤700 words for `_index.md`. No changelog markers anywhere — PRD is a current-state snapshot, history lives in `git log` and `findings.md`.
 
 **Session log cadence** is unchanged — the Stop hook rate-limits checkpoints via `SUPER_MANUS_LOG_EVERY_N_TURNS` (default 5) and `SUPER_MANUS_LOG_MODE` (`both` / `turns` / `commit` / `off`); the agent judges whether to write each time. The state file lives inside the active update folder, so per-update turn counts are isolated.
 
