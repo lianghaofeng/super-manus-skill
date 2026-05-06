@@ -2,28 +2,60 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
-*Survives `/clear`, generates dev-readable progress journals from git history, works alongside superpowers (not a fork).*
+*PRD-led, drift-aware development for Claude Code. Survives `/clear`, generates dev-readable progress journals from git history. Self-sufficient — ships with its own TDD / verification / debugging discipline and a 3-agent impl pipeline that prevents the implementing agent from gaming its own tests.*
 
 ## What
 
-**super-manus** is a Claude Code plugin that fuses [obra/superpowers](https://github.com/obra/superpowers)' execution discipline with Manus-style ([OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files)) persistent file-based state. It owns the state layer only: a project-global folder on disk holds your PRD, plan, findings, and progress journal, and hooks keep them in sync as you work.
+**super-manus** is a Claude Code plugin for PRD-led, drift-aware development. It owns four things: (1) a project-global folder on disk holding your PRD, roadmap, drift log, and per-milestone implementation state; (2) hooks that keep them in sync as you commit; (3) a 3-agent `/super-manus:impl` pipeline (architect → test-writer → code-writer) with time / write / persona barriers between them; (4) a permanent e2e regression suite at `docs/super-manus/e2e/` that mirrors the PRD module structure and gates milestone close.
 
 ## Why
 
-`superpowers` gives you TDD, subagent dispatch, and code-review discipline, but loses everything on `/clear` or `/compact`. `planning-with-files` gives you Manus-style persistent state across sessions, but no execution discipline.
+Single-shot LLM coding loses everything on `/clear` or `/compact`. Plan-first tools (Manus-style file-based state, [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files)) keep state but don't enforce that code stays aligned with the spec. A single agent that writes both tests and impl has obvious motives to write weak tests, mirror the impl plan, or adjust expectations after seeing the impl. v0.5 super-manus targets all three: persistent project state across sessions, a BLOCKING drift gate that refuses to mark a milestone done while the per-module PRD and the actual code disagree, and a 3-agent impl pipeline whose temporal + write-permission + persona barriers close the obvious cheating modes.
 
-super-manus targets the gap: persistent state that survives session boundaries, with hooks that auto-restore "where were we" without user babysitting. It does NOT re-implement superpowers' executor — super-manus owns the **state layer**. Keep using superpowers (or any other workflow) for execution.
+It ships with its own thin execution discipline (TDD scoped to phases, mandatory verification before phase-close, systematic debugging when a phase stalls) so you can run it standalone — no other workflow plugin required.
 
-## v0.4 — project-global PRD
+## v0.5 — self-sufficient execution discipline + e2e regression suite
 
-v0.4 hoists PRD / roadmap / prd_drift to project-global level and removes the per-feature timestamped wrapper folder. The v0.3 layout wrapped everything in `docs/super-manus/<YYYY-MM-DD>-<feature>/`, which conflated two concepts: the PRD (a current-state snapshot of the whole project) and the impl time-series (per-update milestones). v0.4 separates them:
+v0.5 keeps the v0.4 project-global PRD layout intact and adds two things on top: a 3-agent `/super-manus:impl` pipeline that closes the "agent games its own tests" cheating modes, and a permanent e2e regression suite at `docs/super-manus/e2e/` that mirrors the PRD's module/_index structure.
+
+**3-agent /super-manus:impl pipeline.** Each phase runs three agents in series with explicit trust boundaries between them:
+
+1. **`impl-architect`** drafts `tasks/p<n>_impl.md` (Objective / Approach / Files touched / Verification). No code, no tests. Reused unchanged from v0.4.
+2. **`impl-test-writer`** writes phase tests at `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_*.<ext>` (always) and e2e tests at `docs/super-manus/e2e/<module>/test_<capability>.<ext>` (when this phase **completes** a `## What users get` capability) or `docs/super-manus/e2e/_system/test_<scenario>.<ext>` (when it completes a cross-module `## Demo` scenario). Commits red tests. Persona discipline: tests anchored in PRD spec, not mirrored from `## Approach`.
+3. **`impl-code-writer`** writes implementation per `## Approach` + `## Files touched`, iterates until phase tests + touched e2e tests are green. Has no permission to edit `tests/` or `e2e/` (forbidden in persona); the orchestrator hashes test files before/after this agent runs and aborts the phase on tamper.
+
+The split exists for one reason: **prevent the implementing agent from gaming its own tests**. Three independent mechanisms enforce this:
+
+- **Time barrier** — test-writer commits red tests BEFORE code-writer runs. By the time code-writer is spawned, tests are in git; there is no "future impl" for tests to mirror.
+- **Write barrier** — code-writer's persona forbids editing tests; orchestrator hashes test files before/after and aborts on mismatch.
+- **Persona discipline** — test-writer explicitly anchors tests in `prd/<module>.md ## What users get` / `## Quality bar` / `## Risks`, treating `## Approach` as one of many valid impls and refusing to mirror it.
+
+Read access is OPEN — both new agents read everything. The cheat-prevention is temporal + write-permission + persona, not read-permission.
+
+**Two-tier test maintenance.** test-writer maintains both:
+
+- **Phase tests** at `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_<verb>_<noun>.<ext>` — milestone proof, NOT auto-discovered by CI. Lifetime: as long as the milestone update folder exists.
+- **e2e tests** at `docs/super-manus/e2e/<module>/test_<capability>.<ext>` and `docs/super-manus/e2e/_system/test_<scenario>.<ext>` — permanent regression mirroring PRD's structure, AUTO-DISCOVERED by default test runner globs (pytest `test_*.py`, jest `*.test.ts`). Lifetime: as long as the capability lives in PRD.
+
+CI runs the e2e suite on every commit; phase tests are run only by `/super-manus:impl` during phase execution.
+
+**Two impl commands:**
+
+- `/super-manus:impl` — DOGFOOD default. Runs ONE phase end-to-end (architect → test-writer → code-writer → verify → close), then stops. If that was the last pending phase, runs the end-of-update drift gate. Use when you don't fully trust the plan yet, or want a natural git history of one phase per session.
+- `/super-manus:impl-all` — POWER MODE. Loops through ALL pending phases of the active update without pausing. Same 3-agent pipeline + same drift checks per phase; the only difference is no pauses between phases. Aborting it (Ctrl-C, error, drift detected, tamper detected, gate failed) leaves on-disk state identical to running `/super-manus:impl` that many times — fallback is safe.
+
+**End-of-update drift gate gains Pass 3 — e2e coverage check.** For every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist AND pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
+
+See [docs/design-v0.5.md](docs/design-v0.5.md) for the full design. [docs/design-v0.4.md](docs/design-v0.4.md) (superseded) and [docs/design-v0.2.md](docs/design-v0.2.md) (superseded) are kept for historical reference.
+
+### v0.4 — project-global PRD (still in place)
+
+v0.5 keeps every v0.4 invariant. The v0.4 layout — project-global PRD with module × milestone two-axis model — is unchanged:
 
 - **PRD is project-global** (`docs/super-manus/prd/`), one file per module (db / api / frontend / ...). Each per-module PRD allows schema sketches, interface outlines, UX flows in its `## What users get` section — the level of detail a PM gives engineering — capped at ~2000 words. Under that, nine stable headings (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions). The project-level `prd/_index.md` adds Audience + Success metrics on top of Problem / Demo / Must / Not doing / Modules / Data flow overview.
-- **Implementation is per-module per-milestone**: each "milestone update" is a folder under `docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/` containing the four-file set (`task_plan.md`, `findings.md`, `progress.md`, `tasks/p<n>_impl.md`). Old updates are immutable historical record; the latest is active. Timestamps appear ONLY here.
+- **Implementation is per-module per-milestone**: each "milestone update" is a folder under `docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/` containing the four-file set (`task_plan.md`, `findings.md`, `progress.md`, `tasks/p<n>_impl.md`) plus the new v0.5 `tests/` subfolder. Old updates are immutable historical record; the latest is active. Timestamps appear ONLY here.
 - **PRD ↔ implementation alignment is enforced**: when intent diverges from PRD, the agent stops, logs to `prd_drift.md`, and asks the user — revert implementation, or run `/super-manus:prd-update <module>`. PRD is never silently updated.
 - **No active-state file.** The `.super-manus/active` pointer from v0.2/v0.3 is gone. Hooks resolve the active update purely by mtime scan of `docs/super-manus/impl/<module>/*/`. The "feature" abstraction is gone — there is one project = one PRD.
-
-See [docs/design-v0.4.md](docs/design-v0.4.md) for the full design. v0.2/v0.3 design is preserved at [docs/design-v0.2.md](docs/design-v0.2.md) (superseded).
 
 ## Install
 
@@ -121,7 +153,7 @@ Drift between PRD and implementation is always logged to `prd_drift.md` (append-
 
 ## Layout
 
-The on-disk layout super-manus creates inside a project that uses it (v0.4):
+The on-disk layout super-manus creates inside a project that uses it (v0.5):
 
 ```
 <project-root>/
@@ -129,6 +161,11 @@ The on-disk layout super-manus creates inside a project that uses it (v0.4):
     ├── prd/                                    # project-global, ONE source of truth
     │   ├── _index.md                           # project overview + module manifest + data flow (≤700 words)
     │   └── <module>.md                         # per-module target state (≤2000 words; /super-manus:prd-update)
+    ├── e2e/                                    # NEW in v0.5: permanent regression, mirrors prd/
+    │   ├── _system/                            # cross-module scenarios from prd/_index.md ## Demo
+    │   │   └── test_<scenario>.<ext>           # auto-discovered by test runner; runs in CI
+    │   └── <module>/                           # per-module capabilities from prd/<module>.md ## What users get
+    │       └── test_<capability>.<ext>         # auto-discovered by test runner; runs in CI
     ├── roadmap.md                              # project-global, module status table (auto-managed)
     ├── prd_drift.md                            # project-global, PRD ↔ implementation drift log (append-only)
     └── impl/                                   # time series of milestones, per module
@@ -137,31 +174,39 @@ The on-disk layout super-manus creates inside a project that uses it (v0.4):
                 ├── task_plan.md                # phase index for this update
                 ├── findings.md                 # decisions / errors / data points for this update
                 ├── progress.md                 # commits + session log for this update (hook-managed)
-                └── tasks/
-                    └── p<n>_impl.md            # per-phase technical plan (lazy, /super-manus:impl)
+                ├── tasks/
+                │   └── p<n>_impl.md            # per-phase technical plan (lazy, /super-manus:impl)
+                └── tests/                      # NEW in v0.5: phase tests, milestone-scoped, NOT auto-discovered
+                    └── phase_p<n>_<verb>_<noun>.<ext>
 ```
+
+The two test directories are not interchangeable. `e2e/` is **permanent regression** (lives as long as the PRD capability lives, auto-discovered by CI). `impl/<m>/<u>/tests/` is **milestone-scoped phase tests** (committed with the update, can be archived when the milestone closes, NOT auto-discovered — invoked by explicit path).
 
 ## What it does NOT do
 
-v0.4 stays small. Out of scope:
+v0.5 stays small. Out of scope:
 
-- Per-module test folders (test design intent goes in `prd/<module>.md ## Quality bar`; per-day test outcomes go in the update's `findings.md`)
 - Module rename command (low frequency — rename folders + edit `prd/_index.md` manually)
 - Migration command from v0.2/v0.3 (manual: move files per the using-sm skill §8)
 - Multi-product monorepo support in a single super-manus folder (use multiple super-manus-enabled subdirectories — one per product — or stay on v0.3)
-- TDD task executor / subagent dispatch / code review / multi-harness — still deferred items
-- Automated test running (use your existing toolchain)
-- PR creation or merge integration
+- Code review skill / agent — deferred (`## Verification` + 3-pass drift gate covers the load-bearing checks)
+- Auto-promote phase test to e2e suite (manual move + rename per the naming convention)
+- Retroactive e2e-coverage backfill for v0.4 projects (write e2e for old capabilities yourself, or wait until a future phase touches that capability and the test-writer adds e2e then)
+- Strict no-read isolation between test-writer and code-writer (open-read + write-barrier + persona-discipline path; revisit if cheating data justifies tightening)
+- Multi-harness orchestration / PR creation / merge integration
+- Test framework / runner — super-manus invokes whatever your project already uses (`pytest`, `npm test`, `cargo test`, `go test`, your `Makefile` targets, etc.); it does not impose one
 
-## Coexistence with superpowers
+## Self-sufficient execution discipline (v0.5)
 
-super-manus and superpowers can both be installed; they don't fight:
+super-manus does not depend on any other workflow plugin. It ships its own thin execution layer:
 
-- super-manus owns SessionStart / Stop / PostToolUse hooks for the **state layer**.
-- superpowers owns its own SessionStart hook for skill bootstrap — both fire, both inject, no conflict.
-- super-manus skills don't auto-trigger; `using-sm` is invoked only when you run `/super-manus:*`.
-- Plans written by superpowers' `writing-plans` (`docs/plans/*.md`) are independent of super-manus.
+- **`tdd-in-phases` skill** — when `/super-manus:impl` enters a phase, the test-writer is spawned BEFORE the code-writer (non-negotiable). Phase tests go to `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_<verb>_<noun>.<ext>`; e2e tests go to `docs/super-manus/e2e/<module>/test_<capability>.<ext>` when the phase completes a capability. Test-writer commits red; code-writer flips green and is forbidden from editing tests.
+- **`verification-before-phase-close` skill** — phase Status flips to `closed` only after every command in `tasks/p<n>_impl.md ## Verification` exits green. The orchestrator (not the code-writer) runs them. `## Verification` MUST include the path to phase tests for the phase plus one user-visible smoke command (curl an endpoint, run a CLI, open a page).
+- **`systematic-debugging-in-phase` skill** — when a verify command fails, follow a checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, then fix) instead of randomly trying things. Three strikes against the same error class → escalate.
+- **3-agent `/super-manus:impl` pipeline** — `impl-architect` (drafts the phase plan), `impl-test-writer` (writes phase + e2e tests, red), `impl-code-writer` (writes implementation, green). The split replaces v0.4's single `impl-executor`. Time barrier (test-writer commits before code-writer runs) + write barrier (code-writer cannot edit tests; orchestrator hashes test files before/after) + persona discipline (test-writer anchors tests in PRD spec, not impl plan) close the obvious cheating modes.
+
+If you previously ran super-manus alongside `obra/superpowers`, you no longer need to. v0.5 absorbs the three pieces of superpowers that actually fit the PRD-led loop (TDD / verify-before-completion / systematic debugging); the rest of superpowers either duplicated super-manus features (brainstorming, plan writing, plan execution, subagent dispatch) or was orthogonal (git worktrees, finishing branches). superpowers can stay installed for non-super-manus work, or you can uninstall it.
 
 ## Status
 
-v0.4 — project-global PRD with module × milestone two-axis model and drift detection. See [docs/design-v0.4.md](docs/design-v0.4.md) for the full design. v0.2/v0.3 ([docs/design-v0.2.md](docs/design-v0.2.md), superseded) and v0.1 ([docs/design-v0.1.md](docs/design-v0.1.md), superseded) are kept for historical reference.
+v0.5 — self-sufficient execution discipline (3-agent impl pipeline + 3 absorbed skills) on top of the v0.4 project-global PRD layout, plus a permanent e2e regression suite and the new `/super-manus:impl-all` power-mode command. See [docs/design-v0.5.md](docs/design-v0.5.md) for the full design. [docs/design-v0.4.md](docs/design-v0.4.md) (superseded), [docs/design-v0.2.md](docs/design-v0.2.md) (superseded), and [docs/design-v0.1.md](docs/design-v0.1.md) (superseded) are kept for historical reference.

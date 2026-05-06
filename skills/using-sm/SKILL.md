@@ -1,12 +1,14 @@
 ---
 name: using-sm
-description: How to read and write super-manus state files (v0.4 project-global PRD model — module × milestone — with project-global prd/ folder, impl/<module>/<update>/ folders, roadmap.md, prd_drift.md). Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
+description: How to read and write super-manus state files (v0.5 — v0.4 project-global PRD layout + e2e/ permanent regression suite + impl/<m>/<u>/tests/ phase tests + 3-agent /super-manus:impl flow). Triggered by /super-manus:* slash commands and SessionStart/Stop/PostToolUse hook reminders in super-manus-enabled projects.
 user-invocable: false
 ---
 
-# using-sm (v0.4)
+# using-sm (v0.5)
 
-The super-manus plugin keeps a project-global folder on disk so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol for the **v0.4** layout. Follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions".
+The super-manus plugin keeps a project-global folder on disk so state survives `/clear`, `/compact`, and full session boundaries. This skill teaches you the read/write protocol for the **v0.5** layout. Follow it whenever a `/super-manus:*` command runs or a hook reminder references "the using-sm skill conventions".
+
+v0.5 keeps the entire v0.4 layout intact and adds two directories on top: `docs/super-manus/e2e/` (permanent regression, mirrors PRD) and `docs/super-manus/impl/<m>/<u>/tests/` (phase tests, milestone-scoped). The execution discipline is now self-sufficient — three skills (`tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase`) and a 3-agent `/super-manus:impl` pipeline (architect → test-writer → code-writer) replace the v0.4 single `impl-executor` and the previous reliance on `obra/superpowers`.
 
 The v0.4 model has **two axes**: `module` (space) and `milestone update` (time). PRD is per-module target state (project-global, one snapshot for the whole project); implementation work is per-module per-milestone time series.
 
@@ -19,7 +21,8 @@ User-facing commands (all in the `/super-manus:` namespace):
 - `/super-manus:reverse-prd` — one-shot: scan an existing project, infer module split, generate `prd/_index.md` + per-module PRD stubs (user audits)
 - `/super-manus:sync <module>` — after a PRD edit, scaffold a new milestone-update folder for the chosen module, drift-checked against `prd/<module>.md`
 - `/super-manus:prd-update <module>` — surgical 5-option edit on a single per-module PRD (no changelog markers, ≤2000 words, single-section)
-- `/super-manus:impl [target]` — resume / advance work in the active update; auto-selects next pending phase, seeds `tasks/p<n>_impl.md`, drift-checks, then executes
+- `/super-manus:impl [target]` — run ONE pending phase end-to-end through the 3-agent pipeline (architect → test-writer → code-writer → verify → close), then stop. If that was the last pending phase, runs the end-of-update drift gate. DOGFOOD default — one user invocation = one phase shipped.
+- `/super-manus:impl-all` — POWER MODE. Loop through ALL pending phases of the active update without pausing. Same 3-agent pipeline + same drift checks per phase; the only difference vs `/super-manus:impl` is the orchestrator does not pause between phases. After the last phase, runs the end-of-update drift gate. Aborting it (Ctrl-C, error, drift, tamper, gate fail) leaves on-disk state identical to running `/super-manus:impl` that many times — fallback is safe.
 - `/super-manus:drive` — global next-action switch: read full project state, decide one of brainstorm / sync / prd-update / impl, announce decision + reason, execute inline
 - `/super-manus:catchup` — re-inject project-global `prd/_index.md` + most-recent update's `task_plan.md` into context
 - `/super-manus:log` — manually append a session log entry to the active update's `progress.md` now
@@ -34,6 +37,11 @@ The recommended flow for a non-trivial project: `start` → `brainstorm` → aud
     ├── prd/                                     ← project-global, ONE source of truth
     │   ├── _index.md                            ← 8 PM-flavored H2 sections (Problem / Audience / Success metrics / Demo / Must / Not doing / Modules / Data flow overview); ≤700 words
     │   └── <module>.md                          ← 9 PM-flavored H2 sections (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions); ≤2000 words
+    ├── e2e/                                     ← v0.5 NEW: permanent regression suite, mirrors prd/
+    │   ├── _system/                             ← cross-module scenarios from prd/_index.md ## Demo
+    │   │   └── test_<scenario>.<ext>            ← auto-discovered by default test runner; runs in CI
+    │   └── <module>/                            ← per-module capabilities from prd/<module>.md ## What users get
+    │       └── test_<capability>.<ext>          ← auto-discovered by default test runner; runs in CI
     ├── roadmap.md                               ← project-global, module status table (auto-managed)
     ├── prd_drift.md                             ← project-global, append-only PRD ↔ implementation drift log
     └── impl/                                    ← time series of milestones, per module
@@ -42,11 +50,20 @@ The recommended flow for a non-trivial project: `start` → `brainstorm` → aud
                 ├── task_plan.md                 ← phase index for THIS update (Goal + Phases table)
                 ├── findings.md                  ← decisions / errors / data points for THIS update
                 ├── progress.md                  ← commits + session log for THIS update (hook-managed)
-                └── tasks/
-                    └── p<n>_impl.md             ← per-phase technical plan, lazy-created by /super-manus:impl
+                ├── tasks/
+                │   └── p<n>_impl.md             ← per-phase technical plan, lazy-created by /super-manus:impl
+                └── tests/                       ← v0.5 NEW: phase tests for THIS update, NOT auto-discovered
+                    └── phase_p<n>_<verb>_<noun>.<ext>
 ```
 
 **Two axes**: `prd/<module>.md` is the module's TARGET STATE (does not move with implementation). `impl/<module>/<update>/` is the module's TIME SERIES (each milestone update is a folder; old updates are immutable historical record).
+
+**Two test tiers** (v0.5):
+
+- `docs/super-manus/e2e/<module>/test_<capability>.<ext>` and `docs/super-manus/e2e/_system/test_<scenario>.<ext>` — **permanent regression**, mirrors PRD's module/_index structure, auto-discovered by default test runner globs (pytest `test_*.py`, jest `*.test.ts`), runs in CI on every commit. Lifetime: as long as the capability lives in PRD.
+- `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_<verb>_<noun>.<ext>` — **phase tests**, milestone-scoped, NOT auto-discovered (`phase_*` prefix in Python or `*.phase.ts` suffix in Node/TS is chosen specifically to fall outside default runner globs), invoked by `/super-manus:impl` via explicit path. Lifetime: as long as the milestone update folder exists.
+
+The naming distinction is load-bearing — orchestrator and CI configs depend on it. Phase tests go through explicit-path invocation by the orchestrator; e2e tests are picked up by the project's pre-existing test runner globs.
 
 **No active-state file.** There is NO `.super-manus/active` and no second active-state file. Hooks and commands resolve "the current active update" by calling `sm_active_update` (sourced from `${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh`, **no arguments** in v0.4), which scans `docs/super-manus/impl/<module>/*/` across all modules and returns `<module>/<update-folder>` of the most recently modified subfolder. If the result is empty, the hook no-ops; the agent suggests `/super-manus:brainstorm` or `/super-manus:sync <module>`.
 
@@ -198,6 +215,28 @@ v0.4 has no automatic migration command. If you have a project still on the v0.2
 6. Hooks and scripts pick up the new layout immediately; no further action needed.
 
 Multi-feature projects should pick one feature as the project PRD and either fold the others in as additional modules, archive their docs, or split them into separate super-manus-enabled subdirectories.
+
+## 9. Companion skills (v0.5)
+
+`using-sm` (this skill) is the state-protocol skill — it covers what files exist, what goes in each, when to update them, the Drift check protocol, the 2-action rule, the 3-strike protocol, and the anti-patterns list. It is invoked indirectly: every `/super-manus:*` slash command and every `SessionStart`/`Stop`/`PostToolUse` hook reminder references its conventions.
+
+v0.5 ships three additional skills that cover the **execution discipline** layer (what `using-sm` deliberately does NOT cover). They are invoked by the `/super-manus:impl` and `/super-manus:impl-all` orchestrators during phase execution, not by `using-sm` itself.
+
+| Skill | Invoked by | What it enforces |
+| --- | --- | --- |
+| `tdd-in-phases` | `impl-test-writer` step of `/super-manus:impl` and `/super-manus:impl-all` | test-writer is spawned BEFORE code-writer; phase tests at `docs/super-manus/impl/<m>/<u>/tests/phase_p<n>_<verb>_<noun>.<ext>`; e2e tests at `docs/super-manus/e2e/<module>/test_<capability>.<ext>` when this phase **completes** a `## What users get` capability; tests committed red; code-writer is forbidden from editing tests |
+| `verification-before-phase-close` | orchestrator after `impl-code-writer` reports done | phase Status flips to `closed` only after every command in `tasks/p<n>_impl.md ## Verification` exits green; `## Verification` MUST contain (1) a phase-test path command and (2) one user-visible smoke command |
+| `systematic-debugging-in-phase` | orchestrator when a `## Verification` command fails | follow the checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, fix, re-run) instead of randomly trying things; same error class three times → escalate |
+
+The 3-agent `/super-manus:impl` orchestration replaces v0.4's single `impl-executor`:
+
+1. `impl-architect` drafts `tasks/p<n>_impl.md` (Objective / Approach / Files touched / Verification). No code, no tests.
+2. `impl-test-writer` writes phase tests + (conditionally) e2e tests; commits them red. Persona discipline: anchor in PRD spec, not in `## Approach`.
+3. `impl-code-writer` writes implementation; iterates until phase tests + touched e2e tests are green. Has NO permission to edit anything under `tests/` or `e2e/`. Orchestrator hashes test files before/after this agent runs and aborts the phase on tamper.
+
+The split is to prevent the implementing agent from gaming its own tests. Time barrier (test-writer commits before code-writer runs) + write barrier (code-writer cannot edit tests) + persona discipline (test-writer anchors tests in PRD spec) close the obvious cheating modes. Read access is OPEN — both new agents read everything (PRD, plan, source code, prior tests).
+
+The end-of-update drift gate gains **Pass 3 — e2e coverage check** in v0.5: for every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist and pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
 
 ---
 

@@ -6,6 +6,8 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
 
 - Any change touching `hooks/` requires a matching `tests/test_<name>.sh`. New hook, new test — no exceptions.
 - Same rule for `agents/`: each agent under `agents/<name>.md` needs `tests/test_agent_<name>.sh` asserting its frontmatter (name/description/tools), persona, inputs, and any behavioural invariants its callers rely on. Agents are spawned by slash commands via the Agent tool with `subagent_type=<name>`, so the agent's `name` frontmatter and the orchestrator's `subagent_type` must stay in lock-step.
+- **Agent invariants (v0.5).** The two new impl agents — `impl-test-writer` and `impl-code-writer` — both need `tests/test_agent_<name>.sh` per the rule above. Their tests MUST also assert the write-barrier discipline: `impl-test-writer`'s persona says "tests anchored in PRD spec, NOT mirror of impl plan" and the agent has no `Edit` tool; `impl-code-writer`'s persona explicitly forbids editing any file under `tests/` or `e2e/` (the orchestrator additionally hashes test files before/after to enforce mechanically). If the persona text or the Tools frontmatter drifts, the test must catch it — these are the load-bearing v0.5 cheat-prevention boundaries.
+- **Skill invariants (v0.5).** Each skill is a directory `skills/<name>/SKILL.md`. The four v0.5 skills — `using-sm`, `tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase` — each need `tests/test_skill_<name>.sh` (mirroring how `test_skill_using_sm.sh` covers `using-sm`). Skills are loaded by slash commands; the test asserts the SKILL.md frontmatter (`name`, `description`, `user-invocable`) plus any load-bearing section headings the orchestrator references.
 - Templates under `templates/` must keep their schema headings verbatim. The full set in v0.2:
   - `task_plan.md`: `## Goal`, `## Phases`
   - `findings.md`: `## Decisions`, `## Errors`, `## Data points / research`
@@ -48,6 +50,45 @@ Invariants:
 - Drift between PRD and implementation is **always** logged to `prd_drift.md`; the agent must not silently update PRD.
 - The "feature" abstraction is gone. There is one project = one PRD. Multi-product monorepos must use multiple super-manus-enabled subdirectories (one per product) or stay on v0.3.
 
+### v0.5 layout deltas (additive on top of v0.4)
+
+v0.5 keeps every v0.4 path. It adds two new directories:
+
+```
+docs/super-manus/
+├── prd/                                     ← unchanged from v0.4
+├── e2e/                                     ← NEW in v0.5: permanent regression, mirrors prd/
+│   ├── _system/                             ← cross-module scenarios from prd/_index.md ## Demo
+│   │   └── test_<scenario>.<ext>            ← auto-discovered by test runner; runs in CI
+│   └── <module>/                            ← per-module capability tests from prd/<module>.md ## What users get
+│       └── test_<capability>.<ext>          ← auto-discovered by test runner; runs in CI
+├── roadmap.md                               ← unchanged
+├── prd_drift.md                             ← unchanged
+└── impl/<module>/<YYYY-MM-DD>-<update-name>/
+    ├── task_plan.md                         ← unchanged
+    ├── findings.md                          ← unchanged
+    ├── progress.md                          ← unchanged
+    ├── tasks/p<n>_impl.md                   ← unchanged
+    └── tests/                               ← NEW in v0.5: phase tests, milestone-scoped
+        ├── phase_p1_<verb>_<noun>.py            (Python)
+        ├── phase_p2_<verb>_<noun>.phase.ts      (Node/TS)
+        └── ...
+```
+
+Naming-convention invariants (parsed by orchestrator and tests):
+
+- **Phase tests** live at `docs/super-manus/impl/<module>/<update>/tests/` and use `phase_p<n>_<verb>_<noun>.<ext>`. The `phase_*` prefix (Python) or `*.phase.ts` suffix (Node/TS) is chosen specifically so default test runner globs (`pytest test_*.py`, `jest *.test.ts`) DO NOT pick them up — phase tests are NOT auto-discovered by CI; they are run only by `/super-manus:impl` during phase execution via explicit path.
+- **e2e tests** live at `docs/super-manus/e2e/<module>/test_<capability>.<ext>` (per-module capability) or `docs/super-manus/e2e/_system/test_<scenario>.<ext>` (cross-module scenario from `prd/_index.md ## Demo`). The `test_*` / `*.test.*` form IS auto-discovered by default runners — e2e tests are the permanent regression suite and CI runs them on every commit.
+
+Two permanence tiers:
+
+- Phase tests are committed with the milestone, archive when `roadmap.md` flips to `stable`, and may be deleted with the update folder. They prove "this phase shipped".
+- e2e tests live as long as their PRD capability lives. They prove "this capability still works after future milestones". To promote a phase test to e2e, the user manually moves it to `e2e/<module>/` and renames per the convention above.
+
+End-of-update drift gate gains **Pass 3 — e2e coverage check**: for every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist AND pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
+
+The 3-agent `/super-manus:impl` orchestration (architect → test-writer → code-writer) replaces the v0.4 single `impl-executor`. The `impl-architect` agent is reused from v0.4 with no behavioural change; `impl-test-writer` and `impl-code-writer` are new. `/super-manus:impl-all` is a new command that loops the same 3-agent pipeline through all pending phases of the active update without pausing — useful when the plan is already audited.
+
 ## v0.3 → v0.4 path migration
 
 | v0.3 path | v0.4 path |
@@ -71,8 +112,9 @@ Slash command surface area also shrinks: `/super-manus:start` becomes a no-arg "
 
 ## Where to look
 
-- **Current design** lives in `docs/design-v0.4.md` — source of truth for the project-global layout and the active development target.
+- **Current design** lives in `docs/design-v0.5.md` — source of truth for the 3-agent impl flow, the e2e/ regression suite, the three new skills (`tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase`), and the `/super-manus:impl-all` command.
+- v0.4 design is preserved at `docs/design-v0.4.md` for historical reference (with a SUPERSEDED banner). v0.5 keeps the v0.4 project-global PRD layout intact; what changed is the execution discipline (no longer "coexist with superpowers" — super-manus now ships its own self-sufficient execution discipline absorbing TDD / verification / systematic debugging from superpowers).
 - v0.2/v0.3 design is preserved at `docs/design-v0.2.md` for historical reference (with a SUPERSEDED banner — its layout invariants no longer apply).
 - v0.1 design is preserved at `docs/design-v0.1.md` for historical reference (with a SUPERSEDED banner).
 - Plans (task-by-task implementation breakdown) live in `docs/plans/`.
-- When in doubt about scope or layout, re-read `design-v0.4.md` before adding anything.
+- When in doubt about scope or layout, re-read `design-v0.5.md` before adding anything.
