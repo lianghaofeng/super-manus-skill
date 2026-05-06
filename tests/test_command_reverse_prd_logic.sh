@@ -70,4 +70,24 @@ grep -qiE "per-service|per runtime entry|do NOT merge" "$F" || { echo "FAIL: mus
 # _index.md ## Data flow overview from compose graph, not textual inference
 grep -qiE "compose.*graph|depends_on graph|env-URL graph" "$F" || { echo "FAIL: _index.md ## Data flow overview must derive from compose depends_on / env-URL graph"; exit 1; }
 
+# Step 3 — content writing is delegated to a subagent (Agent tool), not done inline by main agent
+grep -qiE "Agent tool|Task tool|subagent_type|architect subagent|spawn.*subagent" "$F" || { echo "FAIL: writing must be delegated to a subagent via the Agent tool"; exit 1; }
+
+# Architect + PM persona for the subagent
+grep -qiE "chief system architect|system architect" "$F" || { echo "FAIL: subagent must take the chief system architect persona"; exit 1; }
+grep -qiE "product manager|senior PM" "$F" || { echo "FAIL: subagent must also take the senior PM persona"; exit 1; }
+
+# Mandatory ASCII diagram in _index.md ## Data flow overview
+grep -qiE "ASCII|box-drawing" "$F" || { echo "FAIL: _index.md ## Data flow overview must include an ASCII diagram"; exit 1; }
+grep -qE "┌|┐|└|┘|─|│" "$F" || { echo "FAIL: must list box-drawing characters as the ASCII palette"; exit 1; }
+
+# Module–diagram 1:1 invariant
+grep -qiE "module.diagram invariant|module box label|exactly equal a module name" "$F" || { echo "FAIL: must declare the module-diagram 1:1 invariant (every module box label = a row in ## Modules)"; exit 1; }
+
+# Offline / batch modules — modules without runtime edges get an explicit listing line
+grep -qiE "offline.*batch modules|offline-modules" "$F" || { echo "FAIL: must require an 'Offline / batch modules: ...' line for modules omitted from the diagram"; exit 1; }
+
+# Orchestrator post-conditions: file-count check + cross-reference table vs files
+grep -qiE "1:1 invariant|module.file 1:1|count.*equals the module count" "$F" || { echo "FAIL: orchestrator must verify file count = module count (file-level 1:1 invariant)"; exit 1; }
+
 echo OK

@@ -92,61 +92,222 @@ NOT used for module discovery. LSP and source-file reading are reserved for fill
 
 Stage 1 is declarative-only. ~10–20 reads total: orchestration manifests, root Makefile / package.json / pyproject.toml, per-app `package.json` / `pyproject.toml`. Do NOT read source files in this stage.
 
-## Fill module content — LSP + grep cooperation
+## Hand off content generation to the architect subagent
 
-With the module list from Stage 1.5 in hand, the next pass reads source code to fill `## Surface` and `## Data flow` per module. This pass follows the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/using-sm/SKILL.md). Apply its rules directly:
+Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn a dedicated subagent with the **Agent tool** (`subagent_type="general-purpose"`) and the prompt below. The subagent reads sources, drafts the PRD bundle, and writes files via the Write tool. The main agent only verifies after the subagent returns.
 
-- **LSP-led where available**: `workspace symbols` to enumerate exports per module, `document symbols` on each module's primary entry files (route file, migration file, CLI entry, top-level component), `find-references` on each module's exports for cross-module wiring.
-- **Double-source / cross-check**: claim a fact in `## Surface` or `## Data flow` only when both LSP and grep corroborate it (or grep alone if LSP is unavailable for that file). Single-source surprises get an `(audit)` marker.
-- **LSP unavailable** fallback: if no language server is active for the dominant language (polyglot repos commonly hit this), continue with grep + Read alone, mark uncertain claims with `(audit)`, and add a "LSP unavailable — text-only inference; treat all `(audit)` markers as load-bearing" line at the top of `prd/_index.md`. Module discovery (Stage 1) is unaffected — only `## Surface` / `## Data flow` quality degrades.
-- **Budget**: LSP ≤10 workspace-symbol / find-references calls + 1 document-symbol per module; grep / Read ≤30 calls. Do NOT exhaustively read every source file.
+Why a subagent: the writing pass needs a fresh context (no chat-history pollution), a focused architect/PM persona, and a sustained reading budget across many source files. Embedding it in the main thread bloats context and fragments the persona.
 
-## Write the PRD
+### Inputs to substitute into the prompt
 
-For each module from Stage 1.5, write `<feature>/prd/<module>.md` from `templates/prd_module.md`. Each section below specifies its **source priority** — read declarative sources first, fall back to source code only when declarative signals are exhausted. Default module granularity is **per-service** (one PRD module = one runtime entry); if two services obviously serve one logical role (e.g. `web-parent` + `parent-api`), do NOT merge them in this pass — list them separately and add a `## Open questions` entry suggesting the merge.
+Before spawning, the orchestrator fills in these placeholders from Stage 1 results:
 
-**`(audit)` policy**: mark a fact `(audit)` only when it comes from a single source and you couldn't corroborate it elsewhere. Do NOT bulk-mark whole sections — that just gives the user a wall of placeholders to wade through. If a section is genuinely empty (e.g. no migrations exist for this module), leave it empty rather than `(audit)`-stuffing it.
+- `{project_root}` — absolute path of the project being reverse-prd'd
+- `{feature_folder}` — `<project_root>/docs/super-manus/<active-feature>` absolute path
+- `{module_list}` — markdown table from Stage 1.5 with columns: `name | type (launch|batch) | entry_points | source_origin (apps|services|scripts|makefile)`
+- `{infra_deps}` — bullet list from Stage 1.1: `<image> — used as <role hint>`
+- `{monorepo_signals}` — which workspace manifests were detected (pnpm/uv/cargo/go), or "none"
+- `{lsp_available}` — `true` or `false` (probe by attempting one workspace-symbol call before spawning)
 
-### Per-module sections
+### Subagent prompt (verbatim, with placeholders substituted)
 
-- `## Purpose` — one sentence. Sources in priority: (1) the module's own `package.json` `description` / `pyproject.toml` `description` field; (2) the first paragraph of `apps/<module>/README.md` if present; (3) the Makefile target's comment line above it; (4) repo-root README mention. If none yield a sentence, write `(audit — describe what this module does)`.
+```
+You are a chief system architect AND a senior product manager (10 years of experience in both roles).
+Your goal: produce a PRD bundle for the project at {project_root} that lets a new team member understand
+the system architecture in 5 minutes. Use PM voice for business value and capabilities; switch to
+architect voice for protocols / URLs / topology. Mix the two: PM lead + architect evidence.
 
-- `## Surface` — fill in this priority:
-  1. **Process entry** — `Dockerfile CMD`/`ENTRYPOINT`, or the file the Stage 1.3 launch target invokes (e.g. `uvicorn parent_api.app:app` → `apps/parent-api/parent_api/app.py`), or the `[project.scripts]` entry. Read top-of-file imports + the FastAPI / Flask / Express / Next route registrations directly off this file.
-  2. **Declared schema / routes / CLI** — for storage modules: `alembic/versions/*.py` or `migrations/*.sql` table definitions. For HTTP modules: every `@router.<verb>` / `app.<verb>` decorator + its path. For CLI modules: subcommand registry. For UI modules: top-level pages / route file.
-  3. **LSP補漏** — only if 1 + 2 don't paint a complete picture: `document symbols` on the entry file, `workspace symbols` filtered to the module's directory. Per the Drift check protocol's double-source rule, single-source LSP claims get `(audit)`.
-  
-  Use *short* schema sketches and bullet lists. **Do not invent fields, endpoints, or screens.**
+INPUTS (provided):
+- project_root: {project_root}
+- feature_folder: {feature_folder}
+- module_list: {module_list}
+- infra_deps: {infra_deps}
+- monorepo_signals: {monorepo_signals}
+- lsp_available: {lsp_available}
 
-- `## Data flow` — fill in this priority:
-  1. **Compose / k8s wiring** — `depends_on:`, named networks, env vars containing sibling URLs (`GATEWAY_URL`, `VERIFIER_URL`, `DATABASE_URL`), queue topic / subject names, S3 bucket names.
-  2. **Module entry file imports + outbound calls** — `httpx.AsyncClient(<url>)` / `fetch(<url>)` calls with sibling URLs; `nats_client.subscribe(<subject>)` / `kafka_consumer.subscribe(<topic>)`; SQL connection strings; cache client constructors.
-  3. **find-references on this module's exports** (LSP) — where this module's APIs get called from.
-  4. **grep imports** — backstop for LSP misses (config-driven dispatch, dynamic loading, polyglot boundaries).
-  
-  Format as "in: …, out: …" or a short bullet list of inbound + outbound edges. `(audit)` any single-source claim.
+DELIVERABLES (write directly via the Write tool, do NOT print to chat):
+1. {feature_folder}/prd/_index.md — feature-level overview (≤700 words)
+2. {feature_folder}/prd/<module>.md for EACH module in module_list (≤2000 words each)
 
-- `## Constraints` — three sources, all required if applicable:
-  1. **`infra_deps[]` from Stage 1.1** — every infra service this module talks to, with concrete role: "reads/writes Postgres `<table>`", "publishes to NATS subject `<X>`", "indexes into Qdrant collection `<Y>`", "caches in Redis with prefix `<Z>`".
-  2. **Library packages** — every `packages/*` / `libs/*` this module imports (resolved from the module's `package.json` `dependencies` / `pyproject.toml` `[project.dependencies]` filtered to internal workspace names).
-  3. **In-code constraints** — explicit timeouts, declared rate limits, license headers about compliance, `// TODO: PII` comments, `# pragma: no cover` blocks indicating known-untested paths.
+================================================================================
+_index.md STRUCTURE — six H2 sections, exact heading names (downstream tools parse these)
+================================================================================
 
-- `## Out of scope` — leave empty unless the module's README or repo-root README explicitly says "we don't do X" or "X is out of scope". Do NOT speculate.
+## Problem
+One sentence, PM voice: what pain does this project solve and for whom.
+Source priority: (1) project root package.json/pyproject.toml description field;
+(2) first paragraph of README.md; (3) CLAUDE.md if present.
+If all three are silent, write `(audit — describe the problem this codebase solves)`.
 
-- `## Open questions` — populate with anything you wanted to assert but couldn't verify, plus any merge / split suggestions (granularity defaults). This is the user's audit list — be generous here, sparse elsewhere.
+## Demo
+3–5 lines, second person, concrete usage scenario. Source: README quickstart / "Getting Started"
+section / docs/ top-level. (audit) only if README is empty.
 
-Total per-module file ≤ 2000 words. If `## Surface` would balloon past that (e.g. an API gateway with 80 routes), summarise — exhaustive enumeration is the user's job during audit.
+## Must
+Bullet list of business capabilities visible from runtime entry points (the union of
+launch + batch entries from module_list). One bullet = one capability the system delivers.
+NOT a re-listing of modules.
 
-### `<feature>/prd/_index.md` sections
+## Not doing
+Bullet list of explicit non-goals. Only what README / CLAUDE.md explicitly says is out of scope.
+(audit) if none.
 
-- `## Problem` — one sentence. Priority: (1) repo-root `package.json` / `pyproject.toml` `description`; (2) first paragraph of `README.md`; (3) `CLAUDE.md` if present. If none yield a sentence, `(audit — describe the problem this codebase solves)`.
-- `## Demo` — 3–5 lines, second person, concrete usage scenario. Source: README quickstart / "Getting started" section, or `docs/` top-level. `(audit)` only if README is empty.
-- `## Must` — bullet list of capabilities visible from the **union of Stage 1.3 launch + batch entry points** (= what the system can actually do). One bullet per capability. NOT a re-listing of modules.
-- `## Not doing` — bullet list. Source: README explicit "we don't do X" lines, or `(audit)` if none.
-- `## Modules` table — one row per Stage 1.5 module with relative link `[prd/<module>.md](<module>.md)` and a one-line Purpose copied from that module's `## Purpose` first sentence.
-- `## Data flow overview` — produced from the **compose `depends_on` graph + env-URL graph**, not from textual inference. Format as a short bullet list of edges (`<A> → <B> via <protocol>`) or a 3–5 line paragraph. Mark `(audit)` only on edges you couldn't corroborate from declarative wiring.
+## Modules
+Table with one row per module from module_list:
 
-Total `_index.md` ≤ 700 words.
+| Module | File | Purpose |
+| --- | --- | --- |
+| <name> | [prd/<name>.md](<name>.md) | <one-line PM description copied from that module's ## Purpose first sentence> |
+
+## Data flow overview
+This section is REQUIRED to contain (in this order):
+(a) An ASCII architecture diagram, see DIAGRAM RULES below.
+(b) An edge list backup — one line per edge: `<A> --<protocol>--> <B> [path/topic]`.
+(c) An offline-modules line: `Offline / batch modules: <comma-separated list>` listing every
+    module from the Modules table that does NOT appear as a box in the diagram.
+(d) 1–2 sentences in plain language explaining the architecture's core runtime loop.
+
+================================================================================
+DIAGRAM RULES (mandatory for _index.md ## Data flow overview)
+================================================================================
+
+Use box-drawing characters: ┌ ┐ └ ┘ ─ │ ▲ ▼ ◄ ► ├ ┤ ┬ ┴ ┼
+
+Each box is one of two kinds:
+- MODULE box — its label MUST exactly equal a module name from the ## Modules table.
+- INFRA-DEP box — its label is the image name (postgres, qdrant, redis, prometheus, etc.).
+
+Arrows show data flow direction. Label every edge with protocol (HTTP / WS / gRPC / SQL /
+NATS subject / Redis prefix / env URL). External-actor arrows (browser / mobile / cron)
+may enter the diagram but should not have boxes.
+
+MODULE–DIAGRAM INVARIANT (HARD CONSTRAINT):
+Every module-typed box label MUST match a row in the ## Modules table exactly. Conversely,
+every module in the ## Modules table MUST either appear as a box in the diagram OR be
+listed in the offline-modules line right after the diagram. No module is silently absent.
+
+Diagram source: build the diagram from the compose `depends_on` graph + env-URL graph
+(env vars containing sibling URLs, queue subjects, S3 bucket names) only. Do NOT infer
+edges from textual reasoning or fluff.
+
+================================================================================
+<module>.md STRUCTURE — six H2 sections, exact heading names
+================================================================================
+
+## Purpose
+One sentence, PM voice: business problem this module solves + role in the feature.
+Source priority: (1) module's own package.json/pyproject.toml description; (2) first
+paragraph of apps/<module>/README.md if present; (3) Makefile target comment above it;
+(4) repo-root README mention. If none yield a sentence, `(audit — describe what this module does)`.
+
+## Surface
+Top 3–5 business capabilities this module delivers, each backed by concrete evidence
+(schema / endpoint / CLI). Format each capability:
+
+- **<capability name>** — <PM description: what users / consumers get>. Backed by:
+  <concrete schema | endpoint path | CLI invocation | screen / route name>.
+
+Source priority for evidence:
+(1) PROCESS ENTRY — Dockerfile CMD/ENTRYPOINT, or the file the launch target invokes
+    (e.g. `uvicorn parent_api.app:app` → `apps/parent-api/parent_api/app.py`), or the
+    [project.scripts] entry. Read top-of-file imports + FastAPI/Flask/Express/Next
+    route registrations directly off this file.
+(2) DECLARED SCHEMA / ROUTES / CLI — for storage modules: alembic/versions/*.py or
+    migrations/*.sql table definitions. For HTTP modules: every @router.<verb> / app.<verb>
+    decorator + its path. For CLI modules: subcommand registry. For UI modules:
+    top-level pages / route file.
+(3) LSP補漏 — only if (1)+(2) don't paint a complete picture: document symbols on the
+    entry file, workspace symbols filtered to the module's directory. Apply the
+    Drift check protocol's double-source rule: single-source LSP claims get (audit).
+
+Do NOT invent fields, endpoints, or screens. Use short schema sketches and bullet lists.
+
+## Data flow
+Default format: edge list (`in: …`, `out: …`, `third-party deps: …`).
+If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO
+add an ASCII sub-diagram before the edge list (use the same box-drawing characters).
+
+Source priority:
+(1) compose depends_on + sibling URL env vars (GATEWAY_URL, VERIFIER_URL, DATABASE_URL)
+    + queue subject / topic names + S3 bucket names.
+(2) Module entry file's outbound calls — httpx.AsyncClient(<url>) / fetch(<url>),
+    nats.subscribe(<subject>) / kafka.subscribe(<topic>), SQL connection strings.
+(3) LSP find-references on this module's exports (where it gets called from).
+(4) grep imports for LSP misses (config-driven dispatch, dynamic loading, polyglot edges).
+
+(audit) any single-source claim.
+
+## Constraints
+Three categories — include all that apply:
+
+1. INFRA_DEPS CONSUMED — every infra service this module talks to with its concrete role.
+   Examples: "reads/writes Postgres `<table>`", "publishes NATS subject `<X>`", "indexes
+   Qdrant collection `<Y>`", "caches in Redis with prefix `<Z>`".
+2. LIBRARY PACKAGES IMPORTED — every internal packages/* / libs/* this module depends on,
+   resolved from this module's package.json `dependencies` / pyproject.toml
+   `[project.dependencies]` filtered to internal workspace names.
+3. IN-CODE CONSTRAINTS — explicit timeouts, declared rate limits, license headers,
+   // TODO: PII comments, # pragma: no cover blocks indicating known-untested paths.
+
+## Out of scope
+Only what the module's README or repo-root README explicitly excludes. Do NOT speculate.
+Empty section if README is silent.
+
+## Open questions
+Populate liberally: every (audit) item, every merge/split suggestion (granularity
+defaults), anything you wanted to assert but couldn't verify. This is the user's audit list.
+
+================================================================================
+GRANULARITY DEFAULT
+================================================================================
+
+Per-service: one module = one runtime entry. Do NOT auto-merge in this pass (e.g. don't
+fold web-parent + parent-api into "parent stack"). Suggest merges in ## Open questions instead.
+
+================================================================================
+(audit) POLICY
+================================================================================
+
+Mark a fact (audit) only if it comes from a single source and you couldn't corroborate
+elsewhere. Do NOT bulk-mark whole sections — that gives the user a wall of placeholders.
+Empty sections are better than (audit)-stuffed sections.
+
+If lsp_available is false, add this line right after the H1 of _index.md:
+> LSP unavailable — text-only inference; (audit) markers below are load-bearing.
+
+But still: only mark what's actually unverified, not the whole document.
+
+================================================================================
+SOURCE READING — DRIFT CHECK PROTOCOL
+================================================================================
+
+This is from skills/using-sm/SKILL.md §4. Apply directly:
+- LSP-LED where available: workspace symbols, document symbols, find-references for
+  content evidence.
+- DOUBLE-SOURCE / CROSS-CHECK: claim a fact only when both LSP and grep corroborate, or
+  grep alone if LSP is down. Single-source surprises get (audit).
+- LSP UNAVAILABLE fallback: continue with grep + Read alone, mark uncertain claims (audit),
+  surface the warning at the top of _index.md.
+- BUDGET: ≤10 LSP calls + ≤30 grep / Read calls total. Do NOT exhaustively read every
+  source file.
+
+================================================================================
+FINAL OUTPUT TO ORCHESTRATOR
+================================================================================
+
+When all files are written, return ONE summary line:
+
+> wrote _index.md + <N> module files; <M> (audit) markers total
+```
+
+### After the subagent returns
+
+The main agent (orchestrator) MUST:
+
+1. Verify `{feature_folder}/prd/_index.md` exists and is non-empty.
+2. Verify the count of `{feature_folder}/prd/*.md` files (excluding `_index.md`) equals the module count from Stage 1.5 — this enforces the **module–file 1:1 invariant** at the orchestrator level too.
+3. Read `_index.md` and grep its `## Modules` table — every row's module name MUST match a `<name>.md` file in `prd/`. Mismatch → surface a one-line warning to the user (do NOT silently fix).
+4. Surface the subagent's summary line verbatim to the user.
 
 ## Update `roadmap.md`
 
