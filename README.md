@@ -1,5 +1,7 @@
 # super-manus
 
+> 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
+
 *Survives `/clear`, generates dev-readable progress journals from git history, works alongside superpowers (not a fork).*
 
 ## What
