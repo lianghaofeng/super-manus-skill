@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Tests the orchestrator slash command commands/reverse-prd.md.
+# Content-generation rules live in agents/reverse-prd-architect.md (asserted by
+# tests/test_agent_reverse_prd_architect.sh) — this file checks orchestration only.
+
 set -euo pipefail
 cd "$(dirname "$0")/.."
 F=commands/reverse-prd.md
@@ -22,26 +26,12 @@ grep -qiF "audit" "$F" || { echo "FAIL: must instruct the user to audit/refine a
 grep -qiE "one-shot|one shot" "$F" || { echo "FAIL: must call out the one-shot nature of the command"; exit 1; }
 
 # Must scan project sources to infer module breakdown
-grep -qiE "scan|infer|analyze" "$F" || { echo "FAIL: must mention scanning / inferring from project sources"; exit 1; }
+grep -qiE "scan|infer|discover" "$F" || { echo "FAIL: must mention scanning / inferring from project sources"; exit 1; }
 
 # Must NOT seed any impl/<m>/<u>/ folders — that's /super-manus:sync's job
 grep -qF "/super-manus:sync" "$F" || { echo "FAIL: must redirect to /super-manus:sync for module work after audit"; exit 1; }
 
-# Must respect 700 / 2000 word ceilings just like /brainstorm
-grep -qF "700" "$F" || { echo "FAIL: must mention 700-word ceiling for prd/_index.md"; exit 1; }
-grep -qF "2000" "$F" || { echo "FAIL: must mention 2000-word ceiling for prd/<module>.md"; exit 1; }
-
-# Must not invent product details that aren't in the source — instructions to be conservative
-grep -qiE "invent|guess|fabricate|conservative" "$F" || { echo "FAIL: must instruct the agent to NOT invent details not visible in the source"; exit 1; }
-
-# Must use the Drift check protocol from using-sm (LSP + grep cooperation, not pure grep) for content filling
-grep -qF "Drift check protocol" "$F" || { echo "FAIL: must reference using-sm's Drift check protocol"; exit 1; }
-grep -qF "LSP" "$F" || { echo "FAIL: must call out LSP as a structural-inference primary tool"; exit 1; }
-grep -qiE "workspace symbols|find-references|document symbols" "$F" || { echo "FAIL: must mention at least one concrete LSP operation"; exit 1; }
-grep -qiE "double-source|cross-check|both LSP and" "$F" || { echo "FAIL: must articulate the double-source / cross-check rule"; exit 1; }
-grep -qiE "LSP unavailable|LSP not available|no language server" "$F" || { echo "FAIL: must specify the LSP-unavailable fallback path"; exit 1; }
-
-# Module discovery is runtime-first (declarative), not LSP-led
+# Stage 1 — runtime-first module discovery (declarative-only, no LSP)
 grep -qiE "runtime-first|what runs" "$F" || { echo "FAIL: discovery must be framed as runtime-first / 'what runs'"; exit 1; }
 grep -qiE "docker-compose|compose\.yaml|orchestration" "$F" || { echo "FAIL: must read compose / orchestration manifests for app services"; exit 1; }
 grep -qiE "infra dependenc|infra_deps" "$F" || { echo "FAIL: must classify infra deps (postgres/redis/etc) and exclude from modules"; exit 1; }
@@ -55,39 +45,18 @@ grep -qiE "no upper cap|no upper bound" "$F" || { echo "FAIL: must remove the 2�
 grep -qiE "hard-abort|hard abort" "$F" || { echo "FAIL: must hard-abort when active feature is topic-scoped (no overwrite prompt)"; exit 1; }
 grep -qiE "topic-scoped|committed PRD topic|committed.*topic" "$F" || { echo "FAIL: must describe the topic-scoped/committed-PRD condition that triggers abort"; exit 1; }
 
-# Content-filling source priorities (Step 2): declarative-first, LSP last
-grep -qiE "process entry|Dockerfile CMD|launch target invokes" "$F" || { echo "FAIL: ## Surface must take process entry / Dockerfile CMD as priority 1"; exit 1; }
-grep -qiE "depends_on|sibling URL|queue topic|subject name" "$F" || { echo "FAIL: ## Data flow must take compose depends_on / sibling URLs / queue topics as priority 1"; exit 1; }
-grep -qiE "infra_deps|infra dependenc" "$F" || { echo "FAIL: ## Constraints must enumerate infra_deps from Stage 1.1"; exit 1; }
-grep -qiE "library package|packages/\*|workspace.*depend" "$F" || { echo "FAIL: ## Constraints must include internal library-package imports"; exit 1; }
+# Stage 2 — content writing delegated to a named subagent (Agent tool)
+grep -qiE "Agent tool|Task tool|subagent_type" "$F" || { echo "FAIL: writing must be delegated to a subagent via the Agent tool"; exit 1; }
+grep -qF "reverse-prd-architect" "$F" || { echo "FAIL: must reference the reverse-prd-architect agent by name"; exit 1; }
+grep -qF "agents/reverse-prd-architect.md" "$F" || { echo "FAIL: must link to the agent definition file (agents/reverse-prd-architect.md)"; exit 1; }
 
-# (audit) policy — single-source only, no bulk marking
-grep -qiE "single.source|do NOT bulk-mark|bulk[ -]mark" "$F" || { echo "FAIL: must restrict (audit) to single-source unverified claims, not bulk filler"; exit 1; }
+# Spawning prompt must enumerate the six inputs the agent expects
+for input in project_root feature_folder module_list infra_deps monorepo_signals lsp_available; do
+  grep -qF "$input" "$F" || { echo "FAIL: spawning prompt must include input '$input'"; exit 1; }
+done
 
-# Granularity default — per-service / per runtime entry, do not auto-merge
-grep -qiE "per-service|per runtime entry|do NOT merge" "$F" || { echo "FAIL: must default to per-service module granularity (no auto-merge)"; exit 1; }
-
-# _index.md ## Data flow overview from compose graph, not textual inference
-grep -qiE "compose.*graph|depends_on graph|env-URL graph" "$F" || { echo "FAIL: _index.md ## Data flow overview must derive from compose depends_on / env-URL graph"; exit 1; }
-
-# Step 3 — content writing is delegated to a subagent (Agent tool), not done inline by main agent
-grep -qiE "Agent tool|Task tool|subagent_type|architect subagent|spawn.*subagent" "$F" || { echo "FAIL: writing must be delegated to a subagent via the Agent tool"; exit 1; }
-
-# Architect + PM persona for the subagent
-grep -qiE "chief system architect|system architect" "$F" || { echo "FAIL: subagent must take the chief system architect persona"; exit 1; }
-grep -qiE "product manager|senior PM" "$F" || { echo "FAIL: subagent must also take the senior PM persona"; exit 1; }
-
-# Mandatory ASCII diagram in _index.md ## Data flow overview
-grep -qiE "ASCII|box-drawing" "$F" || { echo "FAIL: _index.md ## Data flow overview must include an ASCII diagram"; exit 1; }
-grep -qE "┌|┐|└|┘|─|│" "$F" || { echo "FAIL: must list box-drawing characters as the ASCII palette"; exit 1; }
-
-# Module–diagram 1:1 invariant
-grep -qiE "module.diagram invariant|module box label|exactly equal a module name" "$F" || { echo "FAIL: must declare the module-diagram 1:1 invariant (every module box label = a row in ## Modules)"; exit 1; }
-
-# Offline / batch modules — modules without runtime edges get an explicit listing line
-grep -qiE "offline.*batch modules|offline-modules" "$F" || { echo "FAIL: must require an 'Offline / batch modules: ...' line for modules omitted from the diagram"; exit 1; }
-
-# Orchestrator post-conditions: file-count check + cross-reference table vs files
+# Orchestrator post-conditions after subagent returns
 grep -qiE "1:1 invariant|module.file 1:1|count.*equals the module count" "$F" || { echo "FAIL: orchestrator must verify file count = module count (file-level 1:1 invariant)"; exit 1; }
+grep -qiE "Modules.*table|## Modules" "$F" || { echo "FAIL: orchestrator must cross-check ## Modules table rows against actual prd/<name>.md files"; exit 1; }
 
 echo OK

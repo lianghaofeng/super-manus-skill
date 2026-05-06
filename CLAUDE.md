@@ -5,6 +5,7 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
 ## Repo invariants
 
 - Any change touching `hooks/` requires a matching `tests/test_<name>.sh`. New hook, new test — no exceptions.
+- Same rule for `agents/`: each agent under `agents/<name>.md` needs `tests/test_agent_<name>.sh` asserting its frontmatter (name/description/tools), persona, inputs, and any behavioural invariants its callers rely on. Agents are spawned by slash commands via the Agent tool with `subagent_type=<name>`, so the agent's `name` frontmatter and the orchestrator's `subagent_type` must stay in lock-step.
 - Templates under `templates/` must keep their schema headings verbatim. The full set in v0.2:
   - `task_plan.md`: `## Goal`, `## Phases`
   - `findings.md`: `## Decisions`, `## Errors`, `## Data points / research`
