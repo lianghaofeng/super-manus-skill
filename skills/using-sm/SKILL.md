@@ -238,19 +238,20 @@ The split is to prevent the implementing agent from gaming its own tests. Time b
 
 The end-of-update drift gate gains **Pass 3 — e2e coverage check** in v0.5: for every `## What users get` capability touched by this update's commits, `e2e/<module>/test_<capability>.<ext>` MUST exist and pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
 
-## 10. Code navigation discipline
+## 10. Coding discipline (karpathy reference)
 
-When reading code (not editing), pick the cheapest tool that answers the question. Reading whole files burns context; grep matches strings and false-matches comments / unrelated names; LSP matches symbols. Use this order:
+Single source of truth for the four `andrej-karpathy-skills:karpathy-guidelines` principles that super-manus agents follow when writing or modifying code:
 
-- **Discovery** (find files, locate by literal text, search unknown patterns): `Grep` / `Glob`.
-- **Understanding** (definition / references / type info for a known symbol): `LSP` (`workspaceSymbol`, `documentSymbol`, `findReferences`, `goToDefinition`, `hover`).
-- **Last resort**: `Read` whole files only when LSP doesn't cover the language, or when you genuinely need surrounding prose / config / data context.
+1. **Surgical changes** — touch only what the task requires. Don't refactor adjacent code, don't "improve" formatting / comments unrelated to the task, don't introduce new abstractions for single-use code. Match existing style. Every changed line should trace directly to the task at hand. Pre-existing dead code stays unless the user asks.
+2. **Surface assumptions** — state what you're assuming explicitly. If multiple interpretations exist, present them rather than picking silently. If something is unclear, stop and name the confusion. Don't guess invisibly.
+3. **Verifiable success criteria** — every task ends with a green check: a test passes, a command exits 0, a user-observable behavior occurs. "It looks done" is not done. The phase plan's `## Verification` section is the literal expression of this principle inside super-manus.
+4. **Avoid overcomplication** — minimum code that solves the problem. No flexibility / configurability / abstractions / error handling that wasn't asked for. If you wrote 200 lines and 50 would do, rewrite. Ask "would a senior engineer call this overcomplicated?".
 
-Default for a known symbol = `LSP.goToDefinition` / `LSP.hover`, NOT `Read`. Default for "where is X?" = `Grep`, NOT `Read`. `Read` is for "I need to see this entire file end-to-end".
+These principles apply universally to every super-manus agent (impl-architect / impl-test-writer / impl-code-writer / reverse-prd-architect / sync-planner). Agents reference §10; do NOT inline-duplicate the four principles into agent personas (so future updates touch one file, not many).
 
-This applies to **every super-manus agent that reads code** — `impl-architect` (when surveying existing code to draft `## Approach` / `## Files touched`), `impl-test-writer` (when reading source for API surface — class/fn names to import), `impl-code-writer` (when reading the codebase to plan edits). The Drift check protocol in §4 is the specific application of this rule for PRD↔code cross-checking; §10 is the general rule for all code reading.
+How the v0.5 execution discipline maps onto these principles: `tdd-in-phases` is principle 3 in TDD form (red test → green test = verifiable criterion); `verification-before-phase-close` is the literal gate for principle 3; `systematic-debugging-in-phase` applies principles 1 + 2 + 3 (smallest change, surface the violated assumption, re-run the verifiable check).
 
-This is the single source of truth for code-navigation discipline. Agents reference §10; do NOT inline-duplicate the rule into agent personas (so future updates touch one file, not three).
+**This is for code-writing discipline**, not code-reading tactics. For "should I LSP, grep, or Read?" questions, there is NO super-manus rule — `impl-*` agents pick whatever fits inside the known module they're working in; `reverse-prd-architect` follows its own runtime-first protocol in [commands/reverse-prd.md](../commands/reverse-prd.md) Stage 1 (LSP is NOT used for module discovery). Different agents have different tool tactics; that's intentional.
 
 ---
 

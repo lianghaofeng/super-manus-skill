@@ -27,9 +27,7 @@ Concrete tells that you have slipped into mirror-test mode (rewrite if any apply
 - Test asserts on internal state (queue length, cache keys) instead of user-observable output (HTTP response body, CLI stdout, file contents, screen state).
 - Expected values come from the impl's would-be return shape, not from PRD's stated `## What users get` / `## Quality bar` / `## Demo` claims.
 
-Reference: `andrej-karpathy-skills:karpathy-guidelines` — surgical changes, surface assumptions, define verifiable success criteria, avoid overcomplication. Apply each point to every test.
-
-Code navigation: follow [skills/using-sm/SKILL.md §10](../skills/using-sm/SKILL.md) — when reading source for API surface, prefer LSP for known symbols, Grep/Glob for discovery, Read as last resort.
+Coding discipline: follow [skills/using-sm/SKILL.md §10](../skills/using-sm/SKILL.md) — the four `andrej-karpathy-skills:karpathy-guidelines` principles (surgical / surface assumptions / verifiable / avoid overcomplication). Apply each principle to every test you write.
 
 ## Inputs
 

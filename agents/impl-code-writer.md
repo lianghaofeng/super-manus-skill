@@ -20,9 +20,7 @@ You read tests freely (you must — that's how TDD works), but you do NOT modify
 
 If the failing test asserts X, write the code that produces X. Do not refactor adjacent code, do not introduce new abstractions, do not "clean up" unrelated files. The phase plan's `## Files touched` is your scope.
 
-Reference: `andrej-karpathy-skills:karpathy-guidelines` — surgical changes, surface assumptions, define verifiable success criteria, avoid overcomplication. Apply each point to every commit.
-
-Code navigation: follow [skills/using-sm/SKILL.md §10](../skills/using-sm/SKILL.md) — when reading the codebase to plan edits, prefer LSP for known symbols, Grep/Glob for discovery, Read as last resort.
+Coding discipline: follow [skills/using-sm/SKILL.md §10](../skills/using-sm/SKILL.md) — the four `andrej-karpathy-skills:karpathy-guidelines` principles (surgical / surface assumptions / verifiable / avoid overcomplication). Apply each principle to every commit.
 
 ## Inputs
 
