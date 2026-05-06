@@ -87,14 +87,50 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"
 
 to regenerate `progress.md ## Outstanding`.
 
-## End-of-update consistency check
+## End-of-update drift gate (BLOCKING)
 
-When all phases in `$UPDATE_DIR/task_plan.md` are `closed`, read `<feature>/prd/$MODULE.md` and `$UPDATE_DIR/progress.md ## Completed commits`. Report two diffs to the user:
+When all phases in `$UPDATE_DIR/task_plan.md` are `closed`, the update is **NOT done** until `<feature>/prd_drift.md` has zero rows where `Module = $MODULE` AND `Resolution = pending`. The gate runs in two passes.
 
-- "PRD declared but not implemented" — bullets in `## What users get` / `## Quality bar` not reflected by any commit.
-- "Implemented but not in PRD" — capabilities visible in commits but not declared in PRD; for each, append one row to `prd_drift.md` and prompt for `/super-manus:prd-update $MODULE`.
+### Pass 1 — Refresh drift from this update's commits
 
-Do not silently flip the module to `stable` in roadmap if drift remains unresolved. Once both diffs are empty (or all drift rows have non-`pending` Resolutions), update the module's row in `<feature>/roadmap.md` from `iterating` to `stable`.
+Read `<feature>/prd/$MODULE.md` (`## What users get`, `## Quality bar`, `## Out of scope`) and `$UPDATE_DIR/progress.md ## Completed commits`. Apply the **Drift check protocol** at the commit level:
+
+- **"PRD declared but not implemented"** — for each bullet in `## What users get` / `## Quality bar` that no commit visibly satisfies, append:
+  ```
+  | <YYYY-MM-DD> | $MODULE | <bullet text> declared but not in commits | pending |
+  ```
+- **"Implemented but not in PRD"** — for each capability visible in commits that is not declared in PRD, append:
+  ```
+  | <YYYY-MM-DD> | $MODULE | <capability> shipped but not in prd/$MODULE.md | pending |
+  ```
+
+The double-source rule still applies: only append a drift row when both LSP and grep (where applicable) agree the gap is real.
+
+### Pass 2 — Block until pending = 0
+
+Read `<feature>/prd_drift.md`. Count rows where the `Module` column equals `$MODULE` AND the `Resolution` column equals `pending` (case-insensitive match on `pending`).
+
+- **If pending > 0** → the update is **BLOCKED**. Print to the user verbatim:
+
+  > Update `<UPDATE_DIR>` cannot be marked done — `<N>` pending PRD drift rows for module `$MODULE`:
+  >
+  > 1. `<conflict text from row 1>`
+  > 2. `<conflict text from row 2>`
+  > ...
+  >
+  > Resolve each by either:
+  > - Running `/super-manus:prd-update $MODULE` (PRD edits to absorb the drift; the command flips the row's Resolution out of `pending`), OR
+  > - Reverting the implementation to match PRD and editing the drift row's Resolution to `reverted` directly in `prd_drift.md` with a one-line note in `findings.md ## Decisions` explaining why.
+  >
+  > Then re-run `/super-manus:impl` to re-evaluate this gate.
+
+  Do NOT flip the roadmap row to `stable`. Do NOT tell the user the update is complete. Do NOT continue to "Tell the user". STOP.
+
+- **If pending == 0** → the update IS done. Update the module's row in `<feature>/roadmap.md` from `iterating` to `stable`. Continue to "Tell the user".
+
+### Gate is HARD
+
+The agent must not soft-pass the update by reporting it complete while drift rows remain `pending`. There is no auto-resolve path; resolution always involves either `/super-manus:prd-update` or a manual `reverted` edit + findings entry.
 
 ## Tell the user
 

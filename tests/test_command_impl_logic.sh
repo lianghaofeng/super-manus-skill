@@ -40,4 +40,15 @@ grep -qF "Drift check protocol" "$F" || { echo "FAIL: impl.md must reference usi
 grep -qF "LSP" "$F" || { echo "FAIL: impl.md drift check must invoke LSP, not just text scan"; exit 1; }
 grep -qiE "double-source|cross-check|both LSP and" "$F" || { echo "FAIL: impl.md must keep the double-source rule visible"; exit 1; }
 
+# End-of-update drift gate is BLOCKING (cannot soft-pass with pending drift)
+grep -qiE "End-of-update drift gate|drift gate.*BLOCKING|BLOCKING.*drift gate" "$F" || { echo "FAIL: impl.md must define a BLOCKING end-of-update drift gate, not a soft consistency check"; exit 1; }
+grep -qiE "pending.*0|pending == 0|pending = 0|pending row.*zero|zero.*pending" "$F" || { echo "FAIL: gate must require zero pending prd_drift rows for the module before completion"; exit 1; }
+grep -qiE "BLOCKED|cannot be marked done|cannot.*complete" "$F" || { echo "FAIL: gate must explicitly block update completion when pending drift remains"; exit 1; }
+grep -qiF "iterating" "$F" || { echo "FAIL: must mention the 'iterating' roadmap status the gate refuses to advance from"; exit 1; }
+grep -qiF "stable" "$F" || { echo "FAIL: must mention 'stable' as the roadmap status only reachable after the gate passes"; exit 1; }
+
+# Two resolution paths must be documented (prd-update OR revert + findings note)
+grep -qiE "reverted|revert.*implementation" "$F" || { echo "FAIL: gate must document the 'revert implementation' resolution path (with Resolution=reverted)"; exit 1; }
+grep -qiF "findings.md" "$F" || { echo "FAIL: revert path must require a findings.md ## Decisions entry"; exit 1; }
+
 echo OK
