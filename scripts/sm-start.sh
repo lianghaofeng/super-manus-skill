@@ -27,10 +27,13 @@ if ! [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
   exit 1
 fi
 
-# Resolve template root: explicit env var wins, then CLAUDE_PLUGIN_ROOT, else error.
-ROOT="${SUPER_MANUS_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"
-if [ -z "$ROOT" ] || [ ! -d "$ROOT/templates" ]; then
-  echo "sm-start: template root not found (set SUPER_MANUS_ROOT or run via Claude Code plugin context)" >&2
+# Resolve template root: explicit env var wins, then CLAUDE_PLUGIN_ROOT, then self-locate via $0.
+# The script lives at <plugin-root>/scripts/sm-start.sh, so two `dirname`s up is the plugin root.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DERIVED_ROOT="$(dirname "$SCRIPT_DIR")"
+ROOT="${SUPER_MANUS_ROOT:-${CLAUDE_PLUGIN_ROOT:-$DERIVED_ROOT}}"
+if [ ! -d "$ROOT/templates" ]; then
+  echo "sm-start: template root not found at '$ROOT' (set SUPER_MANUS_ROOT or run via Claude Code plugin context)" >&2
   exit 1
 fi
 
