@@ -11,8 +11,9 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
   - `findings.md`: `## Decisions`, `## Errors`, `## Data points / research`
   - `progress.md`: `## Completed commits`, `## Session log`, `## Outstanding`
   - `phase_plan.md`: `## Objective`, `## Approach`, `## Files touched`, `## Verification`
-  - `prd_index.md` (v0.2): `## Problem`, `## Demo`, `## Must`, `## Not doing`, `## Modules`, `## Data flow overview`
-  - `prd_module.md` (v0.2): `## Purpose`, `## Surface`, `## Data flow`, `## Constraints`, `## Out of scope`, `## Open questions`
+  - `prd_index.md` (v0.2 PM-flavored, **8 H2 sections**): `## Problem`, `## Audience`, `## Success metrics`, `## Demo`, `## Must`, `## Not doing`, `## Modules`, `## Data flow overview`
+  - `prd_module.md` (v0.2 PM-flavored, **9 H2 sections**): `## Why this exists`, `## Users`, `## Success`, `## What users get`, `## How it connects`, `## Quality bar`, `## Risks`, `## Out of scope`, `## Open questions`
+  - **Schema migration note**: the previous v0.2 used 6-section technical headings (Purpose / Surface / Data flow / Constraints / Out of scope / Open questions on per-module; Problem / Demo / Must / Not doing / Modules / Data flow overview on `_index.md`). The PM-flavored set above replaces it everywhere — parsers, tests, agents, slash commands — there is no dual-mode acceptance.
   - `roadmap.md` (v0.2): `## Modules`
   - `prd_drift.md` (v0.2): `# PRD drift log` (single H1; the table is the body)
   - These headings are parsed by hooks and scripts; renaming them silently breaks the runtime.

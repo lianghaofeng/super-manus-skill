@@ -1,9 +1,19 @@
-<!-- prd/_index.md: feature-level overview + module manifest. Per-module surface (schema, interfaces, UX) lives in prd/<module>.md, not here. Total ≤700 words. Headings are stable. -->
+<!-- prd/_index.md: feature-level PRD. PM-led system overview with audience, success metrics, and a runtime architecture diagram. Per-module surface (capability lists, schemas, dependency edges) lives in prd/<module>.md. Total ≤700 words. Headings are stable — hooks, scripts, agents, and tests parse them by exact match. -->
 # <feature title>
 
 ## Problem
 
 <one sentence: what pain, for whom>
+
+## Audience
+
+<the system's primary users + secondary users.
+- **Primary**: <persona> — when they use it, why
+- **Secondary**: <persona> — when they use it, why>
+
+## Success metrics
+
+<top 3 KPIs that say the system is working. User / business metrics, not infra metrics. Each: name, target, how measured.>
 
 ## Demo
 
@@ -25,4 +35,4 @@
 
 ## Data flow overview
 
-<text or simple diagram describing how the modules connect at the feature level. Per-module data flow detail lives in each prd/<module>.md ## Data flow.>
+<ASCII architecture diagram (box-drawing characters: ┌ ┐ └ ┘ ─ │ ▲ ▼ ◄ ►) + edge list backup + offline-modules line + 1–2 sentence loop summary. Per-module data flow detail lives in each prd/<module>.md ## How it connects.>

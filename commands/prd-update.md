@@ -25,7 +25,7 @@ Ask exactly ONE multiple-choice question, then write. Do not bundle, do not foll
 > The conflict is `<one-line restatement of the deviation>`. Should the affected `prd/<module>.md` line be:
 > a) **Tighten** — keep the bullet, narrow the wording so reality fits
 > b) **Split** — replace one bullet with two, separating the original intent from the new capability
-> c) **Demote** — move the bullet from `## Surface` (or `## Constraints`) to `## Open questions`, signalling it's no longer a firm commitment
+> c) **Demote** — move the bullet from `## What users get` (or `## Quality bar`) to `## Open questions`, signalling it's no longer a firm commitment
 > d) **Exclude** — move the bullet into `## Out of scope`
 > e) **Add** — leave existing bullets alone, append one new bullet under the appropriate section
 
@@ -36,7 +36,7 @@ The user picks one letter and (optionally) supplies new wording. If they don't, 
 Before writing the edit, run the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/using-sm/SKILL.md) on the affected bullet:
 
 - **Tighten** — confirm the narrower wording you're about to write actually matches what the code does. Use **LSP** (`document symbols` on the relevant file, `find-references` on the relevant export) to read the real symbol; cross-check with grep on the file's text. Don't trust the user's framing alone — they may misremember the current behavior. The double-source rule applies: write the tightened bullet only if LSP and grep agree on what the code does today.
-- **Demote** — confirm the bullet's surface really is unbuilt / partial before moving it to `## Open questions`. If LSP shows the symbol exists and is referenced, the bullet shouldn't be demoted; push back and offer **Tighten** or **Split** instead.
+- **Demote** — confirm the bullet's capability really is unbuilt / partial before moving it to `## Open questions`. If LSP shows the symbol exists and is referenced, the bullet shouldn't be demoted; push back and offer **Tighten** or **Split** instead.
 - **Split** — run the protocol on both halves of the proposed split; both must be confirmable independently.
 - **Add** and **Exclude** — no verification needed (Add declares new intent; Exclude removes scope).
 
@@ -45,8 +45,8 @@ If LSP is unavailable, fall back to grep + Read alone per the protocol; flag the
 ## Hard constraints on the edit
 
 - **Single surgical edit**: minimum lines changed. Multi-section rewrites must go through `/super-manus:brainstorm` instead — refuse and redirect if the change would cross more than one section of `prd/<module>.md`.
-- **No changelog markers**: do NOT leave `~~strikethrough~~`, "(was: ...)", "updated 2026-05-06", "// changed from X", "moved from Surface" — none of it. The PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
-- **Preserve structure**: do not reorder sections, rename headings, or change bullet style. Sections stay: `## Purpose` / `## Surface` / `## Data flow` / `## Constraints` / `## Out of scope` / `## Open questions`.
+- **No changelog markers**: do NOT leave `~~strikethrough~~`, "(was: ...)", "updated 2026-05-06", "// changed from X", "moved from <section>" — none of it. The PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
+- **Preserve structure**: do not reorder sections, rename headings, or change bullet style. Sections stay: `## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`.
 - **One-liners stay one-liners**: no nested bullets, no parenthetical asides longer than 6 words.
 - **Total length ≤ 2000 words for `prd/<module>.md`**. If your edit pushes past that, the change is too big — tell the user this is a `/super-manus:brainstorm` job, not a `prd-update` job, and stop.
 - **Product semantics only**: no DB schema *strings*, no library names, no file paths, no line numbers, no code identifiers. Schema sketches at the level of "table X has fields a, b, c" are fine; raw migration code is not. **If the deviation is purely tech-design** (e.g. "we used Redis instead of Postgres for the queue"), the PRD probably shouldn't move at all — the conflict belongs in the active update's `tasks/p<n>_impl.md ## Approach`. Push back: "This looks like a tech-design change, not a product change. PRD shouldn't move. Want me to log it in the update's `findings.md` and stop?"

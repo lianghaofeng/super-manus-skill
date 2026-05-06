@@ -16,7 +16,7 @@ super-manus targets the gap: persistent state that survives session boundaries, 
 
 v0.2 reshapes the model around **module (space) × milestone (time)**:
 
-- **PRD is a folder** (`prd/`), one file per module (db / api / frontend / ...). Each per-module PRD allows schema sketches, interface outlines, UX flows in its `## Surface` section — the level of detail a PM gives engineering — capped at ~2000 words. Under that, six stable headings (Purpose / Surface / Data flow / Constraints / Out of scope / Open questions).
+- **PRD is a folder** (`prd/`), one file per module (db / api / frontend / ...). Each per-module PRD allows schema sketches, interface outlines, UX flows in its `## What users get` section — the level of detail a PM gives engineering — capped at ~2000 words. Under that, nine stable headings (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions). The feature-level `prd/_index.md` adds Audience + Success metrics on top of the v0.1 Problem / Demo / Must / Not doing / Modules / Data flow overview.
 - **Implementation is per-module per-milestone**: each "milestone update" is a folder under `impl/<module>/<YYYY-MM-DD>-<update-name>/` containing the v0.1 four-file set (`task_plan.md`, `findings.md`, `progress.md`, `tasks/p<n>_impl.md`). Old updates are immutable historical record; the latest is active.
 - **PRD ↔ implementation alignment is enforced**: when intent diverges from PRD, the agent stops, logs to `prd_drift.md`, and asks the user — revert implementation, or run `/super-manus:prd-update <module>`. PRD is never silently updated.
 
@@ -50,10 +50,10 @@ On first install, restart your Claude Code session so hooks and slash commands r
 /super-manus:start my-feature             # creates docs/super-manus/<date>-my-feature/
                                           # with prd/_index.md, empty prd/, empty impl/,
                                           # roadmap.md, prd_drift.md
-/super-manus:brainstorm                   # 5 questions (last = module split). Writes prd/_index.md
+/super-manus:brainstorm                   # 6 questions (last = module split). Writes prd/_index.md
                                           # + per-module prd/<module>.md stubs, then auto-seeds
                                           # impl/<first-module>/<date>-mvp/ with the four-file set
-... user audits prd/<module>.md files, fleshes out ## Surface ...
+... user audits prd/<module>.md files, fleshes out ## What users get ...
 /super-manus:impl                         # auto-finds next pending phase in the active update,
                                           # seeds tasks/p<n>_impl.md, drift-checks against PRD,
                                           # proceeds to draft + execute
@@ -88,7 +88,7 @@ For an existing project that has no PRD yet:
 
 **Two-axis model** (no overlap):
 
-- `prd/<module>.md` is **WHAT** the module IS (target state). `## Surface` carries schema sketches / endpoint outlines / screen flows.
+- `prd/<module>.md` is **WHAT** the module IS (target state). `## What users get` carries schema sketches / endpoint outlines / screen flows; `## Quality bar` carries user-visible NFRs.
 - `impl/<module>/<update>/task_plan.md` is **HOW-overview** for ONE milestone of work on that module.
 - `impl/<module>/<update>/tasks/p<n>_impl.md` is **HOW-detail** — DB migrations, API code, file diffs per phase.
 
@@ -128,7 +128,7 @@ v0.1 features keep their flat layout (`<feature>/{prd.md,task_plan.md,findings.m
 v0.2 stays small. Out of scope:
 
 - Migration of v0.1 features to v0.2 layout (both layouts coexist; no migration command planned)
-- Per-module test folders (test design intent goes in `prd/<module>.md ## Constraints`; per-day test outcomes go in the update's `findings.md`)
+- Per-module test folders (test design intent goes in `prd/<module>.md ## Quality bar`; per-day test outcomes go in the update's `findings.md`)
 - Module rename command (low frequency — rename folders + edit `prd/_index.md` manually)
 - TDD task executor / subagent dispatch / code review / multi-harness — still v0.1's deferred items
 - Automated test running (use your existing toolchain)

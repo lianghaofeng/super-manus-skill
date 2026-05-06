@@ -50,9 +50,9 @@ Before running the chosen action's body, do a quick PRD ↔ implementation drift
 
 For each module M with at least one update folder:
 
-1. Read `<feature>/prd/M.md ## Surface` and `## Out of scope`.
+1. Read `<feature>/prd/M.md ## What users get` and `## Out of scope`.
 2. Read the most recent update's `progress.md ## Completed commits`.
-3. If a commit message hints at a capability not in `## Surface` or contradicts `## Out of scope`, append one row to `<feature>/prd_drift.md`:
+3. If a commit message hints at a capability not in `## What users get` or contradicts `## Out of scope`, append one row to `<feature>/prd_drift.md`:
    ```
    | <YYYY-MM-DD> | M | <one-line>: <commit hint> not declared in prd/M.md | pending |
    ```

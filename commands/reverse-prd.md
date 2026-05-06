@@ -21,7 +21,7 @@ This guards the most common misuse: dropping a whole-project scan into a feature
 
 Modules are determined by **what runs**, not by what the file tree implies. PRD modules ≈ things with a runtime identity (services that get launched, batch jobs that get triggered, CLIs that get invoked). Pure libraries with no runtime entry are dependencies, not modules.
 
-Read the following declarative sources in order; the de-duped union is the candidate module list. This stage uses no LSP and no source-file reading — module **content** (Surface, Data flow) is filled in later stages.
+Read the following declarative sources in order; the de-duped union is the candidate module list. This stage uses no LSP and no source-file reading — module **content** (What users get, How it connects, Quality bar) is filled in later stages.
 
 ### Stage 1.1 — Compose / orchestration manifests
 
@@ -29,7 +29,7 @@ Read all of: `docker-compose.yml`, `compose.yaml`, `compose.yml`, `infra/docker-
 
 For each declared service, classify by `image:` / `build:`:
 
-- **Infra dependency** if the image matches (case-insensitive prefix or exact): `postgres`, `mysql`, `mariadb`, `mongo`, `redis`, `memcached`, `qdrant`, `weaviate`, `chroma`, `elastic`, `opensearch`, `kafka`, `nats`, `rabbitmq`, `pulsar`, `minio`, `localstack`, `prom/`, `grafana`, `jaeger`, `tempo`, `loki`, `otel/`, `alertmanager`, `traefik`, `mailhog`, `mailpit`, plain `nginx` with no `build:`. **These do NOT become PRD modules.** Collect them in an `infra_deps[]` list — they will land in `## Constraints` of the app modules that talk to them (see Write the PRD).
+- **Infra dependency** if the image matches (case-insensitive prefix or exact): `postgres`, `mysql`, `mariadb`, `mongo`, `redis`, `memcached`, `qdrant`, `weaviate`, `chroma`, `elastic`, `opensearch`, `kafka`, `nats`, `rabbitmq`, `pulsar`, `minio`, `localstack`, `prom/`, `grafana`, `jaeger`, `tempo`, `loki`, `otel/`, `alertmanager`, `traefik`, `mailhog`, `mailpit`, plain `nginx` with no `build:`. **These do NOT become PRD modules.** Collect them in an `infra_deps[]` list — they will land in `## How it connects` of the app modules that talk to them (see Write the PRD).
 - **App service** if it has a custom `build:` block, or an obviously project-specific image tag, or it doesn't match the infra list. App services are module candidates.
 
 If no orchestration manifest exists or all services are infra deps (e.g. teachagent: pg / redis / qdrant / minio / nats / prom / grafana — apps run host-native), this stage produces no app-module candidates. **That's expected; later stages will catch them.**
@@ -39,7 +39,7 @@ If no orchestration manifest exists or all services are infra deps (e.g. teachag
 `ls` the project root for monorepo conventions:
 
 - `apps/*`, `services/*` — every direct subdirectory is a module candidate.
-- `packages/*`, `libs/*` — only count as a module if it ALSO surfaces in another stage (compose service, Makefile launch target, scripts cluster). Otherwise it is a library; treat as a `## Constraints` mention on importers.
+- `packages/*`, `libs/*` — only count as a module if it ALSO surfaces in another stage (compose service, Makefile launch target, scripts cluster). Otherwise it is a library; treat as a `## How it connects` mention on importers.
 
 Single-subdir case: if only one of these directories exists with one subdir, the project is effectively single-module — fall back to a `core` module rather than over-splitting.
 
@@ -65,7 +65,7 @@ Launch targets confirm / narrow the 1.2 list. Batch targets often produce module
 If a top-level `scripts/` directory has ≥5 files, cluster by verb prefix or suffix:
 
 - ≥3 files sharing a prefix (`compile_*`, `build_*`, `download_*`, `promote_*`, `audit_*`, `coach_*`, `demo_*`) or suffix (`*_eval*`, `*_lint*`, `*_smoke*`) → one batch module, named verb-noun (e.g. teachagent's `compile_canonical_taxonomy / compile_knowledge_points_md / compile_lesson_links` → `taxonomy-compilation`).
-- Singletons or 2-file groups → NOT modules. They become bullets under the `## Surface` of the most-related app module (matched by filename keyword).
+- Singletons or 2-file groups → NOT modules. They become bullets under the `## What users get` of the most-related app module (matched by filename keyword).
 
 ### Stage 1.5 — Synthesize
 
@@ -86,7 +86,7 @@ De-duplicate; canonicalize names to lowercase kebab-case (`^[a-z0-9][a-z0-9-]*$`
 
 ### Stage 1.6 — LSP / source code
 
-NOT used for module discovery. LSP and source-file reading are reserved for filling per-module content (Surface, Data flow) — see **Fill module content** below. If LSP is unavailable in this project, that affects content quality only; module discovery is unaffected.
+NOT used for module discovery. LSP and source-file reading are reserved for filling per-module content (What users get, How it connects, Quality bar) — see **Fill module content** below. If LSP is unavailable in this project, that affects content quality only; module discovery is unaffected.
 
 ### Budget
 

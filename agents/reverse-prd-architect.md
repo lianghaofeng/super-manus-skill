@@ -30,7 +30,7 @@ When all files are written, return ONE summary line to the orchestrator:
 
 > wrote _index.md + \<N\> module files; \<M\> (audit) markers total
 
-## `_index.md` — six H2 sections, exact heading names
+## `_index.md` — eight H2 sections, exact heading names
 
 Downstream tools parse these headings. Do NOT rename.
 
@@ -41,6 +41,31 @@ One sentence, PM voice: what pain does this project solve and for whom. Source p
 3. `CLAUDE.md` if present
 
 If all three are silent: `(audit — describe the problem this codebase solves)`.
+
+### `## Audience`
+Primary + secondary users with the moment they reach for the system. Format:
+
+```
+- **Primary**: <persona> — <when / why they use it>
+- **Secondary**: <persona> — <when / why they use it>
+```
+
+Source priority:
+1. README "for whom" / "who is this for" section
+2. CLAUDE.md if present
+3. inferred from runtime entry points: HTTP API surface → developers / integrators; CLI entry → operators / end users; UI route → end users. Mark inferred personas `(audit)`.
+
+If neither README nor CLAUDE explicitly names users and inference is too thin: a single `(audit — name primary user + trigger moment)` line. Do NOT invent secondary users when only the primary is visible.
+
+### `## Success metrics`
+Top **3** KPIs that say the system is working. User / business metrics, not infra metrics ("uptime > 99%" / "tests pass" do NOT belong here). Each line: `<metric name> — target <X>, measured by <Y>`.
+
+Source priority:
+1. README "goals" / "success" section
+2. CLAUDE.md / project-level docs
+3. inferred from `## Must` capabilities — only as a one-line `(audit — set targets)` placeholder per metric. Do NOT fabricate numbers.
+
+If sources are silent on all three: list the slots as `(audit — fill in)` rather than dropping the section. Three is the right count even if all three are placeholders.
 
 ### `## Demo`
 3–5 lines, second person, concrete usage scenario. Source: README quickstart / "Getting Started" section / `docs/` top-level. `(audit)` only if README is empty.
@@ -57,7 +82,7 @@ Table with one row per module from `module_list`:
 ```
 | Module | File | Purpose |
 | --- | --- | --- |
-| <name> | [prd/<name>.md](<name>.md) | <one-line PM description copied from that module's ## Purpose first sentence> |
+| <name> | [prd/<name>.md](<name>.md) | <one-line PM description copied from that module's ## Why this exists first sentence> |
 ```
 
 ### `## Data flow overview`
@@ -83,19 +108,37 @@ Arrows show data flow direction. Label every edge with protocol (HTTP / WS / gRP
 
 Diagram source: build the diagram from the **compose `depends_on` graph + env-URL graph** (env vars containing sibling URLs, queue subjects, S3 bucket names) only. Do NOT infer edges from textual reasoning.
 
-## `<module>.md` — six H2 sections, exact heading names
+## `<module>.md` — nine H2 sections, exact heading names
 
-### `## Purpose`
-One sentence, PM voice: business problem this module solves + role in the feature. Source priority:
+### `## Why this exists`
+**2 sentences**, PM voice: the user pain this module owns + the business value it delivers in the larger system. NOT "this module wraps X" / "Python service for Y" — that's architect framing, leave it for `## How it connects`. Source priority:
 1. module's own `package.json` / `pyproject.toml` `description`
 2. first paragraph of `apps/<module>/README.md` if present
 3. Makefile target comment above it
-4. repo-root README mention
+4. repo-root README mention of this module
 
-If none yield a sentence: `(audit — describe what this module does)`.
+If none yield a sentence: `(audit — describe the user pain this module relieves and its business value)`.
 
-### `## Surface`
-Top **3–5 business capabilities** this module delivers, each backed by concrete evidence. Format each:
+### `## Users`
+Persona + trigger moment, **2–4 lines**. Who reaches for this module and at what moment. Internal modules (e.g. `db`) name the upstream module(s) as the user with a one-line trigger ("`api` reaches for `db` when a request needs to read/write a profile").
+
+Source priority:
+1. module README "for whom" mention
+2. inferred from upstream callers — LSP `find-references` on the module's main exports + grep imports of the module's package name. The set of caller modules forms the internal-user list.
+3. for end-user-facing modules (UI / public CLI / public API): infer persona from feature scope visible in `## What users get`; mark `(audit)` since runtime can't confirm persona.
+
+If inference is too thin: a single `(audit — name caller / trigger)` line is preferable to invented personas.
+
+### `## Success`
+**3–5 measurable user-facing outcomes**. Each line: `<outcome> — target <X>, measured by <Y>`. NOT "tests pass" / "uptime > 99%" / "p95 latency < 500ms" (that last one is a `## Quality bar` line). NOT a re-listing of `## What users get`.
+
+Source priority:
+1. module README "success criteria" / "goals" section
+2. evals / benchmarks present in the module — `make bench-*`, `eval/*` directory, regression test naming patterns. Use the eval target's name as the metric, mark target `(audit)` since the actual goal isn't in code.
+3. if neither: list `(audit — define user-facing success)` placeholders rather than dropping the section. 3 placeholders is the floor; do NOT fabricate numbers.
+
+### `## What users get`
+Top **3–5 capabilities** this module delivers, each backed by concrete technical evidence. PM voice first, architect evidence appended. Format each:
 
 ```
 - **<capability name>** — <PM description: what users / consumers get>. Backed by: <concrete schema | endpoint path | CLI invocation | screen / route name>.
@@ -109,10 +152,20 @@ Source priority for evidence:
 
 Do NOT invent fields, endpoints, or screens. Use short schema sketches and bullet lists. **Be conservative**: only declare a capability when its presence is visible in the source.
 
-### `## Data flow`
-Default format: edge list (`in: …`, `out: …`, `third-party deps: …`).
+### `## How it connects`
+Plain-language dependency block first, then a precise edge list. Format:
 
-If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add an ASCII sub-diagram before the edge list (use the same box-drawing characters).
+```
+- Upstream (who calls in): <list of modules / external actors>
+- Downstream (where outputs go): <list of modules / external systems>
+- Third-party (external): <LLM provider / payment gateway / etc>
+
+Edge list:
+- in:  ← <X> via <protocol>
+- out: → <Y> via <protocol>
+```
+
+If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add an ASCII sub-diagram before the edge list (same box-drawing characters as `_index.md`).
 
 Source priority:
 
@@ -121,14 +174,30 @@ Source priority:
 3. LSP `find-references` on this module's exports (where it gets called from)
 4. grep imports for LSP misses (config-driven dispatch, dynamic loading, polyglot edges)
 
-`(audit)` any single-source claim.
+`(audit)` any single-source claim. infra_deps the module consumes (Postgres tables, NATS subjects, Qdrant collections, Redis prefixes) belong here under Downstream / Third-party — NOT under `## Quality bar`. Internal **library packages** imported by this module — every internal `packages/*` / `libs/*` resolved from this module's `package.json` `dependencies` / `pyproject.toml` `[project.dependencies]` filtered to internal workspace names — also belong here under Upstream (this module depends on them) as a one-line bullet. They are workspace-internal dependencies, not infra and not user-visible NFRs.
 
-### `## Constraints`
-Three categories — include all that apply:
+### `## Quality bar`
+**User-visible** non-functional requirements: latency targets, throughput, scale ceilings, compliance, availability, data freshness. NOT internal infra ("uses Postgres") — that's `## How it connects`. NOT in-code TODOs / known-untested paths — that's `## Risks`. **3–5 bullets**, each measurable.
 
-1. **infra_deps consumed** — every infra service this module talks to with its concrete role. Examples: "reads/writes Postgres `<table>`", "publishes NATS subject `<X>`", "indexes Qdrant collection `<Y>`", "caches in Redis with prefix `<Z>`".
-2. **library packages imported** — every internal `packages/*` / `libs/*` this module depends on, resolved from this module's `package.json` `dependencies` / `pyproject.toml` `[project.dependencies]` filtered to internal workspace names.
-3. **in-code constraints** — explicit timeouts, declared rate limits, license headers, `// TODO: PII` comments, `# pragma: no cover` blocks indicating known-untested paths.
+Source priority:
+1. module README "performance" / "constraints" / "SLO" section
+2. explicit declared limits in code — `RateLimiter(...)`, `TimeoutError(...)`, retry configs, p95 budgets in `pyproject.toml` / config YAML
+3. compliance markers — license headers indicating GPL / Apache, `PII` / `HIPAA` / `GDPR` comments treated as compliance constraints
+4. `(audit — define user-visible NFR)` placeholders if sources are silent. Do NOT pull infra implementation details up into this section.
+
+### `## Risks`
+Three categories — include the ones that apply, **2–4 bullets total**:
+
+- **Product**: user might not actually want this / wrong abstraction / capability outpacing user demand
+- **Technical**: known perf cliff, dependency outage exposure, known-hard problem (e.g. "embedding drift", "LLM hallucination on out-of-distribution inputs")
+- **Org / dependency**: blocked by another team, external API change risk, license incompatibility
+
+Source priority:
+1. module README "risks" / "known issues" / "limitations" section
+2. in-code signals — `// TODO: PII`, `# pragma: no cover`, `# HACK:`, `# XXX:`, "known-broken" tests, fallback code paths with `# fallback when X breaks` comments
+3. dependency surface — third-party deps from `## How it connects` mapped to risk: external LLM provider → "rate-limit / cost / hallucination" technical risk; single-tenant infra dep → "outage exposure"
+
+Empty bullets are fine if the module is well-known and stable; do NOT pad. Do NOT bulk-mark `(audit)` — empty is more honest than placeholder-stuffed.
 
 ### `## Out of scope`
 Only what the module's README or repo-root README explicitly excludes. Do NOT speculate. Empty section if README is silent.

@@ -13,7 +13,7 @@ The v0.2 model has **two axes**: `module` (space) and `milestone update` (time).
 User-facing commands (all in the `/super-manus:` namespace):
 
 - `/super-manus:start <name>` — create a new feature folder + activate it
-- `/super-manus:brainstorm` — 5-question Q&A; writes `prd/_index.md` + per-module `prd/<module>.md` stubs + auto-seeds the first MVP update for the first listed module
+- `/super-manus:brainstorm` — 6-question Q&A; writes `prd/_index.md` + per-module `prd/<module>.md` stubs + auto-seeds the first MVP update for the first listed module
 - `/super-manus:reverse-prd` — one-shot: scan an existing project, infer module split, generate `prd/_index.md` + per-module PRD stubs (user audits)
 - `/super-manus:sync <module>` — after a PRD edit, scaffold a new milestone-update folder for the chosen module, drift-checked against `prd/<module>.md`
 - `/super-manus:prd-update <module>` — surgical 5-option edit on a single per-module PRD (no changelog markers, ≤2000 words, single-section)
@@ -31,8 +31,8 @@ The recommended flow for a non-trivial v0.2 feature: `start` → `brainstorm` �
 └── docs/super-manus/
     └── <YYYY-MM-DD>-<feature-name>/
         ├── prd/
-        │   ├── _index.md                        # feature-level: Problem / Demo / Must / Not / Modules / Data flow (≤700 words)
-        │   └── <module>.md                      # per-module: Purpose / Surface / Data flow / Constraints / Out of scope / Open questions (≤2000 words)
+        │   ├── _index.md                        # feature-level: Problem / Audience / Success metrics / Demo / Must / Not / Modules / Data flow (≤700 words)
+        │   └── <module>.md                      # per-module: Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions (≤2000 words)
         ├── impl/
         │   └── <module>/
         │       └── <YYYY-MM-DD>-<update-name>/
@@ -53,13 +53,15 @@ The recommended flow for a non-trivial v0.2 feature: `start` → `brainstorm` �
 
 ## 2. What goes in which file
 
-**`prd/_index.md`** — feature-level overview + module manifest (`## Problem` / `## Demo` / `## Must` / `## Not doing` / `## Modules` / `## Data flow overview`).
+**`prd/_index.md`** — feature-level overview + module manifest (`## Problem` / `## Audience` / `## Success metrics` / `## Demo` / `## Must` / `## Not doing` / `## Modules` / `## Data flow overview`).
 - Total length ≤ 700 words. The `## Modules` table (`| Module | File | Purpose |`) is the source of truth for which modules exist.
-- **Not for**: per-module schema, endpoints, UX details. Those live in `prd/<module>.md`.
+- `## Audience` names primary + secondary users with their trigger moments. `## Success metrics` is the top 3 user/business KPIs (target + measurement method) — NOT infra metrics like "uptime > 99%".
+- **Not for**: per-module schema, endpoints, UX details, per-module risks. Those live in `prd/<module>.md`.
 
-**`prd/<module>.md`** — per-module target state (`## Purpose` / `## Surface` / `## Data flow` / `## Constraints` / `## Out of scope` / `## Open questions`).
-- Total length ≤ 2000 words. `## Surface` is the key new section vs v0.1: it allows schema sketches (table + field lists), endpoint paths, screen flows — at the level of "this is what the module IS", not "how this phase MIGRATES to it".
-- **No changelog markers**: no `~~strikethrough~~`, no `(was: ...)`, no dated revision marks, no "moved from Surface" breadcrumbs. PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
+**`prd/<module>.md`** — per-module target state (`## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`).
+- Total length ≤ 2000 words. `## What users get` is the key new section vs v0.1: it lists 3–5 capabilities in PM voice with technical evidence appended (`Backed by: <schema | endpoint | screen | CLI>`) — at the level of "this is what the module IS", not "how this phase MIGRATES to it". Schema sketches (table + field lists), endpoint paths, screen flows go here.
+- `## Why this exists` is 2 sentences of PM framing (user pain + business value), NOT "this module wraps X". `## Users` names the persona + trigger moment (internal modules name their upstream callers). `## Success` is 3–5 measurable user-facing outcomes — NOT "tests pass" / "uptime > 99%". `## How it connects` carries upstream/downstream/third-party in plain language plus a precise edge list. `## Quality bar` is user-visible NFRs (perf, scale, compliance) only — internal infra ("uses Postgres") belongs under `## How it connects`. `## Risks` covers Product / Technical / Org+dependency in 2–4 bullets total.
+- **No changelog markers**: no `~~strikethrough~~`, no `(was: ...)`, no dated revision marks, no "moved from <section>" breadcrumbs. PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
 - **Not for**: code snippets, file paths, line numbers, function names — those are tasks/p<n>_impl.md territory. Schema sketches at the level of "table X has fields a, b, c" are fine; raw migration code is not.
 
 **`impl/<module>/<YYYY-MM-DD>-<update-name>/task_plan.md`** — phase index for ONE milestone update.
@@ -104,7 +106,7 @@ The recommended flow for a non-trivial v0.2 feature: `start` → `brainstorm` �
 | `progress.md` (per update) | NEVER directly. Wait for a hook reminder. Post-commit hook tells you to append to `## Completed commits`; Stop hook checkpoint asks you to consider writing to `## Session log`. |
 | `tasks/p<n>_impl.md` (per update) | A phase entered `in_progress`; the approach / DB schema / API design changes mid-phase; the verification step changes. |
 
-**Drift detection responsibility (new in v0.2).** When running `/super-manus:impl`, `/super-manus:sync`, or `/super-manus:drive`, you must compare the user's stated intent / commit messages against `prd/<module>.md ## Surface` / `## Constraints` / `## Out of scope`. If you see a capability that PRD doesn't declare, append one row to `prd_drift.md` with `Resolution = pending` and stop the user with two paths: (1) revert implementation, or (2) `/super-manus:prd-update <module>`. Do **not** silently update PRD. The mechanics of *how* to compare PRD claims against actual code are defined in §4 (Drift check protocol).
+**Drift detection responsibility (new in v0.2).** When running `/super-manus:impl`, `/super-manus:sync`, or `/super-manus:drive`, you must compare the user's stated intent / commit messages against `prd/<module>.md ## What users get` / `## Quality bar` / `## Out of scope`. If you see a capability that PRD doesn't declare (or one that violates the Quality bar), append one row to `prd_drift.md` with `Resolution = pending` and stop the user with two paths: (1) revert implementation, or (2) `/super-manus:prd-update <module>`. Do **not** silently update PRD. The mechanics of *how* to compare PRD claims against actual code are defined in §4 (Drift check protocol).
 
 ## 4. Drift check protocol
 
@@ -117,20 +119,20 @@ LSP gives structural truth from indexed code. grep / Read gives textual signals 
 | Inference target | Primary | Secondary | How they combine |
 |---|---|---|---|
 | Module boundaries | grep (top-level dirs, manifest workspaces) | LSP workspace symbols clustered by file path | Both agree → firm module; disagree → `(audit)` |
-| `## Surface` signatures (real exports, endpoints) | LSP document symbols on the relevant file | grep to locate the file (route, migration, CLI entry) | grep finds the file, LSP names the symbol — only LSP-confirmed names enter PRD |
-| Cross-module data flow | LSP find-references on each export | grep for imports, env vars, config-driven dispatch | LSP gives the call graph; grep covers what LSP can't index |
-| Constraints (timeout, license, PII, TODO) | grep | — | text-only signal; LSP irrelevant |
-| Purpose / Demo / intent | Read (README, manifest description) | — | product intent, not code structure; LSP irrelevant |
+| `## What users get` signatures (real exports, endpoints) | LSP document symbols on the relevant file | grep to locate the file (route, migration, CLI entry) | grep finds the file, LSP names the symbol — only LSP-confirmed names enter PRD |
+| `## How it connects` cross-module wiring | LSP find-references on each export | grep for imports, env vars, config-driven dispatch | LSP gives the call graph; grep covers what LSP can't index |
+| `## Quality bar` (timeout, rate limit, license, PII) and `## Risks` (TODO, HACK, known-broken) | grep | — | text-only signals; LSP irrelevant |
+| `## Why this exists` / `## Users` / `## Success` / Demo / intent | Read (README, manifest description) | — | product intent, not code structure; LSP irrelevant |
 
 ### Concrete LSP operations
 
 - **workspace symbols** — initial pass: every exported symbol with location; cluster by file path to validate folder-based module guesses.
-- **document symbols** — per-module pass: enumerate the public surface of one file before writing its `## Surface`.
-- **find-references** — per-export pass: who calls this module's exports → real cross-module wiring for `## Data flow`.
+- **document symbols** — per-module pass: enumerate the public surface of one file before writing its `## What users get`.
+- **find-references** — per-export pass: who calls this module's exports → real cross-module wiring for `## How it connects`.
 
 ### Double-source rule
 
-A claim entering PRD `## Surface` / `## Data flow` / `## Constraints`, or a verdict entering `prd_drift.md`, must be confirmed by **both LSP and grep** when both apply. Single-source claims either get the `(audit)` marker in `prd/<module>.md` or land in `## Open questions`. Do not append a drift row from a single weak signal.
+A claim entering PRD `## What users get` / `## How it connects` / `## Quality bar`, or a verdict entering `prd_drift.md`, must be confirmed by **both LSP and grep** when both apply. Single-source claims either get the `(audit)` marker in `prd/<module>.md` or land in `## Open questions`. Do not append a drift row from a single weak signal.
 
 ### Budget
 
@@ -145,8 +147,8 @@ If no language server is available (cold project, missing toolchain, polyglot re
 
 ### Per-command application
 
-- `/super-manus:reverse-prd` — full-codebase pass to bootstrap PRD; module boundaries and `## Surface` are LSP-led, Purpose / Demo are README-led.
-- `/super-manus:sync <module>` — runs against the user's stated intent before scaffolding the update folder; LSP confirms whether the intent's surface already exists, grep confirms wiring.
+- `/super-manus:reverse-prd` — full-codebase pass to bootstrap PRD; module boundaries and `## What users get` are LSP-led, `## Why this exists` / `## Users` / `## Success` / Demo are README-led.
+- `/super-manus:sync <module>` — runs against the user's stated intent before scaffolding the update folder; LSP confirms whether the intent's capability already exists, grep confirms wiring.
 - `/super-manus:impl` — runs against the next phase's intent and `tasks/p<n>_impl.md ## Objective` before drafting code; conflict appends `prd_drift.md`.
 - `/super-manus:prd-update <module>` — for **Tighten** and **Demote**, verify the affected bullet against current code; **Split** runs on both halves; **Add** and **Exclude** don't need verification (they declare new intent or remove scope, not align).
 
@@ -171,7 +173,7 @@ The point is to surface tarpits early, not slog through them silently.
 - Putting errors in `task_plan.md` — they belong in `findings.md ## Errors` (per update).
 - Pasting code, pseudo-code, file diffs, or multi-line sketches into `task_plan.md` — that's a phase index. Use `tasks/p<n>_impl.md`.
 - Putting **product spec** (Problem statements, Demo scenarios, capability lists, success metrics) into `task_plan.md` — those belong in `prd/_index.md` or `prd/<module>.md`. `task_plan.md ## Goal` is one sentence + a pointer to the module PRD.
-- Putting **DB schema, API endpoints, code, or any tech-design text** into `prd/<module>.md` deeper than the `## Surface` outline — schema *sketches* (table + fields) are fine; migration code or full request/response DTO definitions are not. Those live in `tasks/p<n>_impl.md ## Approach`.
+- Putting **DB schema, API endpoints, code, or any tech-design text** into `prd/<module>.md` deeper than the `## What users get` outline — schema *sketches* (table + fields) are fine; migration code or full request/response DTO definitions are not. Those live in `tasks/p<n>_impl.md ## Approach`.
 - Pasting **TDD plan recaps, file lists, line numbers, function names, test commands, or block-A/B/C breakdowns** into `findings.md ## Decisions` — record the JUDGMENT (3 lines), not the IMPLEMENTATION ARTIFACT.
 - **Putting changelog markers in any prd/ file** — no `~~strikethrough~~`, no "(was: ...)", no "v2 added X", no dated revision footers. PRD is current-state; history is in `git log` and `findings.md`.
 - **Hand-editing `prd_drift.md`** — only `sync` / `impl` / `drive` append; only `prd-update` resolves. Never reorder rows or rewrite history here.

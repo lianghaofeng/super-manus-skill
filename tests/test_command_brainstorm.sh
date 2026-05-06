@@ -16,12 +16,12 @@ grep -qF "prd/_index.md" "$F" || { echo "FAIL: must reference prd/_index.md (v0.
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must reference prd/<module>.md (v0.2 per-module file)"; exit 1; }
 
 # Must reference the prd_index sections it writes
-for section in Problem Demo Must "Not doing" "Modules" "Data flow"; do
+for section in Problem Audience "Success metrics" Demo Must "Not doing" "Modules" "Data flow overview"; do
   grep -qF "## $section" "$F" || { echo "FAIL: must reference '## $section' section in prd/_index.md"; exit 1; }
 done
 
 # Must reference the prd_module sections seeded for each module
-for section in Purpose Surface Constraints "Out of scope" "Open questions"; do
+for section in "Why this exists" Users Success "What users get" "How it connects" "Quality bar" Risks "Out of scope" "Open questions"; do
   grep -qF "## $section" "$F" || { echo "FAIL: must reference '## $section' section for per-module PRD"; exit 1; }
 done
 
@@ -34,9 +34,9 @@ for forbidden in "database" "API" "architecture"; do
   grep -qiF "$forbidden" "$F" || { echo "FAIL: must explicitly forbid asking about $forbidden"; exit 1; }
 done
 
-# 5-question Q&A: must mention 5 questions and last question is module split
-grep -qF "5 questions" "$F" || { echo "FAIL: must mention the 5-question contract"; exit 1; }
-grep -qiF "module" "$F" || { echo "FAIL: must mention module-split as the 5th question"; exit 1; }
+# 6-question Q&A (PM-flavored schema bumped from 5 → 6 to elicit Risks): must mention 6 questions and last question is module split
+grep -qiE "6 questions|six questions" "$F" || { echo "FAIL: must mention the 6-question contract"; exit 1; }
+grep -qiF "module" "$F" || { echo "FAIL: must mention module-split as the final question"; exit 1; }
 
 # Must auto-seed the first MVP update folder via sm-update.sh
 grep -qF "scripts/sm-update.sh" "$F" || { echo "FAIL: must invoke scripts/sm-update.sh to seed first MVP update"; exit 1; }

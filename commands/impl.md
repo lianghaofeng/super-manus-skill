@@ -52,12 +52,12 @@ Run the **Drift check protocol** in [skills/using-sm/SKILL.md §4](../skills/usi
 
 Concretely:
 
-1. Read the per-module PRD `<feature>/prd/<module>.md` (i.e. `<feature>/prd/$MODULE.md`) — focus on `## Surface`, `## Constraints`, `## Out of scope`.
+1. Read the per-module PRD `<feature>/prd/<module>.md` (i.e. `<feature>/prd/$MODULE.md`) — focus on `## What users get`, `## Quality bar`, `## Out of scope`.
 2. Read the just-seeded or already-existing `$UPDATE_DIR/tasks/p<n>_impl.md ## Objective` (if non-empty), and the user's stated intent for this turn.
-3. Apply the protocol against the phase intent. **LSP** (`document symbols` on the files the phase will touch; `find-references` on any cross-module export it touches) tells you whether the intent's surface already exists or is brand-new; **grep** covers wiring and constraints LSP can't index. The double-source rule applies — only call drift when both LSP and grep (where applicable) agree the phase diverges from PRD.
+3. Apply the protocol against the phase intent. **LSP** (`document symbols` on the files the phase will touch; `find-references` on any cross-module export it touches) tells you whether the intent's capability already exists or is brand-new; **grep** covers wiring and quality-bar text LSP can't index. The double-source rule applies — only call drift when both LSP and grep (where applicable) agree the phase diverges from PRD.
 4. If LSP is unavailable for this module's language, fall back per the protocol (grep + Read only) and surface "LSP unavailable — drift verdict is text-only inference" in the appended row's Conflict cell.
 
-Decide: does the phase intent introduce a capability not declared in `## Surface`, or does it conflict with `## Out of scope`?
+Decide: does the phase intent introduce a capability not declared in `## What users get`, or does it conflict with `## Out of scope` or violate `## Quality bar`?
 
 - **No conflict** → continue.
 - **Conflict** → append one row to `<feature>/prd_drift.md`:
@@ -65,7 +65,7 @@ Decide: does the phase intent introduce a capability not declared in `## Surface
   | <YYYY-MM-DD> | <module> | <one-line conflict description> | pending |
   ```
   Then tell the user: "Drift detected in phase <n> (`<phase-name>`) of `<module>`. Two paths:
-  1. Revert the phase intent to match PRD `## Surface` / `## Constraints` / `## Out of scope`.
+  1. Revert the phase intent to match PRD `## What users get` / `## Quality bar` / `## Out of scope`.
   2. Run `/super-manus:prd-update $MODULE` first, then re-run `/super-manus:impl`."
   Stop. Do NOT proceed to drafting code or `## Approach`. The user must decide.
 
@@ -91,7 +91,7 @@ to regenerate `progress.md ## Outstanding`.
 
 When all phases in `$UPDATE_DIR/task_plan.md` are `closed`, read `<feature>/prd/$MODULE.md` and `$UPDATE_DIR/progress.md ## Completed commits`. Report two diffs to the user:
 
-- "PRD declared but not implemented" — bullets in `## Surface` / `## Constraints` not reflected by any commit.
+- "PRD declared but not implemented" — bullets in `## What users get` / `## Quality bar` not reflected by any commit.
 - "Implemented but not in PRD" — capabilities visible in commits but not declared in PRD; for each, append one row to `prd_drift.md` and prompt for `/super-manus:prd-update $MODULE`.
 
 Do not silently flip the module to `stable` in roadmap if drift remains unresolved. Once both diffs are empty (or all drift rows have non-`pending` Resolutions), update the module's row in `<feature>/roadmap.md` from `iterating` to `stable`.

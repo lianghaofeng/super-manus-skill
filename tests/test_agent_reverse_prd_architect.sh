@@ -31,13 +31,13 @@ grep -qF "prd/_index.md" "$F" || { echo "FAIL: must specify prd/_index.md as a d
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must specify prd/<module>.md as a deliverable"; exit 1; }
 grep -qiE "wrote.*module files|summary line" "$F" || { echo "FAIL: must specify the summary line returned to the orchestrator"; exit 1; }
 
-# _index.md six H2 sections (all must be documented in the agent)
-for h in "## Problem" "## Demo" "## Must" "## Not doing" "## Modules" "## Data flow overview"; do
+# _index.md eight H2 sections (all must be documented in the agent)
+for h in "## Problem" "## Audience" "## Success metrics" "## Demo" "## Must" "## Not doing" "## Modules" "## Data flow overview"; do
   grep -qF "$h" "$F" || { echo "FAIL: agent must document _index.md heading '$h'"; exit 1; }
 done
 
-# <module>.md six H2 sections
-for h in "## Purpose" "## Surface" "## Data flow" "## Constraints" "## Out of scope" "## Open questions"; do
+# <module>.md nine H2 sections
+for h in "## Why this exists" "## Users" "## Success" "## What users get" "## How it connects" "## Quality bar" "## Risks" "## Out of scope" "## Open questions"; do
   grep -qF "$h" "$F" || { echo "FAIL: agent must document <module>.md heading '$h'"; exit 1; }
 done
 
@@ -53,9 +53,9 @@ grep -qiE "offline.*batch modules|offline-modules" "$F" || { echo "FAIL: must re
 grep -qiE "compose.*graph|depends_on graph|env-URL graph" "$F" || { echo "FAIL: ## Data flow overview must derive from compose depends_on / env-URL graph"; exit 1; }
 
 # Source priorities for content filling
-grep -qiE "process entry|Dockerfile CMD|launch target invokes" "$F" || { echo "FAIL: ## Surface must take process entry / Dockerfile CMD as priority 1"; exit 1; }
-grep -qiE "depends_on|sibling URL|queue topic|subject name" "$F" || { echo "FAIL: ## Data flow must take compose depends_on / sibling URLs / queue topics as priority 1"; exit 1; }
-grep -qiE "library package|packages/\*|workspace.*depend" "$F" || { echo "FAIL: ## Constraints must include internal library-package imports"; exit 1; }
+grep -qiE "process entry|Dockerfile CMD|launch target invokes" "$F" || { echo "FAIL: ## What users get must take process entry / Dockerfile CMD as priority 1"; exit 1; }
+grep -qiE "depends_on|sibling URL|queue topic|subject name" "$F" || { echo "FAIL: ## How it connects must take compose depends_on / sibling URLs / queue topics as priority 1"; exit 1; }
+grep -qiE "library package|packages/\*|workspace.*depend" "$F" || { echo "FAIL: ## Quality bar must include internal library-package imports"; exit 1; }
 
 # Drift check protocol — LSP + grep cooperation, with concrete operations + LSP-unavailable fallback
 grep -qF "Drift check protocol" "$F" || { echo "FAIL: must reference using-sm's Drift check protocol"; exit 1; }

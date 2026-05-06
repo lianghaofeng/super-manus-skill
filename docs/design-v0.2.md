@@ -12,7 +12,7 @@ In real use this didn't scale. Mid-size features have multiple system modules (d
 
 **v0.2 reshapes the model around two axes: module (space) × milestone (time).**
 
-- PRD becomes a **folder** (`prd/`), one file per module, each ≤2000 words, allowed to include schema / interface / UX outline (the "Surface" — module's target state).
+- PRD becomes a **folder** (`prd/`), one file per module, each ≤2000 words, allowed to include schema / interface / UX outline (in `## What users get` — the module's target state with PM voice + technical evidence).
 - Implementation work happens in **per-module per-milestone update folders** under `impl/<module>/<YYYY-MM-DD>-<update-name>/`, each containing the existing v0.1 four-file set (task_plan / findings / progress / tasks/p<n>_impl).
 - A new **drift log** (`prd_drift.md`) records every PRD ↔ implementation conflict.
 - A new **roadmap** (`roadmap.md`) tracks per-module status across the feature.
@@ -44,7 +44,7 @@ In real use this didn't scale. Mid-size features have multiple system modules (d
 **Out (deferred to v0.3+):**
 
 - Migration of v0.1 features to v0.2 layout — v0.2 only applies to **new** features. Old features keep working under v0.1 rules; hooks branch on `prd/` being a folder vs a file.
-- Per-module test folders (rejected as over-design — test design intent goes in `prd/<module>.md ## Constraints` or in `impl/<module>/<update>/findings.md`)
+- Per-module test folders (rejected as over-design — test design intent goes in `prd/<module>.md ## Quality bar` or in `impl/<module>/<update>/findings.md`)
 - Module rename command (low frequency, manual operation)
 - TDD task executor / subagent dispatch / code review / multi-harness (still v0.1 deferred items)
 
@@ -83,6 +83,15 @@ In real use this didn't scale. Mid-size features have multiple system modules (d
 ## Problem
 <one sentence>
 
+## Audience
+- **Primary**: <persona> — <when / why they use it>
+- **Secondary**: <persona> — <when / why they use it>
+
+## Success metrics
+- <metric name> — target <X>, measured by <Y>
+- <metric name> — target <X>, measured by <Y>
+- <metric name> — target <X>, measured by <Y>
+
 ## Demo
 <3–5 lines, second person, concrete>
 
@@ -101,24 +110,44 @@ In real use this didn't scale. Mid-size features have multiple system modules (d
 <text or simple diagram describing how modules connect>
 ```
 
-Total ≤700 words. Module manifest is the source of truth for which modules exist.
+Total ≤700 words. Module manifest is the source of truth for which modules exist. `## Audience` names primary + secondary users with trigger moments; `## Success metrics` is top 3 user/business KPIs (each with target + measurement method) — NOT infra metrics.
 
 ### `prd/<module>.md`
 
 ```markdown
 # <module name>
 
-## Purpose
-<one sentence: this module's job>
+## Why this exists
+<2 sentences, PM voice: user pain + business value. Not "this module wraps X".>
 
-## Surface
-<schema / interface / UX outline — target state. Tables, fields, endpoint paths, screens are OK. No code snippets, no file paths.>
+## Users
+<persona + trigger moment, 2–4 lines. Internal modules name their upstream callers as users.>
 
-## Data flow
-<who calls in, where outputs go>
+## Success
+- <user-facing outcome — target <X>, measured by <Y>>
+- <user-facing outcome — target <X>, measured by <Y>>
+- <user-facing outcome — target <X>, measured by <Y>>
 
-## Constraints
-<perf, compat, security non-negotiables>
+## What users get
+- **<capability>** — <PM description>. Backed by: <schema | endpoint | screen | CLI invocation>.
+- **<capability>** — <PM description>. Backed by: <schema | endpoint | screen | CLI invocation>.
+
+## How it connects
+- Upstream (who calls in): <list>
+- Downstream (where outputs go): <list>
+- Third-party (external): <list>
+
+Edge list:
+- in:  ← <X> via <protocol>
+- out: → <Y> via <protocol>
+
+## Quality bar
+<user-visible NFRs: perf / scale / compliance / availability / data freshness. Measurable. NOT internal infra ("uses Postgres") — that's How it connects.>
+
+## Risks
+- **Product**: <wrong abstraction / users don't actually want this>
+- **Technical**: <perf cliff / dependency outage / known-hard problem>
+- **Org / dependency**: <waiting on another team / external API change>
 
 ## Out of scope
 <what this module won't do>
@@ -127,7 +156,7 @@ Total ≤700 words. Module manifest is the source of truth for which modules exi
 <unresolved product questions; remove after answered>
 ```
 
-Total ≤2000 words. **No changelog markers** in any section: no strikethrough, no "(was: ...)", no dated revision marks. PRD is current-state; history lives in git log + `findings.md`.
+Total ≤2000 words. Sections (in order, exact heading names): `## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`. **No changelog markers** in any section: no strikethrough, no "(was: ...)", no dated revision marks. PRD is current-state; history lives in git log + `findings.md`.
 
 ### `roadmap.md`
 
@@ -151,7 +180,7 @@ Status values: `not-started` / `iterating` / `stable` / `blocked`. Auto-managed 
 
 | When | Module | Conflict | Resolution |
 | --- | --- | --- | --- |
-| 2026-05-06 | api | impl introduced /tags endpoint, not in PRD ## Surface | prd-update: added |
+| 2026-05-06 | api | impl introduced /tags endpoint, not in PRD ## What users get | prd-update: added |
 ```
 
 Append-only. One row per drift event. Resolution column filled in after the user decides (revert / prd-update).
@@ -166,7 +195,7 @@ Append-only. One row per drift event. Resolution column filled in after the user
 |---|---|---|
 | `/super-manus:drive` | user | Global switch — agent reads everything (PRD, roadmap, drift log, all impl updates) and decides the next action; runs drift scan |
 | `/super-manus:start <feature>` | user | Create feature folder with v0.2 layout (`prd/` folder, `impl/`, `roadmap.md`, `prd_drift.md`) |
-| `/super-manus:brainstorm` | user | 5 questions, last question is module split → write `prd/_index.md` + per-module PRD stubs → auto-create the first MVP update folder with the four-file set |
+| `/super-manus:brainstorm` | user | 6 questions, last question is module split → write `prd/_index.md` + per-module PRD stubs → auto-create the first MVP update folder with the four-file set |
 | `/super-manus:reverse-prd` | user | Scan an existing project, infer module breakdown, generate `prd/` folder; one-shot, user audits afterward |
 | `/super-manus:sync <module>` | user | After PRD edits, create a new update folder under `impl/<module>/`, seeded against the latest PRD module file |
 | `/super-manus:prd-update <module>` | user | Single-module PRD surgical edit (5 options: tighten / split / demote / exclude / add); writes a paired `findings.md ## Decisions` entry in the active update |
@@ -178,7 +207,7 @@ Append-only. One row per drift event. Resolution column filled in after the user
 
 The agent must run a PRD ↔ implementation alignment check at three points:
 
-1. **At the start of `/super-manus:impl`** — read the active update's `task_plan.md` next pending phase + corresponding `prd/<module>.md`. If the phase intent introduces a capability not declared in `## Surface` / `## Constraints`, write a `prd_drift.md` row and pause: tell the user "drift detected: revert phase or `/super-manus:prd-update <module>`". Do not proceed silently.
+1. **At the start of `/super-manus:impl`** — read the active update's `task_plan.md` next pending phase + corresponding `prd/<module>.md`. If the phase intent introduces a capability not declared in `## What users get` (or violates `## Quality bar`), write a `prd_drift.md` row and pause: tell the user "drift detected: revert phase or `/super-manus:prd-update <module>`". Do not proceed silently.
 2. **At phase close (when a `task_plan.md` row flips to `closed`)** — re-read `prd/<module>.md` and the update's `progress.md ## Completed commits`. Report two diffs: "PRD declared but not implemented" and "implemented but not in PRD". Drift rows logged for the second.
 3. **Inside `/super-manus:drive`** — full feature drift scan as part of the global health check.
 
@@ -239,7 +268,7 @@ Each commit must pass `bash tests/run-all.sh`.
 
 To prevent scope creep:
 
-- **No tests folder per module.** Test design intent goes in `prd/<module>.md ## Constraints`; per-day test outcomes go in the update's `findings.md ## Data points`.
+- **No tests folder per module.** Test design intent goes in `prd/<module>.md ## Quality bar`; per-day test outcomes go in the update's `findings.md ## Data points`.
 - **No PRD revision history file.** History is reconstructed from `git log` + `findings.md ## Decisions` (which gets a paired entry on every `prd-update`). This is the "no changelog markers" rule's logical complement.
 - **No phase concept above the module level.** `task_plan.md` exists only inside an update folder, scoped to that one update. Across-feature progress comes from `roadmap.md`.
 - **No automatic `roadmap.md` Note column edits.** Only the user writes there.
