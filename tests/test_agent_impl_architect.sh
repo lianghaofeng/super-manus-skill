@@ -56,4 +56,16 @@ grep -qiE "drafted.*p<n>_impl|drafted p" "$F" || { echo "FAIL: must specify the 
 # (audit) policy — single-source / no bulk
 grep -qiE "single.source|do NOT bulk-mark|bulk[ -]mark" "$F" || { echo "FAIL: must restrict (audit) markers (single-source only, no bulk)"; exit 1; }
 
+# Phase-test path constraint — Files touched MUST require an entry under ${update_dir}/tests/
+# (this prevents architects from co-opting the project's existing test suite as the phase target,
+# which silently breaks v0.5 phase-test isolation — see skills/tdd-in-phases/SKILL.md)
+grep -qF 'phase_p<n>_<verb>_<noun>' "$F" || { echo "FAIL: must require phase-test filename pattern phase_p<n>_<verb>_<noun>"; exit 1; }
+grep -qF '${update_dir}/tests/' "$F" || { echo "FAIL: must require phase tests under \${update_dir}/tests/"; exit 1; }
+grep -qiE "co-opt|do NOT co-opt|don't co-opt" "$F" || { echo "FAIL: must explicitly forbid co-opting the existing regression suite as the phase target"; exit 1; }
+grep -qiE "not auto-discovered|NOT auto-discovered|auto-discovered" "$F" || { echo "FAIL: must explain phase tests are not auto-discovered (the load-bearing reason)"; exit 1; }
+
+# Verification MUST require BOTH a phase-test path command AND a user-visible smoke command
+grep -qiE "phase[- ]test path command|explicit path|phase-test path" "$F" || { echo "FAIL: ## Verification must require an explicit phase-test path command"; exit 1; }
+grep -qiE "smoke command|user-visible" "$F" || { echo "FAIL: ## Verification must require a user-visible smoke command"; exit 1; }
+
 echo OK

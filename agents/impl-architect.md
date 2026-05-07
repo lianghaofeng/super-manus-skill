@@ -114,25 +114,54 @@ Resolved via:
 
 Group by module if the list spans modules (rare; flag in `## Approach` if so).
 
+**Phase test entry is REQUIRED.** Every phase plan MUST list at least one phase test file under `${update_dir}/tests/` with the `(new)` marker. Path convention by language (chosen to dodge default test-runner globs — see `skills/tdd-in-phases/SKILL.md`):
+
+```
+- `${update_dir}/tests/phase_p<n>_<verb>_<noun>.py` (new) — pytest, Python projects
+- `${update_dir}/tests/phase_p<n>_<verb>_<noun>.phase.ts` (new) — jest/vitest, Node/TS projects
+```
+
+Do NOT co-opt the project's existing test suite (`apps/<m>/tests/`, `packages/<m>/__tests__/`, `docs/super-manus/e2e/`) as the phase test target. Those are the permanent regression suite — auto-discovered by CI, lifetime tied to the capability. Phase tests are milestone-scoped, NOT auto-discovered, archive with the update folder. Two different lifetimes; do not conflate. The orchestrator's `impl-test-writer` will create the phase test file at the listed path; the architect just declares it.
+
+If the phase **completes** a `## What users get` capability from `module_prd_path`, ALSO list the e2e file as `(new)` or `(extend)`:
+
+```
+- `docs/super-manus/e2e/<module>/test_<capability>.py` (new) — permanent regression for capability X
+```
+
 ### `## Verification`
 
-**2–4 bullets, PM-readable.** How the user (or QA, or the orchestrator running the smoke flow) will verify this phase shipped. **At least one bullet MUST be a runnable command** — a test target, a CLI smoke invocation, a `curl` against a local server, a `pytest -k <pattern>`, etc.
+**2–4 bullets, PM-readable.** How the user (or QA, or the orchestrator running the smoke flow) will verify this phase shipped. The section MUST contain BOTH:
+
+1. **A phase-test path command** invoked by explicit path (phase tests are NOT auto-discovered):
+
+   ```
+   pytest ${update_dir}/tests/phase_p<n>_*.py
+   jest ${update_dir}/tests/phase_p<n>_*.phase.ts
+   ```
+
+   The `${update_dir}` should be expanded to the literal path passed by the orchestrator. The path matches the `(new)` phase-test entry in `## Files touched`.
+
+2. **One user-visible smoke command** — a CLI invocation, a `curl` against a local server, a manual screen check — that confirms the capability works end-to-end, not just that the unit assertions pass.
 
 Format:
 
 ```
-- Running `<command>`, you should see `<observable>`.
+- Running `pytest ${update_dir}/tests/phase_p<n>_*.py`, all green.
+- Running `<smoke-command>`, you should see `<observable>`.
 - Manual: open `<URL / screen>`, click `<element>`, expect `<outcome>`.
-- Existing tests `<test path>` continue to pass.
+- Existing tests `<test path>` continue to pass.   ← optional regression-pass note
 ```
 
 Source priority:
 
 1. Module README / `task_plan_path` `## Goal` — what "done" looks like.
-2. Existing test layout under the module — name a `pytest` / `npm test` target that exists.
+2. **Phase test path (REQUIRED) vs existing regression suite (do NOT co-opt):**
+   - **Phase test** — explicitly invoke the new file at `${update_dir}/tests/phase_p<n>_*.<ext>` listed in `## Files touched`. This file does NOT exist yet; `impl-test-writer` will create it. Phase tests are milestone-scoped and deliberately invisible to default test runners.
+   - **Existing regression suite** (`apps/<m>/tests/`, `packages/<m>/__tests__/`, `docs/super-manus/e2e/`) — do NOT name one of its targets as the phase's primary verification command. Reference it only as a regression-pass note ("existing tests `<path>` continue to pass") if the phase changes behavior they cover.
 3. The `## Approach` itself — each new function / endpoint / screen named there is verifiable.
 
-Verification is for the user, not for you. Avoid pure unit-test terms; phrase as "a developer running this command sees X". If the phase is internal-only (refactor), state the regression-test command + the expected lack of behavior change explicitly.
+Verification is for the user, not for you. Avoid pure unit-test terms; phrase as "a developer running this command sees X". If the phase is internal-only (refactor), the phase-test path command still applies (the test asserts the refactor preserves behavior); the smoke command states the regression-pass expectation.
 
 ## Source reading — Drift check protocol
 

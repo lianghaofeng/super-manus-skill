@@ -13,10 +13,11 @@
 ## Files touched
 
 - `path/to/file` — <one-line reason>
+- `${update_dir}/tests/phase_p<n>_<verb>_<noun>.<ext>` (new) — phase test, written by impl-test-writer
 
 ## Verification
 
-<how you will know this phase is closed: tests to run, smoke command, manual check>
+<MUST include (1) explicit phase-test path command — e.g. `pytest ${update_dir}/tests/phase_p<n>_*.py` — AND (2) one user-visible smoke command. Do NOT name a target from the project's existing regression suite (apps/<m>/tests/, docs/super-manus/e2e/) as the phase's primary command — those run in CI on their own; phase tests are milestone-scoped and not auto-discovered.>
 
 <!--
 This section MUST include at minimum:
