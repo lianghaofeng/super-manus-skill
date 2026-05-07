@@ -59,6 +59,38 @@ PRD 编辑是结构化的，不能自由发挥。一次改一条 bullet：
 
 任何编辑之后跑 `/super-manus:sync <module>` scaffold 下一个里程碑。
 
+### `prd-update` 怎么跑（两种模式，同一套选项）
+
+同一套 5 选项，两种触发场景。命令读 `prd_drift.md` 自动判模式：
+
+| `prd_drift.md` 里 `<module>` 有 pending 行吗？ | 模式 | 用在 |
+|---|---|---|
+| 没有 | **Forward iteration（前向迭代）** | 写代码 **之前** 加新能力 / 微调措辞 |
+| 有 | **Drift absorption（drift 吸收）** | PRD 追上已经偏离的代码 |
+
+调用端看不出区别 —— 同一条命令、同一套 5 选项。差别在副作用：
+
+| 动作 | Forward | Drift |
+|---|---|---|
+| 编辑 `prd/<module>.md`（单 bullet、单 section） | ✅ | ✅ |
+| 往当前 update 的 `findings.md ## Decisions` 写一条 3 行 Decision | — | ✅ |
+| 翻 `prd_drift.md` 那行的 Resolution：`pending` → `prd-update: <a-e>` | — | ✅ |
+| 动 `progress.md` | — （hook 管理） | — （hook 管理） |
+| 收尾消息 | "跑 `/super-manus:sync <module>` scaffold 里程碑" | "Drift 行已 resolve，回去 resume update" |
+
+**Tighten / Demote / Split** 三种动作在写之前会跑 [drift check protocol](skills/using-sm/SKILL.md)（LSP + grep 双源）核对受影响的 bullet —— 比如要"收紧"措辞，命令会先确认代码实际行为确实匹配新措辞，不只是用户记忆。**Add** 和 **Exclude** 跳过验证（Add 是新意图，Exclude 是去 scope）。
+
+4 种情况它会拒绝并 redirect 你：
+
+| 情况 | 建议 |
+|---|---|
+| 编辑跨过 `prd/<module>.md` 多个 section | 跑 `/super-manus:brainstorm`（替换式重写） |
+| 偏离其实是 **技术决定**（比如"我们改用了 Redis 不是 Postgres"） | 不动 PRD —— 只在当前 update 的 `findings.md ## Decisions` 写一条 |
+| PRD 跟代码已经对齐，没冲突 | 停，不要编一条编辑出来 |
+| 编辑会把 `prd/<module>.md` 推过 2000 词 | `/super-manus:brainstorm` —— 这个模块已经撑不住一份 PRD 了 |
+
+**技术决定**这条拒绝实际中最常见。PRD 是产品语义 —— "表 X 有字段 a/b/c" 这种 schema 草图可以；库名、文件路径、行号、代码标识符不行。如果一条"drift"实质上是"我们选了别的 DB"，那是 `tasks/p<n>_impl.md ## Approach` 的决定，不是 PRD 该动的地方。
+
 ### 例 1 —— 全新项目，从头到尾
 
 ```bash
