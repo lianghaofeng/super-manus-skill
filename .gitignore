@@ -2,3 +2,4 @@
 .super-manus/
 *.swp
 node_modules/
+.claude/
