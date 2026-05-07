@@ -59,38 +59,6 @@ PRD edits are structured, not freeform. One bullet at a time:
 
 After any edit, run `/super-manus:sync <module>` to scaffold the next milestone.
 
-### How `prd-update` works (two modes, identical options)
-
-Same 5 options, two different trigger contexts. The command auto-detects mode from `prd_drift.md`:
-
-| `prd_drift.md` has a pending row for `<module>`? | Mode | Used for |
-|---|---|---|
-| No | **Forward iteration** | Adding/refining a capability *before* code is written |
-| Yes | **Drift absorption** | PRD catches up to code that already deviated |
-
-Mode is invisible at the call site — same command, same 5 options. What differs is the side effects:
-
-| Action | Forward | Drift |
-|---|---|---|
-| Edits `prd/<module>.md` (single bullet, single section) | ✅ | ✅ |
-| Writes a 3-line Decision into the active update's `findings.md ## Decisions` | — | ✅ |
-| Flips matching `prd_drift.md` row: `Resolution = pending` → `prd-update: <a-e>` | — | ✅ |
-| Touches `progress.md` | — (hook-managed only) | — (hook-managed only) |
-| Closing message | "Run `/super-manus:sync <module>` to scaffold the milestone." | "Drift row resolved. Resume the update." |
-
-For **Tighten / Demote / Split**, the command runs the [drift check protocol](skills/using-sm/SKILL.md) (LSP + grep, double-source) on the affected bullet *before* writing — so a "tighten" claim is verified to actually match what the code does today, not just what the user remembers. **Add** and **Exclude** skip verification (Add declares new intent; Exclude removes scope).
-
-It will refuse and redirect in four cases:
-
-| Situation | Suggestion |
-|---|---|
-| Edit crosses >1 section of `prd/<module>.md` | `/super-manus:brainstorm` (full rewrite path) |
-| Deviation is purely tech-design (e.g. "we used Redis not Postgres") | Don't move PRD — log it as a Decision in the active update's `findings.md` only |
-| PRD already matches reality (no actual conflict) | Stop, don't invent an edit |
-| Edit would push `prd/<module>.md` past 2000 words | `/super-manus:brainstorm` — module outgrew a single PRD |
-
-The tech-design refusal is the most common one in practice. PRD is product semantics — schema sketches at "table X has fields a, b, c" level are fine, but library names, file paths, line numbers, and code identifiers are not. If a "drift" is really "we picked a different DB", that's an `## Approach` decision in `tasks/p<n>_impl.md`, not a PRD movement.
-
 ### Example 1 — green-field project, end to end
 
 ```bash
@@ -228,6 +196,40 @@ The on-disk layout super-manus creates inside a project that uses it:
 **No active-state file.** Hooks resolve the active update by mtime scan of `docs/super-manus/impl/<module>/*/`. One project = one PRD; the "feature" abstraction from older versions is gone.
 
 **No changelog markers anywhere in PRD.** PRD is a current-state snapshot. History lives in `git log` and per-update `findings.md`.
+
+## How `prd-update` works (two modes, identical options)
+
+Same 5 options, two different trigger contexts. The command auto-detects mode from `prd_drift.md`:
+
+| `prd_drift.md` has a pending row for `<module>`? | Mode | Used for |
+|---|---|---|
+| No | **Forward iteration** | Adding/refining a capability *before* code is written |
+| Yes | **Drift absorption** | PRD catches up to code that already deviated |
+
+Mode is invisible at the call site — same command, same 5 options. What differs is the side effects:
+
+| Action | Forward | Drift |
+|---|---|---|
+| Edits `prd/<module>.md` (single bullet, single section) | ✅ | ✅ |
+| Writes a 3-line Decision into the active update's `findings.md ## Decisions` | — | ✅ |
+| Flips matching `prd_drift.md` row: `Resolution = pending` → `prd-update: <a-e>` | — | ✅ |
+| Touches `progress.md` | — (hook-managed only) | — (hook-managed only) |
+| Closing message | "Run `/super-manus:sync <module>` to scaffold the milestone." | "Drift row resolved. Resume the update." |
+
+For **Tighten / Demote / Split**, the command runs the [drift check protocol](skills/using-sm/SKILL.md) (LSP + grep, double-source) on the affected bullet *before* writing — so a "tighten" claim is verified to actually match what the code does today, not just what the user remembers. **Add** and **Exclude** skip verification (Add declares new intent; Exclude removes scope).
+
+It will refuse and redirect in four cases:
+
+| Situation | Suggestion |
+|---|---|
+| Edit crosses >1 section of `prd/<module>.md` | `/super-manus:brainstorm` (full rewrite path) |
+| Deviation is purely tech-design (e.g. "we used Redis not Postgres") | Don't move PRD — log it as a Decision in the active update's `findings.md` only |
+| PRD already matches reality (no actual conflict) | Stop, don't invent an edit |
+| Edit would push `prd/<module>.md` past 2000 words | `/super-manus:brainstorm` — module outgrew a single PRD |
+
+The tech-design refusal is the most common one in practice. PRD is product semantics — schema sketches at "table X has fields a, b, c" level are fine, but library names, file paths, line numbers, and code identifiers are not. If a "drift" is really "we picked a different DB", that's an `## Approach` decision in `tasks/p<n>_impl.md`, not a PRD movement.
+
+`prd-update` is the tool you reach for when PRD needs to move. The next section explains the system that decides *when* PRD might need to move — and prevents the agent from moving it silently.
 
 ## Drift detection
 

@@ -8,6 +8,7 @@ grep -q "MIT" LICENSE
 grep -q "## Install" README.md
 grep -q "## How to use it" README.md
 grep -q "## Directory layout" README.md
+grep -q "## How \`prd-update\` works" README.md
 grep -q "## Drift detection" README.md
 grep -q "## Updates" README.md
 echo OK
