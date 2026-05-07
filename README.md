@@ -39,8 +39,8 @@ The daily loop is small: write a PRD once, then iterate by editing PRD bullets a
 | `/super-manus:reverse-prd` | existing project, no PRD yet | Reads code (runtime-first module discovery), writes `prd/_index.md` (with ASCII arch diagram) + module stubs. |
 | `/super-manus:prd-update <module>` | adding a capability OR resolving drift | Structured 5-option edit on one `prd/<module>.md`: **add / tighten / split / demote / exclude**. Mode (forward iteration vs drift absorption) is auto-detected. |
 | `/super-manus:sync <module>` | after a PRD edit | Reads `git diff prd/<module>.md`, drafts 3-6 candidate phases, scaffolds the milestone folder. |
-| `/super-manus:impl` | iterate one phase | Runs ONE phase end-to-end (architect → test-writer → code-writer → verify → close), then stops. |
-| `/super-manus:impl-all` | finish a milestone | Loops through ALL pending phases of the active update without pausing. Same pipeline + drift checks per phase. |
+| `/super-manus:impl` | iterate one phase | Runs ONE phase end-to-end (architect → review → test-writer → review → code-writer → review → verify → close), then stops. Reviewer at 3 checkpoints (pre-test / pre-code / pre-close) drives a re-spawn loop with per-checkpoint retry budget. |
+| `/super-manus:impl-all` | finish a milestone | Loops through ALL pending phases of the active update without pausing. Same 4-agent pipeline + 3 review checkpoints + drift checks per phase. |
 | `/super-manus:drive` | "what next?" | Reads everything, picks one of the above, announces decision + reason, executes. |
 | `/super-manus:catchup` | new session | Re-injects PRD overview + active update's task_plan into context. |
 | `/super-manus:log` | manual checkpoint | Append a session log entry to the active update's `progress.md` now. |
