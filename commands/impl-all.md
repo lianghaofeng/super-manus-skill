@@ -1,8 +1,8 @@
 ---
-description: Power-mode alternative to /super-manus:impl — loop through ALL pending phases of the active update without pausing. Each phase still goes architect → test-writer → code-writer → verify → close. After the last phase, run the same end-of-update drift gate. Use when the plan is already audited and you want to ship the whole milestone in one go. Optional `target` argument may be omitted, an update name, or a module name.
+description: Power-mode alternative to /super-manus:impl — loop through ALL pending phases of the active update without pausing. Each phase still goes architect → review → test-writer → review → code-writer → review → verify → close. After the last phase, run the same end-of-update drift gate. Use when the plan is already audited and you want to ship the whole milestone in one go. Optional `target` argument may be omitted, an update name, or a module name.
 ---
 
-This is the loop-mode sister of [/super-manus:impl](impl.md). Same 3-agent pipeline per phase, same drift checks, same hash-based cheat-prevention, same end-of-update drift gate. The ONLY difference: the orchestrator does NOT pause between phases — it continues straight to the next pending phase until none remain.
+This is the loop-mode sister of [/super-manus:impl](impl.md). Same 4-agent pipeline per phase (3 writer agents + 1 reviewer at 3 checkpoints), same drift checks, same hash-based cheat-prevention, same end-of-update drift gate. The ONLY difference: the orchestrator does NOT pause between phases — it continues straight to the next pending phase until none remain.
 
 Use this when:
 
@@ -24,6 +24,7 @@ Use plain `/super-manus:impl` instead when:
 
 - **Ctrl-C mid-iteration** — whichever phase was in flight stays `in_progress` in `task_plan.md`. The orchestrator's hash file `.test_hashes_p<n>.txt` may exist or not depending on where the interrupt landed. Re-running `/super-manus:impl` (or `/super-manus:impl-all`) resumes that phase from where it left off.
 - **Agent error** (architect / test-writer / code-writer returns an escalation) — phase stays `in_progress`; user resolves; re-run from `/super-manus:impl` or `/super-manus:impl-all`. Either picks up the same in-flight phase.
+- **Reviewer ESCALATE_TO_USER** at any of the 3 review checkpoints (counter exhausted at 3 attempts, or genuinely unresolvable) — phase stays `in_progress`; verdict + history surfaced via `findings.md ## Errors`; user resolves; re-run from either command.
 - **Drift detected** at the per-phase drift check — phase stays `pending` (its Status was not yet flipped to `in_progress`); drift row appended; user resolves via `/super-manus:prd-update` or revert; re-run from either command.
 - **Hash tamper detected** — phase ABORTED, drift row appended ("code-writer modified tests for phase p<n>"); same recovery.
 - **End-of-update gate fails** — update stays `iterating`; pending drift rows surfaced; user resolves; re-run from `/super-manus:impl` (gate re-runs since all phases are already `closed`).
@@ -56,47 +57,47 @@ while there exists a pending or in_progress phase in $UPDATE_DIR/task_plan.md:
   # ↓ identical to /super-manus:impl steps below ↓
   drift check (per skills/using-sm/SKILL.md §4 — Drift check protocol; LSP + grep, double-source)
     on conflict → append prd_drift.md row, surface user, point at /super-manus:prd-update, STOP loop
-  spawn impl-architect (subagent_type="impl-architect")
-    inputs: project_root, module, update_dir, phase_number, phase_name,
-            module_prd_path, task_plan_path, findings_path, progress_path, lsp_available
-    writes: $UPDATE_DIR/tasks/p<n>_impl.md
-  spawn impl-test-writer (subagent_type="impl-test-writer")
-    inputs: project_root, module, update_dir, phase_number, phase_name,
-            module_prd_path, index_prd_path, task_plan_path, e2e_dir, lsp_available, prior_tests_glob
-    writes + commits: $UPDATE_DIR/tests/phase_p<n>_*.{ext}, e2e/<module>/test_*.{ext}, e2e/_system/test_*.{ext}
-  snapshot SHA-256 of every test file the test-writer touched → $UPDATE_DIR/.test_hashes_p<n>.txt
-  spawn impl-code-writer (subagent_type="impl-code-writer")
-    inputs: project_root, module, update_dir, phase_number, phase_name,
-            module_prd_path, task_plan_path, phase_plan_path,
-            phase_tests_glob, e2e_tests_glob, lsp_available
-    writes + commits: source files only (no test files)
-  re-hash test files; mismatch → ABORT phase, append "code-writer modified tests for phase p<n>" drift row, STOP loop
-  run every command in tasks/p<n>_impl.md ## Verification
+  Step 1: spawn impl-architect (subagent_type="impl-architect") → writes $UPDATE_DIR/tasks/p<n>_impl.md
+  Step 2: spawn impl-reviewer (subagent_type="impl-reviewer", mode=pre-test) — counter[#1] tracking
+    APPROVE → continue; RETURN_TO_ARCHITECT → re-spawn Step 1 (≤2 retries); ESCALATE → STOP loop
+  Step 3: spawn impl-test-writer (subagent_type="impl-test-writer") → commits red phase tests + e2e tests
+  Step 4: spawn impl-reviewer (subagent_type="impl-reviewer", mode=pre-code) — counter[#2] tracking
+    APPROVE → continue; RETURN_TO_TEST_WRITER → re-spawn Step 3 (≤2 retries);
+    RETURN_TO_ARCHITECT → cascade back to Step 1; ESCALATE → STOP loop
+  Step 5: snapshot SHA-256 of every reviewer-approved test file → $UPDATE_DIR/.test_hashes_p<n>.txt
+          spawn impl-code-writer (subagent_type="impl-code-writer") → commits source files only (no tests)
+  Step 6: spawn impl-reviewer (subagent_type="impl-reviewer", mode=pre-close) — counter[#3] tracking
+    APPROVE → continue; RETURN_TO_CODE_WRITER → re-spawn Step 5 code-writer (≤2 retries);
+    RETURN_TO_TEST_WRITER → cascade back to Step 3 (refresh hash on re-commit);
+    RETURN_TO_ARCHITECT → cascade back to Step 1; ESCALATE → STOP loop
+  Step 7: re-hash test files; mismatch → ABORT phase, append "code-writer modified tests for phase p<n>" drift row, STOP loop
+  Step 8: run every command in tasks/p<n>_impl.md ## Verification
     fail → invoke skills/systematic-debugging-in-phase, phase stays in_progress, STOP loop
-  pass → flip phase Status to closed in task_plan.md
-  refresh-outstanding.sh "$UPDATE_DIR"
-  delete $UPDATE_DIR/.test_hashes_p<n>.txt
+  Step 9: pass → flip phase Status to closed in task_plan.md
+          refresh-outstanding.sh "$UPDATE_DIR"
+          delete $UPDATE_DIR/.test_hashes_p<n>.txt
   # ↑ end of per-phase block ↑
   loop continues automatically — no user pause
 end loop
 run end-of-update drift gate (3-pass) per /super-manus:impl
 ```
 
-The 3-agent pipeline INSIDE one phase is identical to `/super-manus:impl` in every detail — same agents, same `subagent_type=` values, same 10 inputs to the architect (`project_root`, `module`, `update_dir`, `phase_number`, `phase_name`, `module_prd_path`, `task_plan_path`, `findings_path`, `progress_path`, `lsp_available`), same hash check, same verification skill invocation. The persona, source-priority hierarchy, and outputs of each agent live in [agents/impl-architect.md](../agents/impl-architect.md) / [agents/impl-test-writer.md](../agents/impl-test-writer.md) / [agents/impl-code-writer.md](../agents/impl-code-writer.md). Do NOT inline those personas here.
+The 4-agent pipeline INSIDE one phase is identical to `/super-manus:impl` in every detail — same agents (impl-architect / impl-reviewer / impl-test-writer / impl-code-writer), same `subagent_type=` values, same hash check, same per-checkpoint retry counters and budgets (≤2 RETURNs per review point), same verification skill invocation. The persona and source-priority hierarchy of each agent live in [agents/impl-architect.md](../agents/impl-architect.md) / [agents/impl-reviewer.md](../agents/impl-reviewer.md) / [agents/impl-test-writer.md](../agents/impl-test-writer.md) / [agents/impl-code-writer.md](../agents/impl-code-writer.md). Do NOT inline those personas here.
 
-For the per-phase mechanics — drift check protocol (LSP + grep, double-source), agent spawning details, the exact wording of the drift-conflict surface, the systematic-debugging-in-phase invocation, and how to flip Status from `in_progress` to `closed` — see [/super-manus:impl](impl.md). This document only describes the loop boundary.
+For the per-phase mechanics — drift check protocol (LSP + grep, double-source), agent spawning details, reviewer verdict handling, cascade re-spawn rules, hash baseline refresh on test-writer re-spawn, the systematic-debugging-in-phase invocation, and how to flip Status from `in_progress` to `closed` — see [/super-manus:impl](impl.md). This document only describes the loop boundary.
 
 ## When the loop stops
 
-The loop stops in one of five ways:
+The loop stops in one of six ways:
 
 1. **No more pending or in_progress phases** — fall through to the end-of-update drift gate below. This is the happy path.
 2. **Drift detected** at the per-phase drift check — append `prd_drift.md` row, surface user with the two paths (revert OR `/super-manus:prd-update`), STOP.
-3. **Agent escalation** (test-writer says "phase test contradicts PRD"; code-writer says "cannot make a test green after 5-step systematic-debugging checklist") — surface escalation, STOP.
-4. **Hash tamper** — ABORT phase, append `code-writer modified tests for phase p<n>` drift row, surface user, STOP.
-5. **`## Verification` failure** — invoke `systematic-debugging-in-phase` once; if the skill resolves it, continue the loop; if the skill's "no clear cause" path triggers, STOP with `findings.md ## Errors` row + user surface.
+3. **Reviewer ESCALATE_TO_USER** at any of the 3 review checkpoints — counter exhausted (3 attempts at the same checkpoint) or genuinely unresolvable issue. Verdict + history written to `findings.md ## Errors`; user surfaced with the reviewer's suggested user_options. STOP.
+4. **Agent escalation** (test-writer / code-writer raises an issue independent of reviewer) — surface escalation, STOP.
+5. **Hash tamper** — ABORT phase, append `code-writer modified tests for phase p<n>` drift row, surface user, STOP.
+6. **`## Verification` failure** — invoke `systematic-debugging-in-phase` once; if the skill resolves it, continue the loop; if the skill's "no clear cause" path triggers, STOP with `findings.md ## Errors` row + user surface.
 
-In cases 2–5, the loop stops at the current phase. The user resolves and re-runs `/super-manus:impl` (one more phase) or `/super-manus:impl-all` (continue the loop) — both are safe.
+In cases 2–6, the loop stops at the current phase. The user resolves and re-runs `/super-manus:impl` (one more phase) or `/super-manus:impl-all` (continue the loop) — both are safe.
 
 ## End-of-update drift gate (BLOCKING — 3-pass)
 

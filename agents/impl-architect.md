@@ -189,3 +189,18 @@ Mark a fact `(audit)` only if it comes from a single source and you couldn't cor
 ## Granularity default
 
 One phase plan = one phase row in `task_plan.md ## Phases`. Do NOT split a phase into sub-phases inside the plan; if the phase is too large, surface that in the summary line ("phase appears to span >1 unit; recommend splitting in task_plan.md") and write the best plan you can for the stated row.
+
+## Receiving reviewer feedback (re-spawn)
+
+If your spawning prompt includes a `previous_attempt_feedback` block, you have been re-spawned by the orchestrator after `impl-reviewer` (mode=`pre-test`, or possibly cascaded from `pre-code` / `pre-close`) rejected your previous plan. The block contains the reviewer's `issues` and `suggested_actions` verbatim.
+
+What to do:
+
+1. **Read the feedback first.** Parse each issue and the suggested action. Do not start writing until you understand which sections of your prior plan need changes.
+2. **Read your prior plan.** It still exists at `${update_dir}/tasks/p<n>_impl.md` — your idempotency guard from earlier no longer applies on a re-spawn. You are expected to overwrite the relevant sections with the feedback addressed.
+3. **Address each issue specifically.** If the reviewer says "plan §3 claims `cn-k12` has field `id` but `head -1` shows no `id` field — verify against real data and revise", run `head -1` yourself, then revise `## Approach` (and `## Files touched` if needed) to match.
+4. **Disagree explicitly when warranted.** If you believe an issue is wrong (e.g., reviewer mis-read your `## Approach`), say so in your summary line: "addressed issues 1, 2; disagreed with issue 3 — see plan §3.2 for clarification". Do NOT silently ignore — silent ignore wastes the loop and risks ESCALATE_TO_USER on the next round.
+5. **No issue is partially addressed.** Either fully address it or explicitly disagree. Half-fixed issues will trigger another RETURN.
+6. **Karpathy: surgical changes still apply.** Only edit the sections the feedback names. Don't refactor unrelated parts of the plan to "improve" them.
+
+The reviewer's feedback is at most 2 rounds (per-checkpoint retry budget = 2). On the 3rd review, if issues remain, the reviewer escalates to the user — the loop ends without your re-spawn.

@@ -15,16 +15,28 @@ This skill is the execution-layer discipline that makes the 3-agent `/super-manu
 
 ## The non-negotiable order
 
+v0.7 adds 3 review checkpoints driven by `impl-reviewer` (read-only, no Write/Edit). The reviewer is the loop driver — writers stay stateless, only knowing their inputs (and `previous_attempt_feedback` on re-spawn).
+
 ```
-[1] impl-architect emits tasks/p<n>_impl.md           (no code, no tests)
-[2] impl-test-writer emits + commits red tests        (phase tests + e2e tests)
-[3] orchestrator hashes every test file just committed
-[4] impl-code-writer emits + commits source code      (read-only on tests/ and e2e/)
-[5] orchestrator re-hashes; mismatch → ABORT phase
-[6] orchestrator runs `## Verification`; pass → close phase
+[1] impl-architect emits tasks/p<n>_impl.md            (no code, no tests)
+[2] impl-reviewer (mode=pre-test) — APPROVE / RETURN_TO_ARCHITECT / ESCALATE
+    counter[#1] tracks RETURNs from this checkpoint; max 2; 3rd → ESCALATE
+[3] impl-test-writer emits + commits red tests         (phase tests + e2e tests)
+[4] impl-reviewer (mode=pre-code) — APPROVE / RETURN_TO_TEST_WRITER / RETURN_TO_ARCHITECT / ESCALATE
+    counter[#2] tracks RETURNs from this checkpoint; max 2; 3rd → ESCALATE
+[5] orchestrator hashes every test file just committed (after review #2 APPROVE — never before)
+    impl-code-writer emits + commits source code       (read-only on tests/ and e2e/)
+[6] impl-reviewer (mode=pre-close) — APPROVE / RETURN_TO_CODE_WRITER / RETURN_TO_TEST_WRITER / RETURN_TO_ARCHITECT / ESCALATE
+    counter[#3] tracks RETURNs from this checkpoint; max 2; 3rd → ESCALATE
+[7] orchestrator re-hashes; mismatch → ABORT phase
+[8] orchestrator runs `## Verification`; pass → close phase
 ```
 
-The temporal order is the cheat-prevention. By the time the code-writer is spawned, the tests are already in git. There is no "future impl" for the tests to mirror.
+**The temporal order is the cheat-prevention.** By the time the code-writer is spawned (Step 5), the tests are already in git AND have been APPROVEd by the reviewer. There is no "future impl" for the tests to mirror.
+
+**The reviewer is the loop driver.** Writers do not know they are on attempt N — they read `previous_attempt_feedback` from their spawning prompt (a new optional input on re-spawn) and address each item. Per-checkpoint counters live in the orchestrator; 3 attempts max per checkpoint before ESCALATE. Reviewer can RETURN to any upstream writer (e.g. `pre-close` reviewer can `RETURN_TO_TEST_WRITER` if the failing test fixture is wrong); the orchestrator cascades — re-spawn the target writer and every downstream stage, re-hash on test re-commit, then re-invoke the originating review checkpoint.
+
+**The reviewer cannot bypass the hash check.** Reviewer is read-only by tool surface (no Write, no Edit). Cheat-prevention semantics carry forward unchanged.
 
 ## Where phase tests live
 

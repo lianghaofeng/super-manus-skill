@@ -1,12 +1,12 @@
 ---
-description: Run ONE phase end-to-end (architect → test-writer → code-writer → verify → close), then stop. If that was the last pending phase, run the end-of-update drift gate. Conservative default — one user invocation = one phase shipped. Optional `target` argument may be omitted, an update name, or a module name.
+description: Run ONE phase end-to-end (architect → review → test-writer → review → code-writer → review → verify → close), then stop. If that was the last pending phase, run the end-of-update drift gate. Conservative default — one user invocation = one phase shipped. Optional `target` argument may be omitted, an update name, or a module name.
 ---
 
-This is the v0.5 successor to v0.4's `/super-manus:impl`. Day-to-day execution entry. The user wants you to figure out where work is, draft the next phase's implementation plan if needed (delegated to the `impl-architect` subagent), check it against the module's PRD, write tests (delegated to `impl-test-writer`), write code (delegated to `impl-code-writer`), verify the phase, and stop.
+This is the v0.7 evolution of `/super-manus:impl`. Day-to-day execution entry. The user wants you to figure out where work is, draft the next phase's implementation plan if needed (delegated to the `impl-architect` subagent), check it against the module's PRD, write tests (delegated to `impl-test-writer`), write code (delegated to `impl-code-writer`), with `impl-reviewer` checkpoints between each writer stage and before phase close, then verify the phase, and stop.
 
-The slash command is a **thin orchestrator**. It does NOT write phase plan content, tests, or source code itself; the three subagents own that. The orchestrator owns: target resolution, phase selection, drift checks, agent spawning + sequencing, the test-file hash check between test-writer and code-writer, the BLOCKING end-of-update drift gate, and phase-close verification.
+The slash command is a **thin orchestrator**. It does NOT write phase plan content, tests, or source code itself; the four subagents own that. The orchestrator owns: target resolution, phase selection, drift checks, agent spawning + sequencing, the **3 review checkpoints with re-spawn loops**, the test-file hash check between test-writer and code-writer, the BLOCKING end-of-update drift gate, and phase-close verification.
 
-Sister command: `/super-manus:impl-all` runs the same 3-agent pipeline but loops through ALL pending phases of the active update without pausing. This command stops after one phase. Use `impl-all` when you trust the breakdown and want to ship the milestone in one go; use `impl` when you want a checkpoint between phases.
+Sister command: `/super-manus:impl-all` runs the same 4-agent pipeline but loops through ALL pending phases of the active update without pausing. This command stops after one phase. Use `impl-all` when you trust the breakdown and want to ship the milestone in one go; use `impl` when you want a checkpoint between phases.
 
 ## Resolve target
 
@@ -113,9 +113,64 @@ The orchestrator MUST:
 
 Engineering detail (DB schema, API endpoints, code snippets, file diffs) lives in this phase plan — NOT in the per-module PRD. The PRD answered "this module IS what"; this phase plan answers "this phase DOES what".
 
-## Step 2 — Spawn impl-test-writer
+## Step 2 — Spawn impl-reviewer (mode=pre-test) [v0.7]
 
-After the architect's plan is in place, the orchestrator spawns the `impl-test-writer` subagent (Agent tool, `subagent_type="impl-test-writer"`). The agent owns the persona ("senior test engineer"), the read-priority hierarchy, the e2e decision tree, and the per-language naming conventions. Do NOT inline that persona here — see [agents/impl-test-writer.md](../agents/impl-test-writer.md).
+Before spending test-writer + code-writer budget, the orchestrator spawns `impl-reviewer` (Agent tool, `subagent_type="impl-reviewer"`) in `pre-test` mode to check whether the architect's plan is grounded in real data and free of unresolved `(audit)` markers. The reviewer is read-only by tool surface (no Write/Edit) and emits one of three verdicts. See [agents/impl-reviewer.md](../agents/impl-reviewer.md) for the persona and per-mode checklist.
+
+### Inputs to pass
+
+Same inputs as architect (`project_root`, `module`, `update_dir`, `phase_number`, `phase_name`, `module_prd_path`, `index_prd_path`, `task_plan_path`, `phase_plan_path`, `findings_path`, `lsp_available`) plus:
+
+- `mode` — `pre-test`
+- `attempt_number` — `1` on first invocation; incremented on re-spawn after RETURN
+
+### Spawning prompt skeleton
+
+> Inputs from /super-manus:impl orchestrator (review checkpoint #1):
+>
+> - mode: `pre-test`
+> - attempt_number: `<1|2|3>`
+> - project_root: `<absolute path>`
+> - module: `<module>`
+> - update_dir: `<absolute path>`
+> - phase_number: `<n>`
+> - phase_name: `<name>`
+> - module_prd_path: `<absolute path>`
+> - index_prd_path: `<absolute path>`
+> - task_plan_path: `<absolute path>`
+> - phase_plan_path: `<absolute path>`
+> - findings_path: `<absolute path>`
+> - lsp_available: `<true|false>`
+>
+> Run pre-test review per your agent definition. Return ONE of: APPROVE, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
+
+### Verdict handling
+
+Track per-checkpoint counter `counter[#1]` (resets per phase, NOT per attempt). Initialize to 0. On verdict:
+
+- **APPROVE** → continue to Step 3 (test-writer). Optionally surface reviewer's `notes` block to user as informational.
+- **RETURN_TO_ARCHITECT** → increment `counter[#1]`. If `counter[#1] > 2`, fall through to ESCALATE handling below. Otherwise:
+  1. Append the reviewer's full verdict block as a row to `$UPDATE_DIR/findings.md ## Errors`:
+     ```
+     | <YYYY-MM-DD> | review #1 attempt <N> RETURN_TO_ARCHITECT | <issues summary>; suggested: <suggested_actions summary> |
+     ```
+  2. Re-spawn `impl-architect` (Step 1) with same inputs PLUS a `previous_attempt_feedback` block in the prompt containing the reviewer's `issues` and `suggested_actions` verbatim.
+  3. After architect re-emits the plan, re-invoke this Step 2 review with `attempt_number = counter[#1] + 1`.
+- **ESCALATE_TO_USER** (or counter exhausted) → stop the phase. Append the escalation history to `findings.md ## Errors`. Surface to user verbatim:
+
+  > Phase <n> stopped at review checkpoint #1 (pre-test) after <N> attempts. Reviewer's final verdict:
+  > <full ESCALATE_TO_USER block>
+  >
+  > User options:
+  > <reviewer's user_options>
+  >
+  > Next: edit the plan / PRD / phase row manually, or revise scope, then re-run /super-manus:impl.
+
+  Phase Status stays `in_progress`. Do NOT proceed to test-writer.
+
+## Step 3 — Spawn impl-test-writer
+
+After review #1 APPROVES, the orchestrator spawns the `impl-test-writer` subagent (Agent tool, `subagent_type="impl-test-writer"`). The agent owns the persona ("senior test engineer"), the read-priority hierarchy, the e2e decision tree, and the per-language naming conventions. Do NOT inline that persona here — see [agents/impl-test-writer.md](../agents/impl-test-writer.md).
 
 Why a subagent: tests anchored in PRD spec (not impl plan) need a distinct persona from the planner. Splitting the persona prevents the architect's `## Approach` framing from leaking into test structure.
 
@@ -165,19 +220,76 @@ The agent commits ONLY test files. The orchestrator will reject (and abort the p
 
 1. Verify the commit touches only paths under `$UPDATE_DIR/tests/` and `docs/super-manus/e2e/`. If any source file was touched, ABORT — append a `test-writer touched non-test files` row to `prd_drift.md` and surface to user.
 2. Surface the agent's summary line verbatim.
-3. Snapshot SHA-256 of every test file the test-writer touched in this commit. Build a list:
 
-   ```bash
-   git diff --name-only HEAD~1 HEAD | while read p; do
-     sha256sum "$p" >> "$UPDATE_DIR/.test_hashes_p<n>.txt"
-   done
-   ```
+(Hash baseline is established AFTER review #2 APPROVES — see Step 5.)
 
-   Keep the hash file in `$UPDATE_DIR` so re-spawn can reload it.
+## Step 4 — Spawn impl-reviewer (mode=pre-code) [v0.7]
 
-## Step 3 — Spawn impl-code-writer
+After the test-writer commits red tests, the orchestrator spawns `impl-reviewer` in `pre-code` mode to verify fixtures use real data (not inline dicts derived from architect's plan), tests cover all declared inputs, and tests are not vacuous (passing before code exists).
 
-The orchestrator now spawns the `impl-code-writer` subagent (Agent tool, `subagent_type="impl-code-writer"`). The agent owns the persona ("senior implementation engineer"), the iteration loop, and the hard rule that NO test files may be edited. Do NOT inline that persona here — see [agents/impl-code-writer.md](../agents/impl-code-writer.md).
+### Inputs to pass
+
+Same as Step 2 but with `mode = pre-code` and one additional input:
+
+- `phase_tests_glob` — `$UPDATE_DIR/tests/phase_p<n>_*.{ext}`
+- `e2e_tests_glob` — comma-separated globs covering touched e2e files (extracted from the test-writer's commit)
+
+### Spawning prompt skeleton
+
+> Inputs from /super-manus:impl orchestrator (review checkpoint #2):
+>
+> - mode: `pre-code`
+> - attempt_number: `<1|2|3>`
+> - project_root: `<absolute path>`
+> - module: `<module>`
+> - update_dir: `<absolute path>`
+> - phase_number: `<n>`
+> - phase_name: `<name>`
+> - module_prd_path: `<absolute path>`
+> - index_prd_path: `<absolute path>`
+> - task_plan_path: `<absolute path>`
+> - phase_plan_path: `<absolute path>`
+> - phase_tests_glob: `<glob>`
+> - e2e_tests_glob: `<comma-separated globs>`
+> - findings_path: `<absolute path>`
+> - lsp_available: `<true|false>`
+>
+> Run pre-code review per your agent definition. Return ONE of: APPROVE, RETURN_TO_TEST_WRITER, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
+
+### Verdict handling
+
+Track per-checkpoint counter `counter[#2]`. Initialize to 0.
+
+- **APPROVE** → continue to Step 5 (hash baseline + spawn code-writer).
+- **RETURN_TO_TEST_WRITER** → increment `counter[#2]`. If `counter[#2] > 2`, ESCALATE. Otherwise:
+  1. Append verdict to `findings.md ## Errors`.
+  2. Re-spawn `impl-test-writer` (Step 3) with `previous_attempt_feedback` block.
+  3. After test-writer re-commits, re-invoke this Step 4 review with `attempt_number = counter[#2] + 1`.
+- **RETURN_TO_ARCHITECT** → increment `counter[#2]`. If `counter[#2] > 2`, ESCALATE. Otherwise:
+  1. Append verdict to `findings.md ## Errors`.
+  2. Re-spawn `impl-architect` (Step 1) with `previous_attempt_feedback`. (Counter at #1 does NOT increment — this is checkpoint #2's RETURN, even if it cascades upstream.)
+  3. After architect re-emits, re-spawn `impl-test-writer` (Step 3) — fresh attempt, counter[#1] AND #2 both apply to their own checkpoints.
+  4. Re-invoke Step 2 review (with `counter[#1]` reset to 0 since plan is fresh — but reuse history from prior attempts in findings.md).
+  5. If Step 2 APPROVES, fall through to Step 3 (test-writer), then re-invoke this Step 4 review with `attempt_number = counter[#2] + 1`.
+- **ESCALATE_TO_USER** (or counter exhausted) → stop the phase as in Step 2's ESCALATE handling. Phase Status stays `in_progress`.
+
+## Step 5 — Hash baseline + spawn impl-code-writer
+
+After review #2 APPROVES, the orchestrator FIRST establishes the hash baseline on the test files that just passed review:
+
+```bash
+git diff --name-only HEAD~1 HEAD | while read p; do
+  case "$p" in
+    "$UPDATE_DIR/tests/"*|"docs/super-manus/e2e/"*)
+      sha256sum "$p" >> "$UPDATE_DIR/.test_hashes_p<n>.txt"
+      ;;
+  esac
+done
+```
+
+Keep the hash file in `$UPDATE_DIR` so cascade re-spawn (e.g., RETURN_TO_TEST_WRITER from review #3) can reload it after the new test commit. **The hash baseline always reflects the latest reviewer-approved test commit.** When test-writer is re-spawned and re-commits, this Step 5 reruns and the baseline is refreshed.
+
+Then spawn the `impl-code-writer` subagent (Agent tool, `subagent_type="impl-code-writer"`). The agent owns the persona ("senior implementation engineer"), the iteration loop, and the hard rule that NO test files may be edited. Do NOT inline that persona here — see [agents/impl-code-writer.md](../agents/impl-code-writer.md).
 
 ### Inputs to pass in the spawning prompt
 
@@ -213,9 +325,63 @@ Pass these in the Agent tool's `prompt` field:
 >
 > Write source code to make all phase tests + touched e2e tests pass per your agent definition. Do NOT touch any file under `tests/` or `docs/super-manus/e2e/`. Commit ONLY source files. Return the summary line when done.
 
-The agent iterates source-code → run tests → repeat until all green, then commits source files only and returns.
+The agent iterates source-code → run tests → repeat until all green, then commits source files only and returns. The agent may also return early in **stuck state** ("tests un-passable") — surface that state to review #3 in Step 6 below.
 
-## Step 4 — Hash check (cheat-prevention)
+## Step 6 — Spawn impl-reviewer (mode=pre-close) [v0.7]
+
+After the code-writer returns (whether green or stuck), the orchestrator spawns `impl-reviewer` in `pre-close` mode to verify the implementation matches the plan, touches only declared files, has no security smells, and (if code-writer reported stuck) to diagnose whether the test, the plan, or the code is the root cause.
+
+### Inputs to pass
+
+Same as Step 4 plus:
+
+- `mode` — `pre-close`
+- `code_writer_stuck` — `true` if code-writer returned with "tests un-passable" / similar; `false` if code-writer reported all tests green
+
+### Spawning prompt skeleton
+
+> Inputs from /super-manus:impl orchestrator (review checkpoint #3):
+>
+> - mode: `pre-close`
+> - attempt_number: `<1|2|3>`
+> - code_writer_stuck: `<true|false>`
+> - project_root: `<absolute path>`
+> - module: `<module>`
+> - update_dir: `<absolute path>`
+> - phase_number: `<n>`
+> - phase_name: `<name>`
+> - module_prd_path: `<absolute path>`
+> - task_plan_path: `<absolute path>`
+> - phase_plan_path: `<absolute path>`
+> - phase_tests_glob: `<glob>`
+> - e2e_tests_glob: `<comma-separated globs>`
+> - findings_path: `<absolute path>`
+> - lsp_available: `<true|false>`
+>
+> Run pre-close review per your agent definition. Return ONE of: APPROVE, RETURN_TO_CODE_WRITER, RETURN_TO_TEST_WRITER, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
+
+### Verdict handling
+
+Track per-checkpoint counter `counter[#3]`. Initialize to 0.
+
+- **APPROVE** → continue to Step 7 (hash check, then verification).
+- **RETURN_TO_CODE_WRITER** → increment `counter[#3]`. If `counter[#3] > 2`, ESCALATE. Otherwise:
+  1. Append verdict to `findings.md ## Errors`.
+  2. Re-spawn `impl-code-writer` (Step 5) with `previous_attempt_feedback`. (No hash refresh — tests unchanged.)
+  3. After code-writer re-commits (or returns stuck again), re-invoke this Step 6 review with `attempt_number = counter[#3] + 1`.
+- **RETURN_TO_TEST_WRITER** → increment `counter[#3]`. If `counter[#3] > 2`, ESCALATE. Otherwise:
+  1. Append verdict to `findings.md ## Errors`.
+  2. Re-spawn `impl-test-writer` (Step 3) with `previous_attempt_feedback`.
+  3. After test-writer re-commits, **re-run Step 4 (review #2 pre-code)** to validate the new tests with `counter[#2]` reset to 0 (fresh tests = fresh checkpoint state at #2; #3's history persists).
+  4. If review #2 APPROVES, refresh hash baseline (Step 5) and re-spawn code-writer (Step 5).
+  5. After code-writer returns, re-invoke this Step 6 review with `attempt_number = counter[#3] + 1`.
+- **RETURN_TO_ARCHITECT** → increment `counter[#3]`. If `counter[#3] > 2`, ESCALATE. Otherwise:
+  1. Append verdict to `findings.md ## Errors`.
+  2. Re-spawn `impl-architect` (Step 1) with `previous_attempt_feedback`. (Counters #1 and #2 reset to 0 — plan + tests are fresh.)
+  3. Cascade through Steps 2 → 3 → 4 → 5 → return here for re-invocation with `attempt_number = counter[#3] + 1`.
+- **ESCALATE_TO_USER** (or counter exhausted) → stop the phase. Append the escalation history to `findings.md ## Errors`. Phase Status stays `in_progress`. Surface to user verbatim per Step 2's ESCALATE template.
+
+## Step 7 — Hash check (cheat-prevention)
 
 After the code-writer returns, re-hash every test file recorded in `.test_hashes_p<n>.txt` and compare:
 
@@ -241,7 +407,7 @@ done < "$UPDATE_DIR/.test_hashes_p<n>.txt"
 
   Do NOT flip the phase status. Do NOT continue to verification. STOP.
 
-## Step 5 — Verification (orchestrator runs `## Verification`)
+## Step 8 — Verification (orchestrator runs `## Verification`)
 
 If hashes match, the orchestrator (NOT the code-writer) runs every command in `$UPDATE_DIR/tasks/p<n>_impl.md ## Verification`. See [skills/verification-before-phase-close/SKILL.md](../skills/verification-before-phase-close/SKILL.md) for the run protocol.
 
@@ -254,7 +420,7 @@ For each bullet:
 
 For manual bullets (`open URL, click X`), prompt the user once to confirm the observable was seen.
 
-## Step 6 — Phase close
+## Step 9 — Phase close
 
 When ALL `## Verification` commands pass:
 

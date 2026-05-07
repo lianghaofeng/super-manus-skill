@@ -141,3 +141,23 @@ If you are re-spawned (e.g. after the orchestrator's hash check passed but `## V
 4. Otherwise, identify the failing test(s) and continue the iteration loop from step 3.
 
 Do NOT redo work already in git; do NOT refactor for style; do NOT widen scope. Re-spawn means "the previous run got partway; finish it".
+
+## Receiving reviewer feedback (re-spawn)
+
+If your spawning prompt includes a `previous_attempt_feedback` block, you have been re-spawned by the orchestrator after `impl-reviewer` (mode=`pre-close`) rejected your previous source code. The block contains the reviewer's `issues` and `suggested_actions` verbatim.
+
+What to do:
+
+1. **Read the feedback first.** Parse each issue. Common patterns at this checkpoint:
+   - "touched files outside `## Files touched`" → revert the unlisted edits, or surface via finding why they're necessary.
+   - "implementation drifted from `## Approach`" → realign your code with the plan, or escalate via finding if the plan is wrong.
+   - "unrelated refactor in commit X" → revert the refactor (karpathy: surgical only).
+   - "security smell on line N" → fix the specific line per reviewer's suggested action.
+   - "tests un-passable; gave up too early" → reviewer believes the tests are correct and a working impl exists. Read the hint in `suggested_actions` and try again.
+2. **Read your prior commit(s).** Use `git diff HEAD~<N> HEAD -- <file>` to see what you wrote. Decide which parts to keep, revert, or rewrite.
+3. **Address each issue specifically.** Either fix it or explicitly disagree in your summary line.
+4. **Re-run all tests after rewriting.** Phase tests + touched e2e tests must all be green before you commit your fix and return. Same iteration loop as the original run.
+5. **No partial fixes.** If you can't fully address an issue (e.g., reviewer says "implement X" but X requires a library not in `## Files touched`), surface via `findings.md ## Errors` and escalate to the orchestrator — do NOT half-fix.
+6. **Tests are still off-limits.** The cheat-prevention barrier is intact across re-spawns. If reviewer's feedback implies a test is wrong, the reviewer should have returned to test-writer instead — say so in your summary if you suspect this misrouting.
+
+The reviewer's feedback is at most 2 rounds (per-checkpoint retry budget = 2). On the 3rd review, if issues remain, the reviewer escalates to the user.

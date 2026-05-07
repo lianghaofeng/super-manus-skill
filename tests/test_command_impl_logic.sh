@@ -70,11 +70,39 @@ grep -qiF "findings.md" "$F" || { echo "FAIL: revert path must require a finding
 # a Pass 2 (e2e coverage). Per-phase terminal: more pending → STOP; no pending →
 # end-of-update gate. /super-manus:impl-all is the loop alternative.
 
-# Spawns ALL THREE agents (existing test only checks impl-architect).
-for sub in impl-architect impl-test-writer impl-code-writer; do
+# Spawns ALL FOUR agents — architect / reviewer / test-writer / code-writer (v0.7).
+for sub in impl-architect impl-reviewer impl-test-writer impl-code-writer; do
   grep -qE "subagent_type=\"${sub}\"" "$F" \
-    || { echo "FAIL: v0.5 must spawn ${sub} via subagent_type=\"${sub}\""; exit 1; }
+    || { echo "FAIL: v0.7 must spawn ${sub} via subagent_type=\"${sub}\""; exit 1; }
 done
+
+# === v0.7 additive assertions =============================================
+# v0.7 inserts impl-reviewer at 3 checkpoints (pre-test / pre-code / pre-close)
+# with per-checkpoint counters (max 2 RETURNs per checkpoint, 3rd → ESCALATE).
+# Reviewer is read-only by tool surface; cheat-prevention semantics preserved.
+# Hash baseline is established AFTER review #2 APPROVE (not before).
+
+# Three reviewer modes
+for mode in pre-test pre-code pre-close; do
+  grep -qF "$mode" "$F" || { echo "FAIL: v0.7 must document reviewer mode '$mode'"; exit 1; }
+done
+
+# Reviewer verdicts — APPROVE / RETURN_TO_<writer> / ESCALATE_TO_USER
+grep -qF "APPROVE" "$F" || { echo "FAIL: v0.7 must document reviewer APPROVE verdict"; exit 1; }
+grep -qE "RETURN_TO_(ARCHITECT|TEST_WRITER|CODE_WRITER)" "$F" \
+  || { echo "FAIL: v0.7 must document RETURN_TO_<writer> verdicts"; exit 1; }
+grep -qE "ESCALATE_TO_USER|ESCALATE\b" "$F" \
+  || { echo "FAIL: v0.7 must document ESCALATE verdict"; exit 1; }
+
+# Per-checkpoint retry counter (3 attempts max, 3rd → ESCALATE)
+grep -qiE "counter\[#1\]|counter\[#2\]|counter\[#3\]|per[- ]checkpoint counter" "$F" \
+  || { echo "FAIL: v0.7 must implement per-checkpoint retry counter"; exit 1; }
+grep -qiE "> 2|max 2|≤2|<= 2" "$F" \
+  || { echo "FAIL: v0.7 must enforce retry budget (max 2 RETURNs per checkpoint)"; exit 1; }
+
+# previous_attempt_feedback passed on re-spawn
+grep -qF "previous_attempt_feedback" "$F" \
+  || { echo "FAIL: v0.7 must pass previous_attempt_feedback on writer re-spawn"; exit 1; }
 
 # Hash check between test-writer and code-writer.
 grep -qE "code-writer modified tests|SHA-256|sha256|sha-256|hash" "$F" \

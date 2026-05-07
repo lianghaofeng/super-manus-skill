@@ -32,11 +32,24 @@ grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must reference docs/super
 grep -qF "prd_drift.md" "$F" || { echo "FAIL: must reference prd_drift.md (drift log, basename or full path)"; exit 1; }
 grep -qF "roadmap.md" "$F" || { echo "FAIL: must reference roadmap.md (basename or full path)"; exit 1; }
 
-# Spawns ALL THREE agents — architect, test-writer, code-writer.
-for sub in impl-architect impl-test-writer impl-code-writer; do
+# Spawns ALL FOUR agents — architect, reviewer (3 invocations), test-writer, code-writer.
+for sub in impl-architect impl-reviewer impl-test-writer impl-code-writer; do
   grep -qE "subagent_type=\"${sub}\"" "$F" \
     || { echo "FAIL: must spawn ${sub} via subagent_type=\"${sub}\""; exit 1; }
 done
+
+# Reviewer 3 invocation modes — pre-test / pre-code / pre-close (v0.7)
+for mode in pre-test pre-code pre-close; do
+  grep -qF "$mode" "$F" \
+    || { echo "FAIL: must reference impl-reviewer mode '$mode'"; exit 1; }
+done
+
+# Reviewer verdict types — APPROVE / RETURN_TO_<writer> / ESCALATE (loop driver)
+grep -qF "APPROVE" "$F" || { echo "FAIL: must mention reviewer APPROVE verdict"; exit 1; }
+grep -qE "RETURN_TO_(ARCHITECT|TEST_WRITER|CODE_WRITER)" "$F" \
+  || { echo "FAIL: must mention RETURN_TO_<writer> verdicts"; exit 1; }
+grep -qE "ESCALATE_TO_USER|ESCALATE\b" "$F" \
+  || { echo "FAIL: must mention ESCALATE verdict"; exit 1; }
 
 # Hash / tamper check: must mention 'code-writer modified tests' OR 'SHA-256'.
 grep -qE "code-writer modified tests|SHA-256|sha256|sha-256" "$F" \

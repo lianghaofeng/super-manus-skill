@@ -48,4 +48,29 @@ grep -qiE "MUST NOT.*edit|do NOT.*modify|forbidden.*edit|cannot edit" "$F" \
 grep -qiE "skip|@pytest\.skip|it\.skip" "$F" \
   || { echo "FAIL: must say code-writer must NOT skip tests"; exit 1; }
 
+# === v0.7 additive assertions =============================================
+# v0.7 inserts impl-reviewer at 3 checkpoints; non-negotiable order grows from
+# 6 steps to 8 steps (review #1 between architect and test-writer; review #2
+# between test-writer and hash; review #3 between code-writer and verify).
+
+# Reviewer agent referenced in the order
+grep -qF "impl-reviewer" "$F" || { echo "FAIL: v0.7 must reference impl-reviewer in non-negotiable order"; exit 1; }
+
+# Three review modes
+grep -qF "pre-test" "$F" || { echo "FAIL: v0.7 must mention pre-test review"; exit 1; }
+grep -qF "pre-code" "$F" || { echo "FAIL: v0.7 must mention pre-code review"; exit 1; }
+grep -qF "pre-close" "$F" || { echo "FAIL: v0.7 must mention pre-close review"; exit 1; }
+
+# Per-checkpoint retry counter (max 2 RETURNs per checkpoint)
+grep -qiE "counter\[#1\]|counter\[#2\]|counter\[#3\]|per[- ]checkpoint counter" "$F" \
+  || { echo "FAIL: v0.7 must specify per-checkpoint counter mechanism"; exit 1; }
+
+# Reviewer is read-only by tool surface (cheat-prevention preserved)
+grep -qiE "read[- ]only|no Write|no Edit" "$F" \
+  || { echo "FAIL: v0.7 must say reviewer is read-only by tool surface"; exit 1; }
+
+# Hash baseline established AFTER review #2 APPROVE (not before, as in v0.5/v0.6)
+grep -qiE "after review #2 APPROVE|after review.*APPROVE|never before|after.*reviewer.*APPROVE" "$F" \
+  || { echo "FAIL: v0.7 must specify hash baseline established AFTER review #2 APPROVE"; exit 1; }
+
 echo OK

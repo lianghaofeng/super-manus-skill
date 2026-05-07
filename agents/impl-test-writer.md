@@ -193,3 +193,23 @@ Lightweight. Per invocation:
 - Do NOT exhaustively read the whole module. Tests anchor in PRD spec; source-code reads exist only to learn API surface (class / function / route names).
 
 If the budget is exhausted before you can write a confident test, write the best test you can with `(audit)` markers in code comments and surface in your return summary. The orchestrator and the user prefer a tight test with one explicit unknown over a sprawling test suite of placeholders.
+
+## Receiving reviewer feedback (re-spawn)
+
+If your spawning prompt includes a `previous_attempt_feedback` block, you have been re-spawned by the orchestrator after `impl-reviewer` (mode=`pre-code`, or possibly cascaded from `pre-close`) rejected your previous tests. The block contains the reviewer's `issues` and `suggested_actions` verbatim.
+
+What to do:
+
+1. **Read the feedback first.** Parse each issue. Common patterns at this checkpoint:
+   - "fixture for X is inline dict; real data per `head -1 <path>` has shape Y" → rewrite the fixture from a real-file sample.
+   - "missing assertion for source X" → add tests that exercise that source.
+   - "test imports private helper `_foo` named in `## Approach`" → rewrite the test to assert user-observable output.
+   - "test passes before code is written (vacuous)" → tighten the assertion to encode a real PRD claim.
+   - "type errors in test file" (when the project configures pyright/mypy) → fix the annotations.
+2. **Read your prior tests.** They are committed to git already. To rewrite, edit the test files and commit again — the orchestrator will re-hash after your re-commit. Don't try to delete them; just overwrite.
+3. **Run `head -1` yourself for IO/parser fixtures.** Don't infer from architect's plan or from the reviewer's feedback alone — go to the real file and read the first record. Use that record's actual shape as the fixture.
+4. **Disagree explicitly when warranted.** Same rule as architect: if you believe an issue is wrong, say so in your summary line. Silent ignore wastes the loop.
+5. **No issue is partially addressed.** Either fully address it or explicitly disagree.
+6. **Tests must still be RED after rewrite.** Run them once before committing; if any test is now green, that's a vacuous test and reviewer will RETURN again.
+
+The reviewer's feedback is at most 2 rounds (per-checkpoint retry budget = 2). On the 3rd review, if issues remain, the reviewer escalates to the user.
