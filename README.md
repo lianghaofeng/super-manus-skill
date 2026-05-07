@@ -197,6 +197,61 @@ The on-disk layout super-manus creates inside a project that uses it:
 
 **No changelog markers anywhere in PRD.** PRD is a current-state snapshot. History lives in `git log` and per-update `findings.md`.
 
+## Drift detection
+
+The cardinal rule of super-manus: **the agent never silently updates PRD**. When PRD and code disagree, the disagreement is logged to `prd_drift.md` and surfaced to you — you decide whether code retreats or PRD advances.
+
+### What counts as drift
+
+| Direction | Example | Term |
+|---|---|---|
+| Code adds a capability PRD didn't promise | Implementation exposes `GET /metrics`, PRD has no observability bullet | **over-shoot** |
+| Code lacks a capability PRD promised | PRD says "SSO supported", code has no SSO path | **under-shoot** |
+| Code violates a `## Quality bar` constraint | PRD says p99 < 200ms, observed p99 is 5s | **quality violation** |
+| Code crosses a `## Out of scope` line | PRD excludes mobile, repo gains a React Native entry | **out-of-scope crossing** |
+
+### When detection runs
+
+Not a daemon — it runs on five command paths:
+
+| Trigger | Compares |
+|---|---|
+| `/super-manus:sync <module>` | The new milestone's stated intent vs the module's current PRD |
+| `/super-manus:impl` (phase entry) | The phase's `## Objective` vs PRD `## What users get` / `## Quality bar` / `## Out of scope` |
+| `/super-manus:impl` (after each commit) | Commit messages + diff signals vs PRD |
+| `/super-manus:drive` | Roadmap + PRD + code, three-way sweep |
+| End-of-update gate (3 passes) | Refresh from commits / e2e coverage / `pending` count must be 0 |
+
+### How detection works
+
+The protocol (see [skills/using-sm/SKILL.md §4](skills/using-sm/SKILL.md)) uses two tools that answer different questions:
+
+- **LSP** (`workspace_symbols`, `document_symbols`, `find_references`) — structural truth: does the symbol PRD claims actually exist in the indexed code?
+- **grep + Read** — textual signals: TODO markers, route paths, config files, license clauses, anything LSP doesn't index.
+
+The **double-source rule**: a drift verdict requires both signals to agree. Single-source claims become `(audit)` markers in PRD `## Open questions`, not drift rows. Budget per check: ≤10 LSP calls + ≤30 grep/Read calls; over-budget → stop and report, no exhaustive sweeps.
+
+LSP unavailable (cold project, polyglot repo, missing toolchain) → grep-only mode, every verdict tagged `(audit)`.
+
+### What happens when drift is found
+
+```
+detected
+   ↓
+append one row to prd_drift.md (Resolution = pending)
+   ↓
+agent stops, presents two paths:
+   1. git revert <commit>           — code retreats to PRD
+   2. /super-manus:prd-update <m>   — PRD advances to code
+   ↓
+you decide. agent never silently moves PRD.
+   ↓
+end-of-update gate refuses to flip roadmap → stable
+while any pending row exists for the module
+```
+
+The `prd_drift.md` file is **append-only**. Resolution flips out of `pending` only via `/super-manus:prd-update` (drift mode) or by a future drift check observing the conflict no longer exists (e.g. after `git revert`). This is the same mechanism that keeps the implementing agent honest — no silent overrides, every disagreement on the record.
+
 ## Self-sufficient execution discipline
 
 super-manus does not depend on any other workflow plugin. The execution layer is built in:

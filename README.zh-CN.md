@@ -196,6 +196,61 @@ super-manus 在使用它的项目里建出的磁盘布局：
 
 **PRD 里不留 changelog 标记**。PRD 是当前态快照，历史在 `git log` 和每个 update 的 `findings.md` 里。
 
+## Drift 检测
+
+super-manus 的核心铁律：**agent 永远不会静默更新 PRD**。PRD 和代码对不上时，分歧被写到 `prd_drift.md` 并暴露给你 —— 由你决定让代码回退还是让 PRD 跟过来。
+
+### 什么算 drift
+
+| 方向 | 例子 | 术语 |
+|---|---|---|
+| 代码多了 PRD 没承诺的能力 | 加了 `GET /metrics`，PRD 没承诺可观测性 | **over-shoot（超出）** |
+| 代码少了 PRD 承诺的能力 | PRD 写「支持 SSO」，代码完全没做 | **under-shoot（欠缺）** |
+| 代码违反 `## Quality bar` 条款 | PRD 写 p99 < 200ms，实测 5s | **质量违约** |
+| 代码越过 `## Out of scope` 红线 | PRD 排除移动端，但加了 React Native 入口 | **越界** |
+
+### 什么时候跑
+
+**不是后台守护进程**，是命令执行路径上主动跑的，5 个入口：
+
+| 触发时机 | 对比的内容 |
+|---|---|
+| `/super-manus:sync <module>` | 新里程碑的意图 vs 该模块当前 PRD |
+| `/super-manus:impl`（进入 phase 时） | phase 的 `## Objective` vs PRD `## What users get` / `## Quality bar` / `## Out of scope` |
+| `/super-manus:impl`（每次 commit 之后） | commit 消息 + diff 暗示的能力 vs PRD |
+| `/super-manus:drive` | roadmap + PRD + 代码三方对照 |
+| End-of-update gate（3 pass） | refresh from commits / e2e 覆盖检查 / pending == 0 必须成立 |
+
+### 检测机制
+
+协议在 [skills/using-sm/SKILL.md §4](skills/using-sm/SKILL.md)，用两种工具回答不同问题：
+
+- **LSP**（`workspace_symbols`、`document_symbols`、`find_references`）—— 结构性事实：PRD 声称的 symbol 在索引过的代码里到底存不存在？
+- **grep + Read** —— 文本信号：TODO 注释、route 路径、配置文件、license 条款，凡是 LSP 索引不到的。
+
+**双源规则（double-source rule）**：一条 drift 结论必须 LSP 和 grep 都同意；单源结论会变成 PRD `## Open questions` 里的 `(audit)` 标记，**不进 prd_drift.md**。每次检查的预算：≤10 次 LSP 调用 + ≤30 次 grep/Read 调用；超预算 → 停下报告，不做穷举式扫描。
+
+LSP 不可用时（冷项目、多语言仓库、缺工具链）→ grep-only 模式，所有结论都带 `(audit)` 标。
+
+### 检测到 drift 之后
+
+```
+检测到
+   ↓
+往 prd_drift.md append 一行（Resolution = pending）
+   ↓
+agent 停下，给你两条路：
+   1. git revert <commit>           —— 让代码退回 PRD
+   2. /super-manus:prd-update <m>   —— 让 PRD 跟过来
+   ↓
+你决定。agent 绝不静默改 PRD。
+   ↓
+收尾 gate 在该模块还有 pending 行时
+拒绝把 roadmap 翻成 stable
+```
+
+`prd_drift.md` 是 **append-only**。Resolution 翻出 `pending` 只有两条路径：通过 `/super-manus:prd-update`（drift 模式），或者下次 drift check 发现冲突已经不存在了（比如 `git revert` 之后）。这套机制和"防止写实现的 agent 给自己测试放水"是同一个底层原则 —— 没有静默覆盖，每一处分歧都留底。
+
 ## 自给自足的执行纪律
 
 super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
