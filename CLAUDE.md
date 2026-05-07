@@ -53,8 +53,8 @@ Invariants:
 
 ## Architecture
 
-- `/super-manus:impl` runs ONE phase through 3 agents in series: **impl-architect** (drafts `tasks/p<n>_impl.md`) → **impl-test-writer** (commits red phase tests + e2e) → **impl-code-writer** (writes source until tests green). Orchestrator hashes test files between steps 2 and 3; tamper aborts the phase.
-- `/super-manus:impl-all` loops the same pipeline through all pending phases without pausing.
+- `/super-manus:impl` runs ONE phase through 4 agents with 3 review checkpoints: **impl-architect** (drafts `tasks/p<n>_impl.md`) → **impl-reviewer** [pre-test] → **impl-test-writer** (commits red phase tests + e2e) → **impl-reviewer** [pre-code] → **impl-code-writer** (writes source until tests green) → **impl-reviewer** [pre-close]. Reviewer is read-only by tool surface (no Write/Edit) and drives re-spawn loops; APPROVE / RETURN_TO_<writer> / ESCALATE_TO_USER per checkpoint, retry budget = 2 RETURNs (3rd ESCALATEs). Hash baseline for cheat-prevention is established AFTER review #2 APPROVE — never before — so cascade re-spawns (review #3 → test-writer) can re-hash on the new test commit.
+- `/super-manus:impl-all` loops the same pipeline through all pending phases without pausing; loop-stops include reviewer ESCALATE_TO_USER.
 - `/super-manus:prd-update <module>` is dual-mode: forward iteration (no pending drift row → user adds/tightens a bullet before coding; skip findings.md write) or drift absorption (pending row → write findings.md decision + flip Resolution). Mode auto-detected.
 - Skills `tdd-in-phases` / `verification-before-phase-close` / `systematic-debugging-in-phase` are invoked by `/super-manus:impl` during phase execution. `using-sm` is the umbrella skill invoked by every `/super-manus:*` command.
 
@@ -68,6 +68,6 @@ Invariants:
 
 ## Where to look
 
-- **Current design**: `docs/design-v0.6.md` — read this before adding anything.
-- Older designs at `docs/design-v0.{1,2,4,5}.md` — superseded, kept for historical reference only. Don't read unless you need to understand WHY a current invariant exists.
+- **Current design**: `docs/design-v0.7.md` — read this before adding anything. Covers the 4-agent reviewer pipeline (v0.7.0) and the v0.7.1 PRD-template refinements (`## How it connects` Exposes/Consumes preamble + `## Data flow overview` `(for: <capability>)` edge annotation).
+- Older designs at `docs/design-v0.{1,2,4,5,6}.md` — superseded, kept for historical reference only. Don't read unless you need to understand WHY a current invariant exists.
 - Per-task implementation plans live at `docs/plans/`.
