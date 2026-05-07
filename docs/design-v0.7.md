@@ -276,3 +276,73 @@ These choices were made during user audit before implementation. All five locked
 3. **Pre-test reviewer runs `head -1` itself** (rather than relying on architect to paste real-data samples into `## Approach`). Reasoning: putting the verification step inside the reviewer keeps a single source of ground truth; relying on architect to produce samples means architect could still paste paraphrased / outdated content. Reviewer's tool surface includes Bash for exactly this.
 4. **Type-check / lint is project-configured-only** ("pure A"). If `pyproject.toml` declares mypy/pyright, or `tsconfig.json` declares strict mode, the pre-code reviewer runs that checker on the test files. **If the project has no such config, the reviewer skips type-check entirely.** No fallback `python -m py_compile` floor check, no forced strict checker. Reasoning: super-manus should respect project conventions, not impose strict typing on projects that intentionally use untyped code. The dogfood case (pyright `Iterator[str]` error) would be caught here because that project does configure pyright.
 5. **Reviewer references `using-sm/SKILL.md §9`** (the four karpathy-guidelines principles: surgical / surface assumptions / verifiable / no overcomplication) as its coding-discipline touchstone, same as the writers. No reviewer-specific checklist for now. Flagged for future maintainers if specialization proves necessary.
+
+## 11. v0.7.1 addendum — PRD-template refinements
+
+Borrowed from a formal-PRD framework discussion (DDD-flavored): two surgical edits to the PRD templates that make module boundaries semantically auditable from the PRD alone, without changing headings, MODULE–DIAGRAM INVARIANT, or any orchestrator/agent wiring beyond `agents/reverse-prd-architect.md`.
+
+### What changed
+
+1. **`templates/prd_module.md ## How it connects`** — section now opens with an `Exposes:` / `Consumes:` semantic preamble before the existing Upstream/Downstream/Third-party + edge list block:
+
+   ```
+   Exposes:
+   - <capability name in PM voice> → <consumer module / external actor>
+
+   Consumes:
+   - <capability name in PM voice> ← <provider module / external system>
+
+   Upstream (who calls in): ...
+   Downstream (where outputs go): ...
+   Third-party (external): ...
+
+   Edge list:
+   - in:  ← <X> via <protocol>
+   - out: → <Y> via <protocol>
+   ```
+
+   Items are **PM-voice capability nouns** ("order placement", "credit-score lookup", "vector search"), NOT endpoint paths or symbol names. Endpoint detail stays in the Edge list where it always was.
+
+2. **`templates/prd_index.md ## Data flow overview`** — edge list backup format gains a `(for: <capability>)` purpose annotation per edge:
+
+   ```
+   <A> --<protocol>--> <B> [path/topic] (for: <capability>)
+   ```
+
+   The capability name in `(for: ...)` matches the consuming module's `Exposes` (or its own `## What users get` bullet that the edge backs). The two sections now share one capability vocabulary.
+
+### Why
+
+- **Module-split decisions become auditable from PRD alone.** Before v0.7.1, the only way to evaluate "should X be its own module?" was to read `## How it connects` + edge list + count protocols. After v0.7.1, you read the Exposes block: a module exposing 12 unrelated capabilities is over-scoped; a module exposing 1 capability that's only consumed once may be premature.
+- **Cross-module debugging and review get semantic context.** "Edge X carries capability Y" is meaningfully more useful than "Edge X uses gRPC" when triaging incidents or auditing scope creep.
+- **Cheap to adopt incrementally.** Existing PRDs render fine without the new fields; `/super-manus:reverse-prd` re-runs fill them, manual updates work too.
+
+### Why **not** more from the formal-PRD framework
+
+The framework also recommended document control / changelog markers, formal NFR SLAs, rollout/rollback plans, state machines, and per-section acceptance criteria. All deliberately rejected:
+
+- **Document control / changelog**: contradicts super-manus's "PRD is target state, `git log -p prd/<module>.md` is the audit trail" invariant. Adding dated revision marks creates rot.
+- **Formal NFRs (QPS / latency SLAs)**: super-manus's `## Quality bar` already supports measurable bullets. Forcing numbers in the template pushes toward fabricated SLAs for projects that don't actually have them.
+- **State machines, rollback plans, monitoring**: belong in `impl/<m>/<u>/tasks/p<n>_impl.md ## Approach` (state machines) or runbooks/SRE docs (rollback, monitoring). Not PRD scope.
+- **Phased milestones inside PRD**: phasing already lives in `impl/<m>/<u>/task_plan.md ## Phases`. Duplicating it inside PRD creates a synchronization burden with no benefit.
+
+### Cascade implemented
+
+- `templates/prd_module.md` — new placeholder body for `## How it connects`.
+- `templates/prd_index.md` — new placeholder body for `## Data flow overview` edge list spec.
+- `agents/reverse-prd-architect.md` — derivation rules for both new fields:
+  - **Exposes** is derived from THIS module's `## What users get` capabilities × `find-references` on the module's exports.
+  - **Consumes** is derived from upstream module's `## What users get` capabilities (read directly from the upstream `prd/<upstream>.md`).
+  - **`(for: <capability>)`** is derived from the consumed-side module's `## What users get` bullet that the edge backs; if no single bullet fits, mark `(for: (audit))`.
+- `skills/using-sm/SKILL.md` summary line — updated to mention "Exposes/Consumes semantic preamble" alongside the structural edge list.
+- `commands/prd-update.md` — added verification guidance for capability-boundary edits (Tighten/Split on Exposes/Consumes lines verifies the capability still crosses the boundary; Demote rarely applies; the `(for: <capability>)` annotation must continue to match a real upstream `## What users get` bullet).
+- `tests/test_template_prd_module.sh` / `tests/test_template_prd_index.sh` / `tests/test_agent_reverse_prd_architect.sh` — keyword assertions for `Exposes:`, `Consumes:`, `(for:`.
+
+### Migration
+
+None required. Existing PRDs render fine. To adopt:
+
+- New PRDs created via `/super-manus:start` or `/super-manus:reverse-prd` get the new fields automatically.
+- Existing PRDs: re-run `/super-manus:reverse-prd <module>` to regenerate, OR add the Exposes/Consumes block manually using the template as reference.
+
+Plugin manifest bumped to **0.7.1**. Pure additive vs v0.7.0 (no path migration, no orchestrator change, no test-fixture format change beyond the new keyword assertions).

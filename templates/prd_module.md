@@ -20,14 +20,23 @@
 
 ## How it connects
 
-<dependencies in plain language, then a precise edge list.
-- Upstream (who calls in): <list of modules / external actors>
-- Downstream (where outputs go): <list of modules / external systems>
-- Third-party (external): <LLM provider / payment gateway / etc>
+<semantic surface first (what capabilities cross this module's boundary), then structural edges (who/protocol). Format:
+
+Exposes:
+- <capability name in PM voice> → <consumer module / external actor>
+
+Consumes:
+- <capability name in PM voice> ← <provider module / external system>
+
+Upstream (who calls in): <list of modules / external actors>
+Downstream (where outputs go): <list of modules / external systems>
+Third-party (external): <LLM provider / payment gateway / etc>
 
 Edge list:
 - in:  ← <X> via <protocol>
-- out: → <Y> via <protocol>>
+- out: → <Y> via <protocol>
+
+Exposes/Consumes items name PM-voice capabilities ("order placement", "credit-score lookup"), NOT endpoint paths or symbol names. Endpoint detail stays in the Edge list.>
 
 ## Quality bar
 

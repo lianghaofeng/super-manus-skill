@@ -9,6 +9,11 @@ grep -qF "## Users" "$F" || { echo "FAIL: missing Users section"; exit 1; }
 grep -qF "## Success" "$F" || { echo "FAIL: missing Success section"; exit 1; }
 grep -qF "## What users get" "$F" || { echo "FAIL: missing 'What users get' section"; exit 1; }
 grep -qF "## How it connects" "$F" || { echo "FAIL: missing 'How it connects' section"; exit 1; }
+# Exposes/Consumes semantic preamble — names PM-voice capabilities crossing this module's boundary
+# before the structural Upstream/Downstream block. Without this, agents drop back to protocol-only
+# edges and module-split decisions lose their semantic anchor (see borrow from Gemini API-First Contract).
+grep -qF "Exposes:" "$F" || { echo "FAIL: ## How it connects must declare an Exposes: preamble"; exit 1; }
+grep -qF "Consumes:" "$F" || { echo "FAIL: ## How it connects must declare a Consumes: preamble"; exit 1; }
 grep -qF "## Quality bar" "$F" || { echo "FAIL: missing 'Quality bar' section"; exit 1; }
 grep -qF "## Risks" "$F" || { echo "FAIL: missing Risks section"; exit 1; }
 grep -qF "## Out of scope" "$F" || { echo "FAIL: missing 'Out of scope' section"; exit 1; }

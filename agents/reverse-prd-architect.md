@@ -89,7 +89,7 @@ Table with one row per module from `module_list`:
 This section MUST contain (in this order):
 
 (a) **An ASCII architecture diagram** — see Diagram rules below.
-(b) **An edge list backup** — one line per edge: `<A> --<protocol>--> <B> [path/topic]`.
+(b) **An edge list backup** — one line per edge: `<A> --<protocol>--> <B> [path/topic] (for: <capability>)`. The `(for: <capability>)` parenthetical names the PM-voice capability the edge carries (e.g. `(for: order placement)`, `(for: vector search)`). Source the capability from the consuming module's `## What users get` bullet that this edge backs; if no single capability is identifiable, mark `(for: (audit))`.
 (c) **An offline-modules line** — `Offline / batch modules: <comma-separated list>` listing every module from the Modules table that does NOT appear as a box in the diagram.
 (d) **1–2 sentences** in plain language explaining the architecture's core runtime loop.
 
@@ -153,9 +153,15 @@ Source priority for evidence:
 Do NOT invent fields, endpoints, or screens. Use short schema sketches and bullet lists. **Be conservative**: only declare a capability when its presence is visible in the source.
 
 ### `## How it connects`
-Plain-language dependency block first, then a precise edge list. Format:
+Semantic surface first (Exposes/Consumes), then plain-language dependency block, then a precise edge list. Format:
 
 ```
+Exposes:
+- <capability name in PM voice> → <consumer module / external actor>
+
+Consumes:
+- <capability name in PM voice> ← <provider module / external system>
+
 - Upstream (who calls in): <list of modules / external actors>
 - Downstream (where outputs go): <list of modules / external systems>
 - Third-party (external): <LLM provider / payment gateway / etc>
@@ -167,12 +173,18 @@ Edge list:
 
 If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add an ASCII sub-diagram before the edge list (same box-drawing characters as `_index.md`).
 
+Exposes/Consumes are PM-voice capability nouns ("order placement", "credit-score lookup", "vector search"), NOT endpoint paths or symbol names. They name the semantic contract; endpoint detail stays in the Edge list.
+
 Source priority:
 
 1. compose `depends_on` + sibling URL env vars (`GATEWAY_URL`, `VERIFIER_URL`, `DATABASE_URL`) + queue subject / topic names + S3 bucket names
 2. Module entry file's outbound calls — `httpx.AsyncClient(<url>)` / `fetch(<url>)`, `nats.subscribe(<subject>)` / `kafka.subscribe(<topic>)`, SQL connection strings
 3. LSP `find-references` on this module's exports (where it gets called from)
 4. grep imports for LSP misses (config-driven dispatch, dynamic loading, polyglot edges)
+
+Source priority for **Exposes**: derive from THIS module's own `## What users get` capabilities — each capability that's consumed by another module surfaces as one Exposes line, mapping the capability name to its consumer(s) (resolved via LSP `find-references` on this module's exports + grep on internal package imports).
+
+Source priority for **Consumes**: derive from upstream modules' `## What users get` capabilities — for each Downstream/Third-party row, name the capability the upstream module advertises that this module relies on. If the upstream `## What users get` is unwritten yet, mark `(audit — capability name)`.
 
 `(audit)` any single-source claim. infra_deps the module consumes (Postgres tables, NATS subjects, Qdrant collections, Redis prefixes) belong here under Downstream / Third-party — NOT under `## Quality bar`. Internal **library packages** imported by this module — every internal `packages/*` / `libs/*` resolved from this module's `package.json` `dependencies` / `pyproject.toml` `[project.dependencies]` filtered to internal workspace names — also belong here under Upstream (this module depends on them) as a one-line bullet. They are workspace-internal dependencies, not infra and not user-visible NFRs.
 

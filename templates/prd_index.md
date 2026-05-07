@@ -35,4 +35,4 @@
 
 ## Data flow overview
 
-<ASCII architecture diagram (box-drawing characters: ┌ ┐ └ ┘ ─ │ ▲ ▼ ◄ ►) + edge list backup + offline-modules line + 1–2 sentence loop summary. Per-module data flow detail lives in each prd/<module>.md ## How it connects.>
+<ASCII architecture diagram (box-drawing characters: ┌ ┐ └ ┘ ─ │ ▲ ▼ ◄ ►) + edge list backup + offline-modules line + 1–2 sentence loop summary. Edge list format: `<A> --<protocol>--> <B> [path/topic] (for: <capability>)` — the `(for: ...)` parenthetical names the PM-voice capability the edge carries, matching the vocabulary used in each prd/<module>.md ## How it connects Exposes/Consumes block. Per-module data flow detail lives in each prd/<module>.md ## How it connects.>

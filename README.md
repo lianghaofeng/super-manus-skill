@@ -329,7 +329,16 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.7.0 — current
+### v0.7.1 — current
+
+PRD-template refinements borrowed from formal-PRD framework discussion:
+
+- **`prd/<module>.md ## How it connects`** opens with an `Exposes:` / `Consumes:` semantic preamble before the existing Upstream/Downstream/Third-party + edge list. Items are PM-voice capability nouns ("order placement", "credit-score lookup"), not endpoint paths. Makes the module's contract surface explicit so module-split decisions become auditable from the PRD alone.
+- **`prd/_index.md ## Data flow overview`** edge list backup format now requires a `(for: <capability>)` purpose annotation per edge: `<A> --<protocol>--> <B> [path/topic] (for: <capability>)`. The capability vocabulary matches per-module Exposes/Consumes. Cross-module edges now carry semantic meaning, not just protocol.
+
+Both changes are **additive** — no headings renamed, MODULE–DIAGRAM INVARIANT preserved, no migration of existing PRDs needed (re-run `/super-manus:reverse-prd` to regenerate or fill new fields manually). `agents/reverse-prd-architect.md` updated with derivation rules (Exposes from this module's `## What users get`; Consumes from upstream module's `## What users get`; `(for: ...)` from the consumed capability bullet). See `docs/design-v0.7.md` §11 for the full rationale.
+
+### v0.7.0
 
 Adds the **`impl-reviewer` agent** at three checkpoints (`pre-test` / `pre-code` / `pre-close`) inside `/super-manus:impl` and `/super-manus:impl-all`. Read-only by tool surface (no `Write`, no `Edit`); drives a re-spawn loop with per-checkpoint retry budget (max 2 RETURNs per checkpoint; 3rd RETURN escalates to user with full history). Verdicts: `APPROVE` / `RETURN_TO_<writer>` / `ESCALATE_TO_USER`. RETURN can target any upstream writer — `pre-close` reviewer can RETURN_TO_TEST_WRITER if the failing test fixture is wrong, or RETURN_TO_ARCHITECT if the plan turned out wrong only on impl. Cheat-prevention preserved: hash baseline is established AFTER `pre-code` review APPROVE — never before.
 

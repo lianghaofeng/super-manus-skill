@@ -54,6 +54,8 @@ Before writing the edit, run the **Drift check protocol** in [skills/using-sm/SK
 - **Split** — run the protocol on both halves of the proposed split; both must be confirmable independently.
 - **Add** and **Exclude** — no verification needed (Add declares new intent; Exclude removes scope).
 
+If the affected bullet sits inside `## How it connects` Exposes / Consumes preamble, the verification target is the **capability boundary**, not a single symbol. For Tighten / Split: confirm the capability name still matches what crosses the module's boundary by `find-references` on the exported entry (Exposes) or grep imports of the upstream module (Consumes). For Demote: a capability rarely belongs in `## Open questions` — usually the right move is to delete the Exposes/Consumes line entirely if the capability is gone, or to Tighten it if the name is wrong. If the affected line sits in `prd/_index.md ## Data flow overview` edge list, the `(for: <capability>)` annotation must continue to match a real `## What users get` capability bullet on the consuming module — verify by reading that module's PRD.
+
 If LSP is unavailable, fall back to grep + Read alone per the protocol; flag the edit with "LSP unavailable — verification is text-only" in the paired `findings.md` decision entry so the user knows confidence is lower.
 
 ## Hard constraints on the edit

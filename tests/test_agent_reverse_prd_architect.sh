@@ -52,9 +52,20 @@ grep -qiE "offline.*batch modules|offline-modules" "$F" || { echo "FAIL: must re
 # Diagram source must be the compose depends_on graph + env-URL graph
 grep -qiE "compose.*graph|depends_on graph|env-URL graph" "$F" || { echo "FAIL: ## Data flow overview must derive from compose depends_on / env-URL graph"; exit 1; }
 
+# Edge list backup must require a `(for: <capability>)` PM-voice purpose annotation.
+# Without this, edges show only protocol — debugging and module-split decisions lose semantic context.
+grep -qF "(for:" "$F" || { echo "FAIL: ## Data flow overview edge list spec must require '(for: <capability>)' purpose annotation"; exit 1; }
+
 # Source priorities for content filling
 grep -qiE "process entry|Dockerfile CMD|launch target invokes" "$F" || { echo "FAIL: ## What users get must take process entry / Dockerfile CMD as priority 1"; exit 1; }
 grep -qiE "depends_on|sibling URL|queue topic|subject name" "$F" || { echo "FAIL: ## How it connects must take compose depends_on / sibling URLs / queue topics as priority 1"; exit 1; }
+
+# ## How it connects must specify an Exposes/Consumes semantic preamble (PM-voice capability nouns
+# crossing the module boundary), separate from the structural Upstream/Downstream/Edge-list block.
+grep -qF "Exposes:" "$F" || { echo "FAIL: ## How it connects spec must declare an Exposes: preamble"; exit 1; }
+grep -qF "Consumes:" "$F" || { echo "FAIL: ## How it connects spec must declare a Consumes: preamble"; exit 1; }
+grep -qiE "PM.voice capability|capability noun|capability name in PM voice" "$F" || { echo "FAIL: ## How it connects spec must clarify Exposes/Consumes are PM-voice capability nouns (not endpoints)"; exit 1; }
+
 grep -qiE "library package|packages/\*|workspace.*depend" "$F" || { echo "FAIL: ## Quality bar must include internal library-package imports"; exit 1; }
 
 # Drift check protocol — LSP + grep cooperation, with concrete operations + LSP-unavailable fallback

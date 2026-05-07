@@ -328,7 +328,16 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.7.0 —— 当前
+### v0.7.1 —— 当前
+
+PRD 模板小幅锐化，借鉴自一次 formal-PRD 框架讨论：
+
+- **`prd/<module>.md ## How it connects`** 顶部加 `Exposes:` / `Consumes:` 语义前导块，原有 Upstream/Downstream/Third-party + edge list 紧随其后。条目是 PM 口吻的能力名词（"order placement"、"credit-score lookup"），不是 endpoint 路径。让模块的"对外契约面"在 PRD 里直接可见，模块拆分决策只看 PRD 就能审。
+- **`prd/_index.md ## Data flow overview`** 的 edge list backup 强制 `(for: <capability>)` 标注：`<A> --<protocol>--> <B> [path/topic] (for: <capability>)`。`<capability>` 用的是和各模块 Exposes/Consumes 相同的词汇表。跨模块边从只带协议变成带语义。
+
+两处都是**纯追加**——没有 heading 重命名，MODULE–DIAGRAM INVARIANT 保留，已有 PRD 不需要迁移（重跑 `/super-manus:reverse-prd` 自动填，或手动补）。`agents/reverse-prd-architect.md` 同步更新派生规则（Exposes 来自本模块 `## What users get`；Consumes 来自上游模块 `## What users get`；`(for: ...)` 来自被消费的 capability bullet）。完整 rationale 见 `docs/design-v0.7.md` §11。
+
+### v0.7.0
 
 加了 **`impl-reviewer` agent**，在 `/super-manus:impl` 和 `/super-manus:impl-all` 内部三个 checkpoint（`pre-test` / `pre-code` / `pre-close`）跑。工具栏只读（无 `Write`、无 `Edit`），驱动 re-spawn 循环，每个 checkpoint 最多容忍 2 次 RETURN，第 3 次 RETURN 带完整历史升级到用户。Verdict：`APPROVE` / `RETURN_TO_<writer>` / `ESCALATE_TO_USER`。RETURN 可指任意上游 writer——`pre-close` reviewer 可以 RETURN_TO_TEST_WRITER 如果失败测试的 fixture 错了，或者 RETURN_TO_ARCHITECT 如果 plan 在 impl 阶段才暴露写错。**防作弊保留**：hash baseline 在 `pre-code` review APPROVE 之后才建立，绝不更早。
 
