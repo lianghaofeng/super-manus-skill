@@ -34,7 +34,7 @@ The daily loop is small: write a PRD once, then iterate by editing PRD bullets a
 
 | Command | When to run | What it does |
 |---|---|---|
-| `/super-manus:start` | once per project | Seeds `docs/super-manus/{prd,impl,e2e}/`, `roadmap.md`, `prd_drift.md`. |
+| `/super-manus:start` | once per project | Seeds `docs/super-manus/prd/`, `impl/`, `roadmap.md`, `prd_drift.md` (`e2e/` is created lazily by `impl-test-writer` when the first capability ships). |
 | `/super-manus:brainstorm` | new project | 6-question PM interview → writes `prd/_index.md` + per-module `prd/<module>.md` stubs. |
 | `/super-manus:reverse-prd` | existing project, no PRD yet | Reads code (runtime-first module discovery), writes `prd/_index.md` (with ASCII arch diagram) + module stubs. |
 | `/super-manus:prd-update <module>` | adding a capability OR resolving drift | Structured 5-option edit on one `prd/<module>.md`: **add / tighten / split / demote / exclude**. Mode (forward iteration vs drift absorption) is auto-detected. |
@@ -47,15 +47,15 @@ The daily loop is small: write a PRD once, then iterate by editing PRD bullets a
 
 ### `/super-manus:prd-update` — the five edit options
 
-PRD edits are structured, not freeform. One bullet at a time:
+PRD edits are structured, not freeform. One bullet at a time. The command's prompt presents these in a–e order:
 
-| Option | Use when | Effect |
-|---|---|---|
-| **add** | a new capability | Append a bullet to `## What users get`. |
-| **tighten** | a claim is too vague | Rewrite a bullet with sharper user-visible language + technical evidence. |
-| **split** | one bullet covers two distinct capabilities | Replace one bullet with two, both individually auditable. |
-| **demote** | a bullet was overpromised | Move it to `## Open questions`. |
-| **exclude** | a bullet is no longer in scope | Move it to `## Out of scope`. |
+| Letter | Option | Use when | Effect |
+|---|---|---|---|
+| **a** | Tighten | a claim is too vague | Rewrite a bullet with sharper user-visible language + technical evidence. |
+| **b** | Split | one bullet covers two distinct capabilities | Replace one bullet with two, both individually auditable. |
+| **c** | Demote | a bullet was overpromised | Move it to `## Open questions`. |
+| **d** | Exclude | a bullet is no longer in scope | Move it to `## Out of scope`. |
+| **e** | Add | a new capability | Append a bullet to `## What users get`. |
 
 After any edit, run `/super-manus:sync <module>` to scaffold the next milestone.
 
@@ -163,7 +163,7 @@ The on-disk layout super-manus creates inside a project that uses it:
     ├── prd/                                    # project-global, ONE source of truth
     │   ├── _index.md                           # project overview + module manifest + data flow (≤700 words)
     │   └── <module>.md                         # per-module target state (≤2000 words)
-    ├── e2e/                                    # permanent regression suite, mirrors prd/
+    ├── e2e/                                    # permanent regression suite, mirrors prd/ (lazy — created by impl-test-writer on first capability)
     │   ├── _system/
     │   │   └── test_<scenario>.<ext>           # cross-module ## Demo scenarios; auto-discovered, runs in CI
     │   └── <module>/
@@ -190,7 +190,7 @@ The on-disk layout super-manus creates inside a project that uses it:
 
 **Two test tiers** (not interchangeable):
 
-- `e2e/` — **permanent regression**. Lives as long as the PRD capability lives. Auto-discovered by your project's test runner (pytest `test_*.py`, jest `*.test.ts`). Runs in CI on every commit. Gates milestone close.
+- `e2e/` — **permanent regression**. Lives as long as the PRD capability lives. Auto-discovered by pytest's default `test_*.py` glob; jest/vitest projects need to add `testMatch: ['**/test_*.ts']` since their default `*.test.ts` glob skips `test_<capability>.ts` filenames. Runs in CI on every commit. Gates milestone close.
 - `impl/<m>/<u>/tests/` — **milestone-scoped phase tests**. Committed with the update, can be archived when the milestone closes. NOT auto-discovered — invoked by explicit path. The `phase_*` prefix is chosen specifically to dodge default test-runner globs.
 
 **No active-state file.** Hooks resolve the active update by mtime scan of `docs/super-manus/impl/<module>/*/`. One project = one PRD; the "feature" abstraction from older versions is gone.
@@ -244,17 +244,20 @@ The cardinal rule of super-manus: **the agent never silently updates PRD**. When
 | Code violates a `## Quality bar` constraint | PRD says p99 < 200ms, observed p99 is 5s | **quality violation** |
 | Code crosses a `## Out of scope` line | PRD excludes mobile, repo gains a React Native entry | **out-of-scope crossing** |
 
+Pipeline-violation rows also land in `prd_drift.md` and behave the same way: `code-writer modified tests for phase p<n>` (cheat-prevention hash mismatch), `test-writer touched non-test files`, `missing e2e coverage for capability <c>`, and `e2e for capability <c> is red`. They count toward the gate's `pending` total and block roadmap → `stable` until resolved.
+
 ### When detection runs
 
-Not a daemon — it runs on five command paths:
+Not a daemon — it runs on six command paths (anchored in [skills/using-sm/SKILL.md §4 Per-command application](skills/using-sm/SKILL.md)):
 
 | Trigger | Compares |
 |---|---|
+| `/super-manus:reverse-prd` | Inferred PRD claims vs current code (initial bootstrap) |
 | `/super-manus:sync <module>` | The new milestone's stated intent vs the module's current PRD |
+| `/super-manus:prd-update` (Tighten / Demote / Split) | The narrowed/demoted/split bullet vs current code (verification before write) |
 | `/super-manus:impl` (phase entry) | The phase's `## Objective` vs PRD `## What users get` / `## Quality bar` / `## Out of scope` |
-| `/super-manus:impl` (after each commit) | Commit messages + diff signals vs PRD |
-| `/super-manus:drive` | Roadmap + PRD + code, three-way sweep |
-| End-of-update gate (3 passes) | Refresh from commits / e2e coverage / `pending` count must be 0 |
+| `/super-manus:drive` | PRD + roadmap + recent commit-message hints (lightweight pre-action sweep) |
+| End-of-update gate (3 passes) | Pass 1 refresh from commits / Pass 2 e2e coverage / Pass 3 `pending` count must be 0 |
 
 ### How detection works
 
@@ -263,7 +266,7 @@ The protocol (see [skills/using-sm/SKILL.md §4](skills/using-sm/SKILL.md)) uses
 - **LSP** (`workspace_symbols`, `document_symbols`, `find_references`) — structural truth: does the symbol PRD claims actually exist in the indexed code?
 - **grep + Read** — textual signals: TODO markers, route paths, config files, license clauses, anything LSP doesn't index.
 
-The **double-source rule**: a drift verdict requires both signals to agree. Single-source claims become `(audit)` markers in PRD `## Open questions`, not drift rows. Budget per check: ≤10 LSP calls + ≤30 grep/Read calls; over-budget → stop and report, no exhaustive sweeps.
+The **double-source rule**: a drift verdict requires both signals to agree **when both apply** (some inference targets — Quality bar, Risks, product intent — are grep- or Read-only by nature; LSP simply doesn't apply). Single-source claims become `(audit)` markers — either inline in `prd/<module>.md` or under `## Open questions` — not drift rows. Budget per check: ≤10 LSP calls + ≤30 grep/Read calls; over-budget → stop and report, no exhaustive sweeps.
 
 LSP unavailable (cold project, polyglot repo, missing toolchain) → grep-only mode, every verdict tagged `(audit)`.
 
@@ -274,9 +277,10 @@ detected
    ↓
 append one row to prd_drift.md (Resolution = pending)
    ↓
-agent stops, presents two paths:
-   1. git revert <commit>           — code retreats to PRD
-   2. /super-manus:prd-update <m>   — PRD advances to code
+agent stops, presents three resolution paths:
+   1. /super-manus:prd-update <m>      — PRD advances to code (drift mode flips Resolution → prd-update: <a-e>)
+   2. git revert <commit> + edit row   — code retreats to PRD; manually set Resolution = reverted with a one-line note in findings.md
+   3. write the missing e2e + re-run   — for Pass 2 "missing/red e2e" rows, the gate clears the row when the e2e is added and goes green
    ↓
 you decide. agent never silently moves PRD.
    ↓
@@ -284,7 +288,7 @@ end-of-update gate refuses to flip roadmap → stable
 while any pending row exists for the module
 ```
 
-The `prd_drift.md` file is **append-only**. Resolution flips out of `pending` only via `/super-manus:prd-update` (drift mode) or by a future drift check observing the conflict no longer exists (e.g. after `git revert`). This is the same mechanism that keeps the implementing agent honest — no silent overrides, every disagreement on the record.
+The `prd_drift.md` file is **row-append-only** — only the Resolution cell is mutable; rows themselves are never deleted or reordered. This is the same mechanism that keeps the implementing agent honest — no silent overrides, every disagreement on the record.
 
 ## Self-sufficient execution discipline
 
@@ -293,7 +297,7 @@ super-manus does not depend on any other workflow plugin. The execution layer is
 - **`tdd-in-phases`** — when `/super-manus:impl` enters a phase, the test-writer is spawned BEFORE the code-writer (non-negotiable). Phase tests + e2e tests are committed red; code-writer flips them green and is forbidden from editing tests. Three independent barriers prevent the implementing agent from gaming its own tests:
   - **Time** — tests are in git before code-writer is spawned.
   - **Write permission** — code-writer's persona forbids editing tests; orchestrator hashes test files before/after and aborts on tamper.
-  - **Persona** — test-writer anchors tests in PRD `## What users get` / `## Quality bar` / `## Risks`, treating `## Approach` as one of many valid impls.
+  - **Persona** — test-writer anchors tests in PRD `## What users get` / `## Quality bar` / `## Risks` and `_index.md ## Demo` (cross-module scenarios → `e2e/_system/`), treating `## Approach` as one of many valid impls.
 - **`verification-before-phase-close`** — phase Status flips to `closed` only after every command in `tasks/p<n>_impl.md ## Verification` exits green. Verification MUST include (1) the phase test path command and (2) one user-visible smoke command.
 - **`systematic-debugging-in-phase`** — when verify fails, follow the checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, then fix). Three strikes against the same error class → escalate.
 
@@ -314,13 +318,17 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.6.x — current
+### v0.6.1 — current
 
-`/super-manus:prd-update` covers both modes — forward iteration ("add a new bullet before coding") and drift absorption (resolve a pending `prd_drift.md` row). Mode is auto-detected. Plus a docs sweep and a fix making `impl-architect` always declare phase tests under `${update_dir}/tests/` (instead of co-opting the project's existing test suite). Everything from v0.5 stays. See [docs/design-v0.6.md](docs/design-v0.6.md).
+Fix in `impl-architect`: phase tests are now always declared under `${update_dir}/tests/phase_p<n>_*.<ext>` instead of co-opting the project's existing test suite (`apps/<m>/tests/`, `docs/super-manus/e2e/`). Matching test invariants in `tests/test_agent_impl_architect.sh`. Pure agent-guidance + template fix; no path migration.
+
+### v0.6.0 — prd-update dual-mode
+
+`/super-manus:prd-update` covers both modes — forward iteration ("add a new bullet before coding") and drift absorption (resolve a pending `prd_drift.md` row). Mode is auto-detected from `prd_drift.md` state. Plus a docs sweep. Everything from v0.5 stays. See [docs/design-v0.6.md](docs/design-v0.6.md).
 
 ### v0.5 — self-sufficient execution + e2e regression
 
-Adds the **3-agent `/super-manus:impl` pipeline** (architect → test-writer → code-writer with time / write / persona barriers between them) and the **permanent e2e regression suite** at `docs/super-manus/e2e/` mirroring PRD's module/_index structure. End-of-update drift gate gains Pass 3 — e2e coverage check: every touched `## What users get` capability needs a passing `e2e/<module>/test_<capability>.<ext>` or roadmap can't flip to `stable`. Three execution skills (`tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase`) ship with the plugin. Adds `/super-manus:impl-all`. See [docs/design-v0.5.md](docs/design-v0.5.md) (superseded).
+Adds the **3-agent `/super-manus:impl` pipeline** (architect → test-writer → code-writer with time / write / persona barriers between test-writer and code-writer) and the **permanent e2e regression suite** at `docs/super-manus/e2e/` mirroring PRD's module/_index structure. End-of-update drift gate gains **Pass 2 — e2e coverage check**: every touched `## What users get` capability needs a passing `e2e/<module>/test_<capability>.<ext>` or roadmap can't flip to `stable` (Pass 3 still gates on `pending == 0`). Three execution skills (`tdd-in-phases`, `verification-before-phase-close`, `systematic-debugging-in-phase`) ship with the plugin. Adds `/super-manus:impl-all`. See [docs/design-v0.5.md](docs/design-v0.5.md) (superseded).
 
 ### v0.4 — project-global PRD
 
