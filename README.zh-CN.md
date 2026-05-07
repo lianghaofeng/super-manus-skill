@@ -2,7 +2,7 @@
 
 > 🌐 **语言**: [English](README.md) · **简体中文**
 
-Claude Code 插件，做 **PRD 驱动、drift 感知** 的开发。状态在磁盘上，跨 `/clear` 和 `/compact` 存活。每个里程碑走一条 3-agent TDD 流水线（architect → test-writer → code-writer），写实现的 agent 没权限改自己的测试。一道 BLOCKING drift gate 拒绝在 PRD 与实际代码不一致时标记完工。
+Claude Code 插件，做 **PRD 驱动、drift 感知** 的开发。状态在磁盘上，跨 `/clear` 和 `/compact` 存活。每个里程碑走一条 4-agent TDD 流水线（architect → test-writer → code-writer，加一个只读 reviewer 在三个 checkpoint 上），写实现的 agent 没权限改自己的测试，reviewer 的 verdict 驱动 re-spawn 循环直到 phase 收敛。一道 BLOCKING drift gate 拒绝在 PRD 与实际代码不一致时标记完工。
 
 自给自足 —— 自带 TDD / verification / debugging 纪律 skill，不需要别的 workflow 插件。
 
@@ -82,9 +82,13 @@ PRD 编辑是结构化的，不能自由发挥。一次改一条 bullet。命令
 /super-manus:impl-all
 # 每个 pending phase：
 #   - impl-architect 草拟 tasks/p<n>_impl.md
+#   - impl-reviewer (pre-test)  → APPROVE / RETURN 给 architect
 #   - impl-test-writer 提交红 phase + e2e 测试
+#   - impl-reviewer (pre-code)  → APPROVE / RETURN 给 test-writer 或 architect
 #   - impl-code-writer 写源码到测试翻绿
-#   - orchestrator 跑 ## Verification 命令
+#   - impl-reviewer (pre-close) → APPROVE / RETURN 给任意上游 writer
+#   - orchestrator hash check + 跑 ## Verification 命令
+# 每个 checkpoint 最多容忍 2 次 RETURN；第 3 次 RETURN 升级到用户。
 # 收尾时：drift gate 拒绝在 e2e 没覆盖每个触及的
 # ## What users get 能力时把 roadmap 翻成 stable。
 ```
@@ -293,9 +297,16 @@ agent 停下，给你三条 resolve 路径：
 
 super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
+- **`impl-reviewer` agent + 3 个 review checkpoint（v0.7）** —— 只读 agent，在 impl 流水线的三个点上：
+  - **`pre-test`**（architect 之后、test-writer 之前）—— 核对 plan 的声明对照真实数据（对每个声称的输入跑 `head -1`、`(audit)` 标记必须 resolve、每个声明的输入在 `## Verification` 里都要有 smoke）。
+  - **`pre-code`**（test-writer 之后、code-writer 之前）—— 核对 fixture 用真实数据样本（不是从 architect 的 plan 文本派生的 inline dict）、覆盖所有声明输入、测试如预期是红的、测试通过项目配置的 type-check（无配置则跳过）。
+  - **`pre-close`**（code-writer 之后、verification 之前）—— 核对实现匹配 `## Approach`、改的文件是 `## Files touched` 的子集、无安全 smell。如果 code-writer 报 stuck（"tests un-passable"），reviewer 诊断到底是测试、plan 还是代码出问题。
+  
+  Verdict：**APPROVE** / **RETURN_TO_<writer>** / **ESCALATE_TO_USER**。RETURN 可以指向任意上游 writer——`pre-close` 看到失败的 fixture 错可以 RETURN_TO_TEST_WRITER，看到 plan 写错可以 RETURN_TO_ARCHITECT。Orchestrator 串联——重 spawn 目标 writer + 所有下游阶段，新 test 提交后刷新 hash baseline，再回到原 review。**每个 checkpoint 的预算：最多 2 次 RETURN；第 3 次 RETURN 升级到用户**，附完整反馈历史。Reviewer 的 **工具栏只读**（无 `Write`，无 `Edit`）—— 防作弊边界完整保留。
+
 - **`tdd-in-phases`** —— `/super-manus:impl` 进入一个 phase 时，test-writer 在 code-writer 之前 spawn（不可商量）。Phase 测试 + e2e 测试以红色提交；code-writer 把它们翻绿，并且禁止改测试。三条独立机制堵住"写实现的 agent 给自己测试放水"：
   - **时间** —— 测试在 code-writer spawn 之前已经在 git 里了。
-  - **写权限** —— code-writer 的 persona 禁止改测试；orchestrator 哈希前后比对，被改就中止。
+  - **写权限** —— code-writer 的 persona 禁止改测试；orchestrator 哈希测试文件（在 `pre-code` review APPROVE 之后）、code-writer 跑完后再哈希一次比对，被改就中止。
   - **Persona** —— test-writer 把测试锚定在 PRD 的 `## What users get` / `## Quality bar` / `## Risks` 加上 `_index.md ## Demo`（跨模块场景 → `e2e/_system/`），把 `## Approach` 当成"众多合法实现之一"。
 - **`verification-before-phase-close`** —— phase Status 翻 `closed` 之前，`tasks/p<n>_impl.md ## Verification` 里的每条命令必须返回 0。`## Verification` 至少包含 (1) 本 phase 的 phase 测试路径命令，(2) 一条用户可见的 smoke 命令。
 - **`systematic-debugging-in-phase`** —— verify 失败时按 checklist 走（重读 Approach、重读失败测试、对 diff 二分查找、写一条回归测试，再 fix）。同一类错误三次 → 上报。
@@ -317,7 +328,15 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.6.1 —— 当前
+### v0.7.0 —— 当前
+
+加了 **`impl-reviewer` agent**，在 `/super-manus:impl` 和 `/super-manus:impl-all` 内部三个 checkpoint（`pre-test` / `pre-code` / `pre-close`）跑。工具栏只读（无 `Write`、无 `Edit`），驱动 re-spawn 循环，每个 checkpoint 最多容忍 2 次 RETURN，第 3 次 RETURN 带完整历史升级到用户。Verdict：`APPROVE` / `RETURN_TO_<writer>` / `ESCALATE_TO_USER`。RETURN 可指任意上游 writer——`pre-close` reviewer 可以 RETURN_TO_TEST_WRITER 如果失败测试的 fixture 错了，或者 RETURN_TO_ARCHITECT 如果 plan 在 impl 阶段才暴露写错。**防作弊保留**：hash baseline 在 `pre-code` review APPROVE 之后才建立，绝不更早。
+
+为什么：2026 年 5 月一个 dogfood 案例（多源 parser）暴露了 v0.6 的 3-agent 线性信任链的两个结构缺陷——plan-time 编造（architect 列字段名但没 `head -1` 验证；5/6 源在生产里静默 drop）和 test-side 死路（测试写错时 code-writer 改不动测试，v0.6 的逃生通道概念上有但机制没接通）。Reviewer 通过注入外部真实信号（`head -1` 真数据、项目配置的 type-check、code-vs-plan diff 核对）打破这条信任链，并给循环一个干净的 RETURN-with-feedback 路径，不破坏 hash baseline。
+
+详见 [docs/design-v0.7.md](docs/design-v0.7.md)。Plugin manifest 0.7.0；相对 v0.6 纯 additive（无路径迁移、无 PRD schema 改动、无测试 fixture 改动）。
+
+### v0.6.1
 
 修了 `impl-architect`：phase 测试现在强制声明在 `${update_dir}/tests/phase_p<n>_*.<ext>`，而不是借用项目原有测试套（`apps/<m>/tests/`、`docs/super-manus/e2e/`）。`tests/test_agent_impl_architect.sh` 加了配套断言。纯 agent guidance + template 修复，无路径迁移。
 

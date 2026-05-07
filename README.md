@@ -2,7 +2,7 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
-A Claude Code plugin for **PRD-led, drift-aware development**. State lives on disk and survives `/clear` and `/compact`. Each milestone runs through a 3-agent TDD pipeline (architect → test-writer → code-writer); the implementing agent has no permission to edit its own tests. A blocking drift gate refuses to mark work "done" while the per-module PRD and the actual code disagree.
+A Claude Code plugin for **PRD-led, drift-aware development**. State lives on disk and survives `/clear` and `/compact`. Each milestone runs through a 4-agent TDD pipeline (architect → test-writer → code-writer, with a read-only reviewer at three checkpoints); the implementing agent has no permission to edit its own tests, and reviewer verdicts drive a re-spawn loop until the phase converges. A blocking drift gate refuses to mark work "done" while the per-module PRD and the actual code disagree.
 
 Self-sufficient — ships with TDD / verification / debugging skills. No other workflow plugin required.
 
@@ -82,9 +82,13 @@ After any edit, run `/super-manus:sync <module>` to scaffold the next milestone.
 /super-manus:impl-all
 # For each pending phase:
 #   - impl-architect drafts tasks/p<n>_impl.md
+#   - impl-reviewer (pre-test)  → APPROVE / RETURN to architect
 #   - impl-test-writer commits red phase + e2e tests
+#   - impl-reviewer (pre-code)  → APPROVE / RETURN to test-writer or architect
 #   - impl-code-writer writes src until tests green
-#   - orchestrator runs ## Verification commands
+#   - impl-reviewer (pre-close) → APPROVE / RETURN to any upstream writer
+#   - orchestrator hash check + runs ## Verification commands
+# Per-checkpoint retry budget: 2 RETURNs max; 3rd RETURN escalates to user.
 # End-of-update: drift gate refuses to flip roadmap → stable
 # unless e2e covers every touched ## What users get capability.
 ```
@@ -294,9 +298,16 @@ The `prd_drift.md` file is **row-append-only** — only the Resolution cell is m
 
 super-manus does not depend on any other workflow plugin. The execution layer is built in:
 
-- **`tdd-in-phases`** — when `/super-manus:impl` enters a phase, the test-writer is spawned BEFORE the code-writer (non-negotiable). Phase tests + e2e tests are committed red; code-writer flips them green and is forbidden from editing tests. Three independent barriers prevent the implementing agent from gaming its own tests:
+- **`impl-reviewer` agent + 3 review checkpoints (v0.7)** — read-only agent at three points in the impl pipeline:
+  - **`pre-test`** (after architect, before test-writer) — verifies plan claims against external reality (`head -1` on declared inputs, `(audit)` markers resolved, every declared input has a `## Verification` smoke).
+  - **`pre-code`** (after test-writer, before code-writer) — verifies fixtures use real-data samples (not inline dicts derived from architect's plan), tests cover all declared inputs, tests are red as expected, and tests pass project-configured type-check (skipped if no config).
+  - **`pre-close`** (after code-writer, before verification) — verifies impl matches `## Approach`, touched files are subset of `## Files touched`, no security smell. If code-writer reported stuck ("tests un-passable"), reviewer diagnoses whether test, plan, or code is the root cause.
+  
+  Verdicts: **APPROVE** / **RETURN_TO_<writer>** / **ESCALATE_TO_USER**. RETURN can target any upstream writer — `pre-close` may RETURN_TO_TEST_WRITER if the failing test fixture is wrong, or RETURN_TO_ARCHITECT if the plan turned out wrong. The orchestrator cascades — re-spawns the target writer + every downstream stage, refreshes the hash baseline on test re-commit, then re-invokes the originating review. Per-checkpoint retry budget: max 2 RETURNs per checkpoint; 3rd RETURN escalates to user with full feedback history. Reviewer is **read-only by tool surface** (no `Write`, no `Edit`) — cheat-prevention boundary preserved.
+
+- **`tdd-in-phases`** — the test-writer is spawned BEFORE the code-writer (non-negotiable). Phase tests + e2e tests are committed red; code-writer flips them green and is forbidden from editing tests. Three independent barriers prevent the implementing agent from gaming its own tests:
   - **Time** — tests are in git before code-writer is spawned.
-  - **Write permission** — code-writer's persona forbids editing tests; orchestrator hashes test files before/after and aborts on tamper.
+  - **Write permission** — code-writer's persona forbids editing tests; orchestrator hashes test files (after `pre-code` review APPROVE) and re-hashes after code-writer, aborts on tamper.
   - **Persona** — test-writer anchors tests in PRD `## What users get` / `## Quality bar` / `## Risks` and `_index.md ## Demo` (cross-module scenarios → `e2e/_system/`), treating `## Approach` as one of many valid impls.
 - **`verification-before-phase-close`** — phase Status flips to `closed` only after every command in `tasks/p<n>_impl.md ## Verification` exits green. Verification MUST include (1) the phase test path command and (2) one user-visible smoke command.
 - **`systematic-debugging-in-phase`** — when verify fails, follow the checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, then fix). Three strikes against the same error class → escalate.
@@ -318,7 +329,15 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.6.1 — current
+### v0.7.0 — current
+
+Adds the **`impl-reviewer` agent** at three checkpoints (`pre-test` / `pre-code` / `pre-close`) inside `/super-manus:impl` and `/super-manus:impl-all`. Read-only by tool surface (no `Write`, no `Edit`); drives a re-spawn loop with per-checkpoint retry budget (max 2 RETURNs per checkpoint; 3rd RETURN escalates to user with full history). Verdicts: `APPROVE` / `RETURN_TO_<writer>` / `ESCALATE_TO_USER`. RETURN can target any upstream writer — `pre-close` reviewer can RETURN_TO_TEST_WRITER if the failing test fixture is wrong, or RETURN_TO_ARCHITECT if the plan turned out wrong only on impl. Cheat-prevention preserved: hash baseline is established AFTER `pre-code` review APPROVE — never before.
+
+Why: a May 2026 dogfood case (multi-source parser) exposed two structural gaps in v0.6's 3-agent linear trust chain — plan-time fabrication (architect cited field names without `head -1` verification; 5/6 sources silently dropped in production) and test-side dead-end (when phase tests are wrong, code-writer can't edit them and the v0.6 escape hatch was conceptually documented but mechanically unwired). The reviewer breaks the trust chain by injecting external reality (head -1 on declared inputs, project-configured type-check, code-vs-plan diff verification) and by giving the loop a clean RETURN-with-feedback path that doesn't break the hash baseline.
+
+See [docs/design-v0.7.md](docs/design-v0.7.md). Plugin manifest bumped to 0.7.0; pure additive vs v0.6 (no path migration, no PRD-schema changes, no test-fixture changes).
+
+### v0.6.1
 
 Fix in `impl-architect`: phase tests are now always declared under `${update_dir}/tests/phase_p<n>_*.<ext>` instead of co-opting the project's existing test suite (`apps/<m>/tests/`, `docs/super-manus/e2e/`). Matching test invariants in `tests/test_agent_impl_architect.sh`. Pure agent-guidance + template fix; no path migration.
 
