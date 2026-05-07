@@ -19,10 +19,18 @@ grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools' (Read/
 grep -qiE "chief system architect|system architect" "$F" || { echo "FAIL: persona must be a chief system architect"; exit 1; }
 grep -qiE "product manager|senior PM" "$F" || { echo "FAIL: persona must also be a senior PM"; exit 1; }
 
-# Documents the six inputs the orchestrator passes
-for input in project_root feature_folder module_list infra_deps monorepo_signals lsp_available; do
+# Documents the eight inputs the orchestrator passes (v0.7.2: scope + target_module added)
+for input in project_root feature_folder scope target_module module_list infra_deps monorepo_signals lsp_available; do
   grep -qF "$input" "$F" || { echo "FAIL: agent must document input '$input'"; exit 1; }
 done
+
+# v0.7.2: scope=single-module deliverable contract — write only prd/<target_module>.md, do NOT
+# touch _index.md or any other prd/<other>.md. Cascade discovery is the orchestrator's job, not
+# the architect's; agent must NOT silently regenerate other modules even if it sees them affected.
+grep -qiE "single-module" "$F" || { echo "FAIL: agent must document scope=single-module behavior"; exit 1; }
+grep -qiE "whole-project" "$F" || { echo "FAIL: agent must document scope=whole-project behavior"; exit 1; }
+grep -qiE "do NOT write [^a-zA-Z]*_index|not write [^a-zA-Z]*_index|do NOT touch [^a-zA-Z]*_index" "$F" || { echo "FAIL: per-module scope must explicitly forbid writing _index.md"; exit 1; }
+grep -qiE "do NOT write any other|not write any other|forbid.*other module" "$F" || { echo "FAIL: per-module scope must explicitly forbid writing other prd/<other>.md files"; exit 1; }
 
 # Deliverables: word ceilings + file paths + summary line
 grep -qF "700" "$F" || { echo "FAIL: must mention 700-word ceiling for prd/_index.md"; exit 1; }

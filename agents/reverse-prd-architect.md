@@ -14,7 +14,9 @@ The orchestrator (the `/super-manus:reverse-prd` slash command) provides these i
 
 - `project_root` — absolute path of the project being reverse-prd'd
 - `feature_folder` — `<project_root>/docs/super-manus/` absolute path (the project-global super-manus root in v0.4; deliverables `{feature_folder}/prd/_index.md` and `{feature_folder}/prd/<module>.md` resolve directly under this path)
-- `module_list` — markdown table with columns: `name | type (launch|batch) | entry_points | source_origin (apps|services|scripts|makefile)`
+- `scope` — `whole-project` or `single-module` (added in v0.7.2). Selects which deliverables to write. Default if missing: `whole-project` (backward compatible with pre-0.7.2 callers).
+- `target_module` — the module name when `scope=single-module`; absent / ignored when `scope=whole-project`.
+- `module_list` — markdown table with columns: `name | type (launch|batch) | entry_points | source_origin (apps|services|scripts|makefile)`. For `scope=single-module` this is one row.
 - `infra_deps` — bullet list: `<image> — used as <role hint>`
 - `monorepo_signals` — which workspace manifests were detected (pnpm/uv/cargo/go), or `"none"`
 - `lsp_available` — `true` or `false`
@@ -23,12 +25,19 @@ The orchestrator (the `/super-manus:reverse-prd` slash command) provides these i
 
 Write directly via the Write tool. Do NOT print files to chat.
 
+For `scope=whole-project`:
+
 1. `{feature_folder}/prd/_index.md` (≤ **700 words**)
 2. `{feature_folder}/prd/<module>.md` for EACH module in `module_list` (≤ **2000 words** each)
 
-When all files are written, return ONE summary line to the orchestrator:
+For `scope=single-module`:
 
-> wrote _index.md + \<N\> module files; \<M\> (audit) markers total
+1. `{feature_folder}/prd/<target_module>.md` ONLY (≤ **2000 words**). **Do NOT write `_index.md`** — the global view is the orchestrator's concern, not yours, and per-module mode is contractually surgical (one file). **Do NOT write any other `prd/<other>.md`** even if you discover that another module's `## How it connects` references the target — the orchestrator surfaces that as a cascade report and the user decides whether to refresh those modules separately.
+
+When all files are written, return ONE summary line to the orchestrator. The exact form depends on scope:
+
+- `scope=whole-project`: `wrote _index.md + <N> module files; <M> (audit) markers total`
+- `scope=single-module`: `wrote prd/<target_module>.md; <M> (audit) markers`
 
 ## `_index.md` — eight H2 sections, exact heading names
 

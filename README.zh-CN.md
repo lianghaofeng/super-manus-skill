@@ -200,7 +200,21 @@ super-manus 在使用它的项目里建出的磁盘布局：
 
 **PRD 里不留 changelog 标记**。PRD 是当前态快照，历史在 `git log` 和每个 update 的 `findings.md` 里。
 
-## `prd-update` 怎么跑（两种模式，同一套选项）
+## 改已有 PRD
+
+PRD 存在以后，三条路径可以改它，作用粒度不同，互不重复：
+
+| 改动范围 | 路径 | Source of truth |
+|---|---|---|
+| 一行 bullet（refine / split / demote / exclude / add） | `/super-manus:prd-update <module>` | 你的产品意图 |
+| 一整页模块 PRD（代码漂移大，想刷新 9 个 section） | `/super-manus:reverse-prd <module>` | 当前源码 |
+| 全工程 PRD（bootstrap，或者大改一轮） | `/super-manus:reverse-prd` | 当前源码 |
+
+**简单规则**：`prd-update` 干外科手术式的产品意图编辑；`reverse-prd` 干源码驱动的批量重写。`prd-update` 拒绝跨 section 改写；`reverse-prd` 没有"改一行"入口。两者粒度不同。
+
+**灰色地带——一个 section 里加 N 条 bullet**（比如想给多个模块批量补 Exposes/Consumes）：两边都不太顺手。`prd-update Add` × N 等于把 5 选项流程跑 N 遍；per-module `reverse-prd` 会重写所有 9 个 section。**手编通常最快**——[`templates/prd_module.md`](templates/prd_module.md) 里有精确格式。
+
+### `prd-update` 怎么跑（两种模式，同一套选项）
 
 同一套 5 选项，两种触发场景。命令读 `prd_drift.md` 自动判模式：
 
@@ -328,7 +342,16 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.7.1 —— 当前
+### v0.7.2 —— 当前
+
+`/super-manus:reverse-prd` 加了两个易用性改进：
+
+- **Per-module 模式**：传一个已有的 `<module>` 名字进去，只刷新 `prd/<module>.md`，不动 `_index.md`、`roadmap.md`、也不动其它模块。适用于"某个模块代码改了想把它的 PRD 同步到最新（包括 v0.7.1 的 Exposes/Consumes 块）"，不需要重扫整个工程。刷完后 orchestrator 跑一次 **cascade scan**——grep 其它 `prd/*.md` 看哪些模块在 `## How it connects` 里提到了目标模块——然后打印一个 follow-up 列表，告诉用户哪些模块的"How it connects"可能已陈旧。**不会** silently regenerate 那些模块；用户自己决定要不要单独刷或手动改。新模块的 bootstrap 仍然需要整工程跑。
+- **Soft-abort 二次确认**（取代 v0.7.0 的 hard-abort）：当用来判断是否覆盖的那一段（whole-project 看 `_index.md ## Problem`；per-module 看 `prd/<module>.md ## Why this exists`）已经写了真实人工内容时，orchestrator 不再直接拒绝，而是通过 `AskUserQuestion` 弹出确认（明确列出会覆盖什么）。之前那种"先备份、清回模板再跑"的麻烦没了——确认机制保留了"绝不静默覆盖"的安全属性，但摩擦小得多。
+
+`agents/reverse-prd-architect.md` 加了两个新输入（`scope`、`target_module`）；`scope=single-module` 时只写 `prd/<target_module>.md`，并被明文禁止动 `_index.md` 或其它模块文件。详见 `docs/design-v0.7.md` §12。
+
+### v0.7.1
 
 PRD 模板小幅锐化，借鉴自一次 formal-PRD 框架讨论：
 

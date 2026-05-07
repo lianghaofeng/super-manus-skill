@@ -14,7 +14,7 @@
       "name": "super-manus",
       "source": "./",
       "description": "PRD-driven feature development for Claude Code: drift detection between PRD and code, self-correcting 4-agent pipeline (architect / test-writer / code-writer + reviewer at 3 checkpoints), persistent state that survives /clear",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "author": {
         "name": "super-manus contributors"
       },

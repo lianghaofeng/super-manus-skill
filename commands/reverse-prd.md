@@ -1,25 +1,48 @@
 ---
-description: One-shot — scan an existing project, infer its module breakdown, and generate prd/_index.md + per-module prd/<module>.md stubs at docs/super-manus/prd/
+description: Scan a codebase and generate prd/_index.md + per-module prd/<module>.md at docs/super-manus/prd/. Whole-project (no arg) or per-module refresh (with <module> arg). One-shot — does its best from source, hands result to user to audit.
 ---
 
-The user wants to take an existing codebase that has no super-manus PRD yet and bootstrap one. This command is **one-shot**: the agent does its best from observed source, then hands the result to the user to audit and refine. It does not run a Q&A like `/super-manus:brainstorm`.
+The user wants to (a) bootstrap a fresh super-manus PRD bundle from a codebase scan (no arg, whole-project mode), or (b) refresh a single module's `prd/<module>.md` after relevant code changed (with `<module>` arg, per-module mode). This command is **one-shot**: the agent does its best from observed source, then hands the result to the user to audit and refine. It does not run a Q&A like `/super-manus:brainstorm`.
 
 ## Setup
 
 Confirm `docs/super-manus/prd/` is a directory. If absent, tell the user super-manus is not enabled and suggest running `/super-manus:start` first; then stop.
 
-**Hard-abort if a PRD has already been committed.** reverse-prd is for bootstrapping a fresh PRD from a codebase scan, not for overwriting an existing one. Read `docs/super-manus/prd/_index.md` and inspect the `## Problem` section:
+## Mode resolution
 
-- Treat the project as **uncommitted** (proceed) if Problem is empty, or its body consists only of template `<placeholder>` text (e.g. `<one sentence: what pain, for whom>`), or only of `(audit ...)` markers.
-- Treat the project as **committed** (abort) otherwise — meaning a human or a prior brainstorm has already written a real problem statement. Do NOT prompt for permission; do NOT overwrite. Emit:
+Resolve from `$ARGUMENTS`:
 
-  > `docs/super-manus/prd/_index.md` already has a committed PRD topic. reverse-prd dumps whole-project inferences and would overwrite that. Resolve manually: either back up the existing PRD and clear `prd/_index.md` back to template state, or skip reverse-prd and refine the existing PRD via `/super-manus:prd-update` and `/super-manus:brainstorm` instead.
+- **Whole-project mode** if `$ARGUMENTS` is empty. Re-scans everything; writes `prd/_index.md` + every `prd/<module>.md`.
+- **Per-module mode** if `$ARGUMENTS` matches `^[a-z0-9][a-z0-9-]*$`. Refreshes only `prd/<module>.md`; does NOT touch `_index.md`, `roadmap.md`, or any other module's PRD.
 
-This guards the most common misuse: dropping a whole-project scan into a folder that already has authored PRD content.
+If `$ARGUMENTS` doesn't match the pattern, refuse: "Argument must be a single lowercase-kebab-case module name (e.g. `parent-api`), or empty for whole-project run."
 
-## Discover modules — runtime-first
+For per-module mode, additionally validate:
 
-Modules are determined by **what runs**, not by what the file tree implies. PRD modules ≈ things with a runtime identity (services that get launched, batch jobs that get triggered, CLIs that get invoked). Pure libraries with no runtime entry are dependencies, not modules.
+- `docs/super-manus/prd/<module>.md` exists. If absent, refuse: "Module `<module>` is not in the current PRD bundle. Per-module reverse-prd only refreshes existing modules — to bootstrap a brand-new module, run `/super-manus:reverse-prd` (no arg) for a whole-project refresh, or `/super-manus:brainstorm` to author it interactively."
+
+## Confirmation gates
+
+Both modes use the same uncommitted/committed classification — but the file inspected differs.
+
+**Whole-project mode**: read `docs/super-manus/prd/_index.md` and inspect `## Problem`.
+**Per-module mode**: read `docs/super-manus/prd/<module>.md` and inspect `## Why this exists`.
+
+Classify the body of that section:
+
+- **uncommitted** — section is empty, or its body consists only of template `<placeholder>` text (e.g. `<2 sentences: the user pain + the business value...>`), or only of `(audit ...)` markers. Proceed without asking.
+- **committed** — section has real human-authored content. Show a confirmation prompt via `AskUserQuestion` before proceeding:
+  - **Whole-project**: `Existing audited PRD detected at prd/_index.md ## Problem. Continuing will OVERWRITE _index.md and ALL prd/<module>.md files. (Per-module audits in other modules will also be lost.) Proceed?`
+  - **Per-module**: `Existing audited content detected at prd/<module>.md ## Why this exists. Continuing will OVERWRITE prd/<module>.md (other modules and _index.md untouched). Proceed?`
+  - Options: `Yes, overwrite` / `No, stop`. On `No`: emit "Stopped — existing PRD preserved." and stop. On `Yes`: proceed to the next stage.
+
+This is the v0.7.2 evolution from v0.7.0's hard-abort: previous behavior refused to overwrite committed PRDs and required the user to manually back up and clear the file. The confirmation gate keeps the safety property (no silent overwrite of audited content) while removing the friction of manual file shuffling.
+
+## Discover modules — runtime-first (whole-project mode only)
+
+Per-module mode skips this entire stage. The module list is the single row `<module>`; the architect spawns with `scope = single-module` and reads the existing `prd/<module>.md` only to identify what to refresh.
+
+For whole-project mode: modules are determined by **what runs**, not by what the file tree implies. PRD modules ≈ things with a runtime identity (services that get launched, batch jobs that get triggered, CLIs that get invoked). Pure libraries with no runtime entry are dependencies, not modules.
 
 Read the following declarative sources in order; the de-duped union is the candidate module list. This stage uses no LSP and no source-file reading — module **content** (What users get, How it connects, Quality bar) is filled in later stages.
 
@@ -94,18 +117,20 @@ Stage 1 is declarative-only. ~10–20 reads total: orchestration manifests, root
 
 ## Hand off content generation to the architect subagent
 
-Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn the **`reverse-prd-architect`** agent (Agent tool, `subagent_type="reverse-prd-architect"`). The architect+PM persona, ASCII diagram rules, source-priority hierarchy, `(audit)` policy, granularity default, and Drift check protocol references all live in [agents/reverse-prd-architect.md](../agents/reverse-prd-architect.md). Do NOT duplicate them here.
+Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module — for whole-project mode. For per-module mode the orchestrator skipped Stage 1 and the module list is the single row `<module>`. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn the **`reverse-prd-architect`** agent (Agent tool, `subagent_type="reverse-prd-architect"`). The architect+PM persona, ASCII diagram rules, source-priority hierarchy, `(audit)` policy, granularity default, and Drift check protocol references all live in [agents/reverse-prd-architect.md](../agents/reverse-prd-architect.md). Do NOT duplicate them here.
 
 Why a subagent: the writing pass needs a fresh context (no chat-history pollution), a focused architect/PM persona, and a sustained reading budget across many source files. Embedding it in the main thread bloats context and fragments the persona.
 
 ### Inputs to pass in the spawning prompt
 
-Compute these from Stage 1 results and pass them in the Agent tool's `prompt` field. The agent's definition file documents what each input means:
+Compute these from Stage 1 results (whole-project) or directly from arguments (per-module), and pass them in the Agent tool's `prompt` field. The agent's definition file documents what each input means:
 
 - `project_root` — absolute path of the project being reverse-prd'd
 - `feature_folder` — `<project_root>/docs/super-manus/` absolute path (the project-global super-manus root in v0.4)
-- `module_list` — markdown table from Stage 1.5 with columns: `name | type (launch|batch) | entry_points | source_origin (apps|services|scripts|makefile)`
-- `infra_deps` — bullet list from Stage 1.1: `<image> — used as <role hint>`
+- `scope` — `whole-project` or `single-module` (added in v0.7.2). Selects which deliverables the agent writes.
+- `target_module` — the module name when `scope=single-module`; omit when `scope=whole-project`.
+- `module_list` — markdown table with columns: `name | type (launch|batch) | entry_points | source_origin (apps|services|scripts|makefile)`. For per-module mode this is one row.
+- `infra_deps` — bullet list from Stage 1.1: `<image> — used as <role hint>`. Per-module mode reuses what's already declared in the existing `prd/<module>.md ## How it connects` block under Third-party / Downstream — re-derive from compose only if that section is empty.
 - `monorepo_signals` — which workspace manifests were detected (pnpm/uv/cargo/go), or `"none"`
 - `lsp_available` — `true` or `false` (probe by attempting one workspace-symbol call before spawning)
 
@@ -117,26 +142,38 @@ The orchestrator's prompt to the agent should look roughly like:
 >
 > - project_root: `<absolute path>`
 > - feature_folder: `<absolute path>`
+> - scope: `<whole-project | single-module>`
+> - target_module: `<module name | (omit if whole-project)>`
 > - module_list: `<markdown table with one row per module>`
 > - infra_deps: `<bullet list>`
 > - monorepo_signals: `<value>`
 > - lsp_available: `<true|false>`
 >
-> Produce the full PRD bundle per your agent definition. Return the summary line when done.
+> Produce the PRD bundle per your agent definition (per-module mode: write only `prd/<target_module>.md`, do NOT touch `_index.md` or other module files). Return the summary line when done.
 
 
 ### After the subagent returns
 
 The main agent (orchestrator) MUST:
 
+For **whole-project mode**:
+
 1. Verify `{feature_folder}/prd/_index.md` exists and is non-empty.
 2. Verify the count of `{feature_folder}/prd/*.md` files (excluding `_index.md`) equals the module count from Stage 1.5 — this enforces the **module–file 1:1 invariant** at the orchestrator level too.
 3. Read `_index.md` and grep its `## Modules` table — every row's module name MUST match a `<name>.md` file in `prd/`. Mismatch → surface a one-line warning to the user (do NOT silently fix).
 4. Surface the subagent's summary line verbatim to the user.
 
-## Update `roadmap.md`
+For **per-module mode**:
+
+1. Verify `{feature_folder}/prd/<target_module>.md` exists, is non-empty, and was modified during this run (mtime newer than spawning time). The architect must NOT have written any other file — if `Glob {feature_folder}/prd/*.md` returns more than the expected file with a fresh mtime, surface a one-line warning ("Per-module run also modified: <list>") and proceed.
+2. **Cascade scan** — grep other `prd/*.md` files for case-sensitive mentions of `<target_module>` inside their `## How it connects` block. Collect the names of modules that mention the target. Also check `prd/_index.md ## Data flow overview` for any edge involving `<target_module>`.
+3. Surface the subagent's summary line verbatim to the user, followed by the cascade report (see "Tell the user" below).
+
+## Update `roadmap.md` (whole-project mode only)
 
 For each inferred module, add a row under `## Modules` in `docs/super-manus/roadmap.md` with status `not-started` (the user will run `/super-manus:sync <module>` to actually start a milestone). Drop any leftover `<module-a>` placeholder if present.
+
+Per-module mode does NOT touch `roadmap.md` — the row already exists.
 
 ## Do NOT seed any update folder
 
@@ -144,8 +181,22 @@ Unlike `/super-manus:brainstorm`'s older v0.3 behavior, this command does NOT ca
 
 ## Tell the user
 
-In one short paragraph:
+For **whole-project mode**, in one short paragraph:
 
 > Generated `docs/super-manus/prd/_index.md` + `<N>` per-module files from a scan of the project. **This is a one-shot inference — please audit:** every `(audit)` marker is something I couldn't verify from source. After auditing, run `/super-manus:sync <module>` to start a milestone for each module you want to work on.
 
 List the inferred modules + the count of `(audit)` placeholders per file in a short table. Stop. Do NOT begin implementation work; the user opens the audit loop.
+
+For **per-module mode**, in one short paragraph:
+
+> Refreshed `docs/super-manus/prd/<target_module>.md`. Other modules and `_index.md` were not touched. **Please audit `(audit)` markers** in the refreshed file.
+
+Then, IF the cascade scan from step 2 above found other modules whose `## How it connects` block mentions `<target_module>` OR `_index.md ## Data flow overview` has edges involving `<target_module>`, add a follow-up block:
+
+> **Cascade — these may now be stale:**
+> - `prd/<other-module>.md ## How it connects` references `<target_module>` (run `/super-manus:reverse-prd <other-module>` to refresh, or edit manually).
+> - `prd/_index.md ## Data flow overview` has edges involving `<target_module>` (re-running the whole-project mode would refresh the diagram, but a manual review is usually cheaper).
+
+If the cascade scan finds nothing, omit this block and just confirm the single-file refresh.
+
+Stop. Do NOT begin implementation work; the user opens the audit loop.

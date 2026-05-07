@@ -201,7 +201,21 @@ The on-disk layout super-manus creates inside a project that uses it:
 
 **No changelog markers anywhere in PRD.** PRD is a current-state snapshot. History lives in `git log` and per-update `findings.md`.
 
-## How `prd-update` works (two modes, identical options)
+## Updating an existing PRD
+
+Once a PRD exists, three paths can change it. They operate at different scales and don't duplicate each other:
+
+| Scope of change | Path | Source of truth |
+|---|---|---|
+| One bullet (refine / split / demote / exclude / add) | `/super-manus:prd-update <module>` | Your product intent |
+| One module's PRD page (code drifted; want to refresh all 9 sections) | `/super-manus:reverse-prd <module>` | Current source code |
+| Whole project PRD (bootstrap, or comprehensive rewrite) | `/super-manus:reverse-prd` | Current source code |
+
+**Quick rule**: `prd-update` for surgical product-intent edits; `reverse-prd` for source-driven bulk regen. `prd-update` refuses multi-section rewrites; `reverse-prd` has no "edit one bullet" entry. They cover different scales.
+
+**Gray zone — adding N bullets to one section** (e.g. backfilling Exposes/Consumes on multiple modules at once): both tools are awkward here. `prd-update Add` × N runs the 5-option flow N times; per-module `reverse-prd` rewrites all 9 sections. **Hand-editing the file is usually fastest** — [`templates/prd_module.md`](templates/prd_module.md) shows the exact format.
+
+### `prd-update` — two modes, identical options
 
 Same 5 options, two different trigger contexts. The command auto-detects mode from `prd_drift.md`:
 
@@ -329,7 +343,16 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.7.1 — current
+### v0.7.2 — current
+
+`/super-manus:reverse-prd` gains two ergonomic improvements:
+
+- **Per-module mode**: pass an existing `<module>` name to refresh just `prd/<module>.md` without touching `_index.md`, `roadmap.md`, or other modules. Useful when a single module's code changed and you want to bring its PRD up to date (including the v0.7.1 Exposes/Consumes block) without re-scanning the whole project. After the refresh, the orchestrator runs a **cascade scan** — greps other `prd/*.md` files for references to the target module — and prints a follow-up list of modules whose `## How it connects` may now be stale. It does NOT silently regenerate them; the user decides whether to refresh those modules separately or edit by hand. Bootstrapping a brand-new module still requires the whole-project run.
+- **Soft-abort confirmation** (replaces v0.7.0's hard-abort): when the section that gates overwrite (`_index.md ## Problem` for whole-project, `prd/<module>.md ## Why this exists` for per-module) already contains real human-authored content, the orchestrator now asks for confirmation via `AskUserQuestion` (listing what will be overwritten) instead of refusing outright. The previous "back up and clear to template state" workaround is gone — confirmation keeps the safety property (no silent overwrite) without the friction.
+
+`agents/reverse-prd-architect.md` accepts two new inputs (`scope`, `target_module`); for `scope=single-module` it writes only `prd/<target_module>.md` and is explicitly forbidden from touching `_index.md` or other module files. See `docs/design-v0.7.md` §12.
+
+### v0.7.1
 
 PRD-template refinements borrowed from formal-PRD framework discussion:
 

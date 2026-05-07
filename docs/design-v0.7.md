@@ -340,9 +340,66 @@ The framework also recommended document control / changelog markers, formal NFR 
 
 ### Migration
 
-None required. Existing PRDs render fine. To adopt:
+None required. Existing PRDs render fine — headings are unchanged, all parsers continue to work, tests stay green. To adopt the new fields:
 
-- New PRDs created via `/super-manus:start` or `/super-manus:reverse-prd` get the new fields automatically.
-- Existing PRDs: re-run `/super-manus:reverse-prd <module>` to regenerate, OR add the Exposes/Consumes block manually using the template as reference.
+- **New PRDs** created via `/super-manus:start` followed by `/super-manus:brainstorm` or `/super-manus:reverse-prd` get the new fields automatically.
+- **PRDs that ran reverse-prd once but were not yet human-audited** (`## Problem` still placeholder / `(audit ...)`) — re-run `/super-manus:reverse-prd` (whole-project) without confirmation. Cost ≈ original reverse-prd cost (full Stage 1 + per-module LSP + writes); not delta-only.
+- **PRDs that have been human-audited** (real content in `## Problem`) — three options ordered cheap → expensive:
+  1. (v0.7.2) Run `/super-manus:reverse-prd <module>` per module to refresh just that one module's `prd/<module>.md` with the new fields. Per-module mode skips `_index.md` and other modules; cascade-scan reports which other modules might be stale.
+  2. Edit by hand. Each module typically needs 2–5 Exposes/Consumes lines — a human who knows the project produces more accurate capability names than the architect's inference anyway.
+  3. Run `/super-manus:reverse-prd` (whole-project) and confirm the v0.7.2 overwrite prompt. Loses all human edits across the entire PRD bundle — only worth it for projects with extensive code changes since the last reverse-prd.
 
 Plugin manifest bumped to **0.7.1**. Pure additive vs v0.7.0 (no path migration, no orchestrator change, no test-fixture format change beyond the new keyword assertions).
+
+## 12. v0.7.2 addendum — `/super-manus:reverse-prd` ergonomics
+
+Two related improvements to `/super-manus:reverse-prd`, both surfaced by the v0.7.1 migration question (*"how do I get the new Exposes/Consumes fields into already-audited PRDs?"*).
+
+### What changed
+
+1. **Per-module mode** — `/super-manus:reverse-prd <module>` (with module-name argument) refreshes just `prd/<module>.md`. Skips Stage 1 module discovery, does not write `_index.md`, does not modify `roadmap.md`, does not touch other modules' files. After the refresh, the orchestrator runs a **cascade scan**: greps every other `prd/*.md` for case-sensitive mentions of the target module inside their `## How it connects` block, and checks `prd/_index.md ## Data flow overview` for edges involving the target. Surfaces the cascade as a follow-up list — does **not** silently regenerate.
+
+2. **Soft-abort confirmation** — replaces the v0.7.0 hard-abort. The classification logic (uncommitted = empty / placeholder / `(audit ...)`; committed = real content) is unchanged; what changed is the action on `committed`:
+   - **v0.7.0 / v0.7.1**: emit a refusal message, instruct the user to manually back up and clear the file. Hard stop.
+   - **v0.7.2**: prompt via `AskUserQuestion`, listing exactly which file(s) will be overwritten. On user confirmation: proceed. On rejection: emit "Stopped — existing PRD preserved." and stop.
+
+   Whole-project mode inspects `_index.md ## Problem`. Per-module mode inspects `prd/<module>.md ## Why this exists` (the analogous "this PRD has been authored" indicator at the per-module level).
+
+### Why per-module mode
+
+Three distinct use cases drove this:
+
+- **Single-module code change** — "I refactored `parent-api` and want to refresh just that one module's PRD without re-running the whole project (and risking other modules' edits)."
+- **Adopting v0.7.1 fields** — "Most of my PRD is audited and stable; I only want to fill `Exposes` / `Consumes` in one module without re-running everything." The per-module mode + soft-abort confirmation together turn this into a 1-command operation: `/super-manus:reverse-prd parent-api`, confirm, done.
+- **Iterative architecture exploration** — "I'm experimenting with module boundaries. I want to refresh `module-A` after moving code in/out, without affecting how the rest of the PRD describes adjacent modules."
+
+### Why cascade-scan reports rather than auto-regenerate
+
+Auto-regeneration of dependent modules was rejected. Reasons:
+
+- Violates per-module mode's contract ("one file in, one file out"). Users invoke per-module specifically to limit blast radius; expanding it would defeat the purpose.
+- Conflicts with super-manus's **drift-aware** philosophy: PRD↔code drift is always surfaced and decided by the human, never silently fixed. The cascade scan extends the same principle to PRD↔PRD drift across modules.
+- Implementation complexity: reliable dependency-graph derivation requires LSP `find-references` across module exports, which has cost; cheap grep-based reporting catches 90% of cases at near-zero cost.
+
+`prd/_index.md ## Data flow overview` updates fall in the same bucket: the diagram is a global view, partial updates create internal inconsistencies. Cascade scan flags it; user decides whether a whole-project rerun is warranted.
+
+### Why soft-abort confirmation rather than `--force` flag
+
+Considered: `/super-manus:reverse-prd --force` to overwrite without prompting. Rejected because:
+
+- Slash command argument-parsing is single-positional in Claude Code; `--force` would conflict with `<module>` (whole-project + force vs per-module).
+- A flag is a footgun — easy to type once and bypass safety.
+- Interactive confirmation already produces the right cost-benefit: the user sees exactly what's about to be lost, and can abort if they didn't realize. The friction is minimal (one click) but unskippable.
+
+### Cascade implemented
+
+- `commands/reverse-prd.md` — restructured with `## Mode resolution`, `## Confirmation gates`, mode-conditional discovery / spawning / post-conditions / user-facing messages. The `## Discover modules — runtime-first` section now explicitly opens with "whole-project mode only".
+- `agents/reverse-prd-architect.md` — `## Inputs` gains `scope` + `target_module`; `## Deliverables` splits into `whole-project` and `single-module` contracts. Per-module deliverables forbid writing `_index.md` or any other `prd/<other>.md` even on discovered cascade.
+- `tests/test_command_reverse_prd_logic.sh` — replaces `hard-abort` assertion with confirmation-gate assertions; adds per-module mode assertions (mode resolution, scope/target_module passing, cascade-scan requirement, "do NOT touch _index.md / roadmap.md").
+- `tests/test_agent_reverse_prd_architect.sh` — asserts `scope` + `target_module` in inputs; asserts `single-module` deliverable contract (no `_index.md`, no other module files).
+
+### Migration
+
+Same backward-compatibility story as v0.7.1: pure additive. Existing whole-project invocations (no argument) continue to work unchanged; the only behavioral change is the hard-abort → confirmation switch on committed PRDs, which is strictly less restrictive.
+
+Plugin manifest bumped to **0.7.2**. Pure additive vs v0.7.1.

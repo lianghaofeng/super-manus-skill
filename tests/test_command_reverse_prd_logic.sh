@@ -42,17 +42,39 @@ grep -qiE "apps/|services/" "$F" || { echo "FAIL: must list workspace app dirs (
 grep -qiE "scripts/" "$F" || { echo "FAIL: must cluster scripts/ by verb prefix as batch-module candidates"; exit 1; }
 grep -qiE "no upper cap|no upper bound" "$F" || { echo "FAIL: must remove the 2–5 module cap (monorepos can produce 8–15 modules)"; exit 1; }
 
-# Hard-abort gate when active feature already has a committed PRD topic
-grep -qiE "hard-abort|hard abort" "$F" || { echo "FAIL: must hard-abort when active feature is topic-scoped (no overwrite prompt)"; exit 1; }
-grep -qiE "topic-scoped|committed PRD topic|committed.*topic" "$F" || { echo "FAIL: must describe the topic-scoped/committed-PRD condition that triggers abort"; exit 1; }
+# v0.7.2: confirmation gate (replaces v0.6/v0.7.0/v0.7.1 hard-abort) when section already has
+# committed (audited) content. Whole-project mode inspects _index.md ## Problem; per-module mode
+# inspects prd/<module>.md ## Why this exists. Both prompt the user via AskUserQuestion before
+# overwriting — silent overwrite of human-authored PRD content remains forbidden.
+grep -qiE "AskUserQuestion|confirmation|confirm.*before" "$F" || { echo "FAIL: must use a confirmation prompt (not silent hard-abort) when section is committed"; exit 1; }
+grep -qiE "uncommitted" "$F" || { echo "FAIL: must define the uncommitted classification (placeholder / (audit) only)"; exit 1; }
+grep -qiE "committed" "$F" || { echo "FAIL: must define the committed classification (real human-authored content)"; exit 1; }
+grep -qiE "OVERWRITE|overwrite" "$F" || { echo "FAIL: confirmation prompt must spell out that proceeding overwrites the file(s)"; exit 1; }
+
+# v0.7.2: per-module mode (refresh just one prd/<module>.md when invoked with a module argument)
+grep -qiE "per-module mode|per.module mode" "$F" || { echo "FAIL: must document per-module mode triggered by \$ARGUMENTS"; exit 1; }
+grep -qiE "whole-project mode|whole.project mode" "$F" || { echo "FAIL: must document whole-project mode (no argument) as the legacy path"; exit 1; }
+grep -qF '$ARGUMENTS' "$F" || { echo "FAIL: must reference \$ARGUMENTS to switch between modes"; exit 1; }
+grep -qE '\^\[a-z0-9\]\[a-z0-9-\]\*\$' "$F" || { echo "FAIL: must validate <module> arg with the lowercase-kebab-case regex"; exit 1; }
+# Per-module mode contract: do NOT touch other module files / _index.md / roadmap.md
+grep -qiE "do NOT touch _index|does NOT touch.*_index|not touch.*_index" "$F" || { echo "FAIL: per-module mode must explicitly NOT touch _index.md"; exit 1; }
+grep -qiE "does NOT touch.*roadmap|do NOT.*roadmap|not touch.*roadmap" "$F" || { echo "FAIL: per-module mode must explicitly NOT touch roadmap.md"; exit 1; }
+
+# Per-module mode cascade reporter — find other modules that reference the target in their
+# ## How it connects block (or _index.md ## Data flow overview) and surface them, do NOT silently regenerate.
+grep -qiE "cascade scan|cascade report|cascade.*may.*stale|may now be stale" "$F" || { echo "FAIL: per-module mode must run a cascade scan and report (not silently regenerate) other modules that reference the target"; exit 1; }
+
+# Per-module mode passes scope=single-module + target_module to the architect
+grep -qF "scope" "$F" || { echo "FAIL: must pass 'scope' input to reverse-prd-architect"; exit 1; }
+grep -qiE "single-module|target_module" "$F" || { echo "FAIL: must pass single-module scope / target_module to the architect when in per-module mode"; exit 1; }
 
 # Stage 2 — content writing delegated to a named subagent (Agent tool)
 grep -qiE "Agent tool|Task tool|subagent_type" "$F" || { echo "FAIL: writing must be delegated to a subagent via the Agent tool"; exit 1; }
 grep -qF "reverse-prd-architect" "$F" || { echo "FAIL: must reference the reverse-prd-architect agent by name"; exit 1; }
 grep -qF "agents/reverse-prd-architect.md" "$F" || { echo "FAIL: must link to the agent definition file (agents/reverse-prd-architect.md)"; exit 1; }
 
-# Spawning prompt must enumerate the six inputs the agent expects
-for input in project_root feature_folder module_list infra_deps monorepo_signals lsp_available; do
+# Spawning prompt must enumerate the eight inputs the agent expects (v0.7.2: added scope + target_module)
+for input in project_root feature_folder scope target_module module_list infra_deps monorepo_signals lsp_available; do
   grep -qF "$input" "$F" || { echo "FAIL: spawning prompt must include input '$input'"; exit 1; }
 done
 
