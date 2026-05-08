@@ -343,7 +343,28 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.7.3 — current
+### v0.7.5 — current
+
+Dual-layer voice for `ESCALATE_TO_USER` verdicts. A May 2026 dogfood escalation (P4 picker latency) showed the v0.7.0 ESCALATE block was structured for engineer-to-engineer consumption — heavy on jargon ("real-link bench RED", inline commit hashes, plan/PRD section refs front-and-center) — and the user reading it had to re-derive what was actually stuck before they could pick an option. The fix is not "drop the facts" (those are load-bearing — without "27x slower than expected" the user cannot tell software-config from hardware-fundamental) but **layer two voices**.
+
+`agents/impl-reviewer.md ## ESCALATE_TO_USER` template now mandates four labeled sections in order:
+
+- `【发生了什么 / What happened】` — plain-language opener, 1–2 sentences, no jargon, no commit hashes.
+- `【为什么不能自己解决 / Why the loop cannot converge】` — plain-language category (hardware physical limit / contradictory PRD / scope ambiguity / budget exhausted).
+- `【关键事实 / Key facts】` — precise diagnostic: numbers WITH comparison ("5.3s / 30 docs (plan §5 假设 <200ms — 27 倍慢)"), commit hash, PRD anchor, test status, suspicions.
+- `【你可以选 / Options】` — `[Recommended]` flags exactly one option (or none); each option is one line: name + cost + outcome.
+
+Machine-parseable header (`VERDICT:` / `mode:` / `phase:` / `attempt:` / `history:`) unchanged — orchestrator parsing logic preserved. `RETURN_TO_<writer>` and `APPROVE` formats unchanged (those go to agents, not users). See `docs/design-v0.7.md` §14. Pure additive vs v0.7.4.
+
+### v0.7.4
+
+Reflexion-style cross-phase memory. `findings.md` gains a fifth section `## Reflections`, append-only, written by the `/super-manus:impl` orchestrator at phase close when the phase had ≥1 reviewer RETURN event. Each entry is `### Phase <n>: <name>` followed by exactly three bullets — `Misstep:` (surface event), `Root cause:` (causal), **`Heuristic:` (prescriptive rule for the next phase)**. The Heuristic line is the load-bearing one — it differentiates Reflections from `## Errors` (event log) and `## Session log` (chronological recap).
+
+The next phase's `impl-architect` spawn includes the section verbatim as a new `prior_reflections` input; the architect honors `Heuristic:` lines as a checklist when drafting `## Approach` and `## Files touched`. Update-scoped (cross-update reflections deferred — would conflict with the "PRD is target spec" invariant); orchestrator-written (reviewer stays read-only by tool surface). Pure additive vs v0.7.3 — no PRD schema change, no path migration, no hash baseline change. See `docs/design-v0.7.md` §13.
+
+The within-trial loop (reviewer → writer feedback via `previous_attempt_feedback`, already in v0.7.0) is plain Reflection — patches the immediate bug. v0.7.4 adds the Reflexion layer — durable cross-trial lessons that prevent the next phase from repeating mistakes the writers couldn't catch about themselves.
+
+### v0.7.3
 
 Fix in `impl-architect`: the agent was applying `Edit` to `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` to substitute placeholders in place, which trips Claude Code's sensitive-file permission prompt on the plugin cache and blocks the phase. The seeding step (Bash + `sed` into `${update_dir}/`) was buried at the end of `## Idempotency` and easy to skip.
 

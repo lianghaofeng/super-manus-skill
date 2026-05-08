@@ -89,4 +89,40 @@ grep -qE "pre-close.*RETURN_TO_TEST_WRITER|RETURN_TO_TEST_WRITER" "$F" || { echo
 # What reviewer does NOT do — prevents drift toward writer-style behavior
 grep -qiE "do not write any file|do NOT write|write nothing" "$F" || { echo "FAIL: must explicitly forbid writing files"; exit 1; }
 
+# === v0.7.5 additive assertions ===========================================
+# v0.7.5 mandates a dual-layer ESCALATE_TO_USER format: plain-language opener
+# (what happened / why can't converge) ABOVE precise diagnostic facts and
+# options. Both layers are load-bearing — neither alone gives the user enough
+# to decide.
+
+# ESCALATE template MUST contain the four labeled sections (canonical bilingual labels).
+grep -qF "发生了什么" "$F" \
+  || { echo "FAIL: v0.7.5 ESCALATE template must include '发生了什么' (what happened) plain-language section"; exit 1; }
+grep -qF "为什么不能自己解决" "$F" \
+  || { echo "FAIL: v0.7.5 ESCALATE template must include '为什么不能自己解决' (why loop can't converge) section"; exit 1; }
+grep -qF "关键事实" "$F" \
+  || { echo "FAIL: v0.7.5 ESCALATE template must include '关键事实' (key facts) precise-diagnostic section"; exit 1; }
+grep -qF "你可以选" "$F" \
+  || { echo "FAIL: v0.7.5 ESCALATE template must include '你可以选' (options) chooser section"; exit 1; }
+
+# Recommended marker — exactly one option may be flagged.
+grep -qF "[Recommended]" "$F" \
+  || { echo "FAIL: v0.7.5 ESCALATE template must document the [Recommended] marker"; exit 1; }
+grep -qiE "exactly ONE option|never mark more than one|mark none" "$F" \
+  || { echo "FAIL: v0.7.5 must specify the [Recommended] marker rule (exactly one, or none)"; exit 1; }
+
+# Style rule: numbers must include comparison/units, not bare values.
+grep -qiE "comparison is what makes|numbers .{0,40}with units|expected baseline|ratio if" "$F" \
+  || { echo "FAIL: v0.7.5 must require numbers carry units + comparison (not bare values)"; exit 1; }
+
+# Style rule: plain-language voice in top sections; no commit hashes / file paths there.
+grep -qiE "plain[- ]language|non-engineer|smart PM" "$F" \
+  || { echo "FAIL: v0.7.5 must require plain-language voice for top ESCALATE sections"; exit 1; }
+grep -qiE "no commit hashes.{0,40}top|commit hash.{0,40}go in 关键事实|file paths.{0,40}top sections" "$F" \
+  || { echo "FAIL: v0.7.5 must forbid commit hashes / file paths in the plain-language top sections"; exit 1; }
+
+# Both-layer-required — explicit "do not collapse to one or the other"
+grep -qiE "do not collapse|both .{0,40}load[- ]bearing|both layers are load" "$F" \
+  || { echo "FAIL: v0.7.5 must explicitly say plain-language and diagnostic layers are both load-bearing (no collapsing)"; exit 1; }
+
 echo OK

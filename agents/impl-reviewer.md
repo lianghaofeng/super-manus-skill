@@ -206,25 +206,55 @@ When you return upstream of the immediate previous writer, the orchestrator casc
 
 ### ESCALATE_TO_USER
 
+The user reads this verdict directly — unlike RETURN_TO_<writer>, which is consumed by another agent. Use a **dual-layer structure**: lead with plain-language sections that a non-engineer (or you on Slack with no context) can grok in 10 seconds, then keep precise diagnostic facts (numbers, ratios, commit hashes, plan/PRD refs) right below for whoever has to act on it. **Both layers are load-bearing — do not collapse to one or the other:**
+
+- The plain-language opener answers *"what happened?"* without jargon. The user without your context should be able to make a decision after just the top sections.
+- The diagnostic facts answer *"what specifically?"* — every concrete number, ratio, commit hash, file/line ref the user (or future you) needs to verify or act on. **Don't drop these for brevity** — without "27x slower than expected", the user cannot tell software-config issue from fundamental hardware issue, and cannot pick the right option below.
+
 ```
 VERDICT: ESCALATE_TO_USER
 mode: <pre-test | pre-code | pre-close>
 phase: p<n>
 attempt: <attempt_number>
-reason: <one sentence — why the loop can't converge>
+
+【发生了什么 / What happened】
+<one to two plain-language sentences, no jargon, no commit hashes — what is stuck and the bottleneck in concrete terms. A non-engineer should grok it. Use a concrete comparison or analogy if the situation is non-obvious.>
+
+【为什么不能自己解决 / Why the loop cannot converge】
+<one sentence in plain language naming the category — hardware physical limit / contradictory PRD / scope ambiguity / budget exhausted / etc. The user reads this to decide whether to invest in fixing or accept the constraint.>
+
+【关键事实 / Key facts】
+- <each numeric fact: actual measurement vs expected, with the ratio if it is dramatic — e.g. "5.3s / 30 docs (plan §5 假设 <200ms — 27 倍慢)">
+- <code state: which commit hash, which file, which line range>
+- <PRD anchor: which `## section`, which exact bullet text — and the plain-language paraphrase if the bullet itself contains jargon>
+- <test/regression status: green/red counts; which suite passed and which failed>
+- <suspicions / leads worth following: name the next-action diagnostic if there is an obvious one — e.g. "M4 vs M1 不应该慢 → MPS 加速可能未生效，落 CPU">
+
+【你可以选 / Options】
+[Recommended] (a) <one-line option name> — <plain-language description, expected cost, expected outcome>
+              (b) <option name> — <description, cost, outcome>
+              (c) <option name> — <description, cost, outcome>
+              (d) <option name> — <description, cost, outcome>
+
 history:
   - attempt 1: <prior reviewer feedback if attempt > 1>
   - attempt 2: <prior reviewer feedback if attempt > 2>
-user_options:
-  - <option A — typically a writer-side fix the user could guide via /super-manus:impl re-run>
-  - <option B — typically a plan or PRD edit (/super-manus:prd-update or hand-edit)>
-  - <option C — typically "abort phase and edit tests directly with manual hash refresh per pre-v0.7 escape hatch">
 ```
+
+Style rules:
+
+- **Plain-language voice in the top three labeled sections** — pretend the reader is a smart PM who knows the project but does not know engineering jargon. Examples: "比目标还慢" beats "exceeds the SLO ceiling"; "硬件性能撞墙" beats "wall-clock saturated"; "改 1 行强制走 GPU" beats "explicit device='mps' in CrossEncoder init".
+- **Numbers always go in 关键事实 with units AND comparison** — write `5.3s / 30 docs (plan §5 假设 <200ms — 27 倍慢)`, not `5.3s rerank latency`. The comparison is what makes the number actionable; the bare number means nothing without the expected baseline.
+- **Mark exactly ONE option `[Recommended]`** when one path is clearly the cheapest-to-test or highest-ROI — typically the "fastest diagnostic that could unlock the cheapest fix" path. If no option is clearly preferred, mark none — false confidence misleads. Never mark more than one.
+- **Each option is one line** — name + cost + outcome shape. Do NOT write paragraphs in the chooser; the diagnostic facts above already supply context.
+- **Use the user's working language** for the labeled headings (Chinese projects → Chinese-led labels; English → English-led). The bilingual headings shown above (`【发生了什么 / What happened】`) are the canonical fallback when the language is unclear; agents in clearly mono-language projects may use single-language labels.
+- **No commit hashes / file paths / function names in the top three sections** — those go in 关键事实. Top sections stay readable on a phone.
 
 Use ESCALATE_TO_USER when:
 
 - `attempt_number > 2` (this is the 3rd review at this checkpoint and it would still RETURN — counter exhausted).
 - The issue is genuinely contradictory PRD or scope ambiguity that no re-spawn will fix.
+- The work hits a physical / external constraint that the loop cannot resolve (hardware limit, third-party API change, missing infrastructure).
 - Your budget is exhausted before converging.
 
 ## Idempotency / re-spawn awareness

@@ -517,3 +517,92 @@ Plugin manifest bumped to **0.7.4**. Pure additive vs v0.7.3.
 - **Reflection ESCALATION on persistent rule violation** (e.g., "architect violated Heuristic from Phase 1 in Phase 3 — escalate to user"). Considered overkill; the reviewer's existing checks catch the symptom even if the architect ignores the heuristic.
 - **First-person voice enforcement** (writers produce reflections in their own voice rather than orchestrator synthesizing). Not worth the per-phase extra spawn at this point. If orchestrator-synthesized Heuristics prove generic / unhelpful, revisit.
 - **Reflection visibility to reviewer.** Reflections are an architect-side input only. Reviewer continues to evaluate against PRD + plan + tests + code — adding "did architect honor Heuristic K?" to reviewer's checklist would re-couple the two layers we just separated.
+
+## 14. v0.7.5 addendum — `ESCALATE_TO_USER` dual-layer voice
+
+A real dogfood escalation (P4 picker latency, May 2026) surfaced a UX bug in the v0.7.0 reviewer: when a phase escalates to the user, the verdict block was structured for **engineer-to-engineer** consumption — heavy on jargon ("real-link bench RED", "plan §5 假设", commit hashes inline, no plain-language summary), with the result that the user reading it had to **re-derive** what was actually stuck before they could pick an option. The diagnostic facts were precise but front-loaded with terminology the user had to translate. The right voice fix is not "drop the facts" (those are load-bearing — without "27x slower than expected" the user cannot tell software-config from hardware-fundamental) but **layer two voices**: plain-language opener for "what happened?" + precise facts kept directly below for "what specifically?".
+
+### What changed
+
+`agents/impl-reviewer.md ## ESCALATE_TO_USER` template gains a four-section dual-layer body. The machine-parseable header (VERDICT / mode / phase / attempt) and the trailing `history:` block are unchanged — only the body between them is restructured:
+
+```
+VERDICT: ESCALATE_TO_USER
+mode: <pre-test | pre-code | pre-close>
+phase: p<n>
+attempt: <attempt_number>
+
+【发生了什么 / What happened】
+<plain-language opener — 1–2 sentences, no jargon, no commit hashes>
+
+【为什么不能自己解决 / Why the loop cannot converge】
+<plain-language category — hardware physical limit / contradictory PRD / scope ambiguity / budget exhausted>
+
+【关键事实 / Key facts】
+- <numbers WITH comparison: "5.3s / 30 docs (plan §5 假设 <200ms — 27 倍慢)">
+- <code state: commit hash, file, line>
+- <PRD anchor: which `## section`, exact bullet text>
+- <test/regression status>
+- <suspicions / next-action diagnostic>
+
+【你可以选 / Options】
+[Recommended] (a) <plain-language + cost + outcome>
+              (b) <option>
+              (c) <option>
+              (d) <option>
+
+history:
+  - attempt 1: <prior reviewer feedback if attempt > 1>
+  - attempt 2: <prior reviewer feedback if attempt > 2>
+```
+
+### Voice rules (load-bearing)
+
+Style rules baked into the template — agents/impl-reviewer.md spells these out so the reviewer doesn't drift back to single-voice output:
+
+- **Plain-language voice in the top three labeled sections.** Pretend the reader is a smart PM who knows the project but does not know engineering jargon. "比目标还慢" beats "exceeds the SLO ceiling"; "改 1 行强制走 GPU" beats "explicit device='mps' in CrossEncoder init".
+- **Numbers in `关键事实` carry units AND comparison.** Bare values are not actionable — `5.3s rerank latency` tells the user nothing without `(plan §5 假设 <200ms — 27 倍慢)`. The comparison is what makes the option chooser navigable.
+- **`[Recommended]` marks exactly one option** when one path is clearly cheapest-to-test or highest-ROI. Mark none if there is no clear preference. **Never two.** False confidence misleads the user into a worse decision than leaving them to pick.
+- **One line per option** — name + cost + outcome. The diagnostic facts above already supply context; do not write paragraphs in the chooser.
+- **No commit hashes, file paths, function names in the top three sections.** Those go in `关键事实`. Top sections must read on a phone.
+- **User's working language for headings.** Chinese projects → Chinese-led labels. The bilingual `【中 / EN】` form is the canonical fallback when language is unclear.
+
+### Why dual-layer (not just plain-language)
+
+Considered and rejected: drop the precise diagnostic block and write only plain-language. Why rejected:
+
+- The user's option choice depends on the diagnostic numbers. Without "27x slower than expected", option (b) "MPS troubleshoot" is not obviously correct — the user could mistake it for fundamental hardware limit and pick (d) "accept SLO drift" instead. The numbers convert the diagnostic from opinion to evidence.
+- Audit trail: weeks later when re-reading findings.md, "P4 escalated due to picker slow" is not enough — `commit 772c9e4 / 5.3s actual / 200ms planned` is the trace future-you needs.
+- Cross-handoff: if the user accepts (d) "PRD edit", the next agent (`/super-manus:prd-update`) needs the exact PRD bullet text + plan section refs. Plain-language alone loses these handles.
+
+Equally considered and rejected: keep engineer voice and let users translate. Why rejected:
+
+- The dogfood case (`P4 review #3 ESCALATE_TO_USER ...`) showed the user explicitly asking for re-explanation in plain language before they could decide. That round-trip is preventable.
+- super-manus's audience includes both technical leads and PMs — the latter cannot fluently parse "plan §5 §Approach §2/§3 commit 772c9e4". Output should be readable to both without translation.
+
+### Cost impact
+
+Negligible. The dual-layer template adds ~200 tokens to the agent's system prompt (loaded once per spawn, cache-hit after first within 5-min window) and ~200 tokens to the ESCALATE output (only when escalation actually triggers, which is rare — most phases never escalate). Per-phase amortized cost increase: <0.2%, fully dwarfed by writer model selection (frontmatter `model: sonnet` saves 60-70% — the dominant cost lever).
+
+### Migration
+
+Pure additive. v0.7.4 ESCALATE outputs continue to parse (header + history blocks unchanged). New format is opt-in by virtue of the agent's system prompt — every new reviewer spawn from v0.7.5 onward emits the new format; in-flight v0.7.4 spawns finish in old format. No findings.md / progress.md / PRD migration needed. No test fixture format change beyond the new keyword assertions.
+
+### Cascade implemented
+
+- `agents/impl-reviewer.md` — `## Verdict format ## ESCALATE_TO_USER` section: replaced single-block template with dual-layer template + style rules.
+- `tests/test_agent_impl_reviewer.sh` — asserts presence of the four labeled sections, the `[Recommended]` marker rule, "no commit hashes in top sections" guidance, and the "both layers are load-bearing" non-collapse rule.
+- `docs/design-v0.7.md` — this addendum.
+- `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` — version bumped to 0.7.5.
+
+`commands/impl.md` and `commands/impl-all.md` are NOT modified — verdict consumption (parsing the `VERDICT: ESCALATE_TO_USER` line, surfacing user_options) is structurally unchanged. The orchestrator forwards the verbatim verdict body to the user via the existing `Surface to user verbatim` step.
+
+### Out of scope (v0.7.5)
+
+- **Reformatting RETURN_TO_<writer> verdicts.** Those go to a writer agent, not the user — engineer voice is correct there. The dual-layer is specifically for user-facing output.
+- **Reformatting APPROVE notes.** APPROVE is informational and rarely consequential; engineer voice is fine.
+- **Translating existing v0.7.4 ESCALATE outputs.** History stays history; new format applies forward only.
+- **Auto-rendering as a UI chooser.** That is a Claude Code SDK / harness concern, not super-manus's. The agent still emits text; whoever renders it can apply UI affordances.
+- **Per-project voice tuning** (e.g., let teams add `## Reviewer voice override` to PRD). YAGNI — bilingual fallback covers the realistic spread.
+
+Plugin manifest bumped to **0.7.5**. Pure additive vs v0.7.4.

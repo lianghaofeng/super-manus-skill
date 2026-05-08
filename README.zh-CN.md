@@ -342,7 +342,28 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.7.3 —— 当前
+### v0.7.5 —— 当前
+
+`ESCALATE_TO_USER` 的 verdict 改成**双层语态**。2026-05 的真实 dogfood escalation（P4 picker 延迟）暴露了 v0.7.0 ESCALATE 输出是 engineer-to-engineer 风格——堆术语（"real-link bench RED"、commit hash 内联、plan/PRD 段号顶在前面）——用户读完得**自己再翻译一遍**才看得懂哪里卡住、能选什么。修法不是"把事实丢掉"（精确数字是 load-bearing 的——没有"比预期慢 27 倍"这条，用户没法分辨是软件配错还是硬件极限），而是**双层语态共存**。
+
+`agents/impl-reviewer.md ## ESCALATE_TO_USER` 模板现在强制四段标签结构：
+
+- `【发生了什么 / What happened】` —— 大白话开场，1-2 句，零术语，零 commit hash
+- `【为什么不能自己解决 / Why the loop cannot converge】` —— 大白话归类（硬件物理极限 / PRD 自相矛盾 / scope 模糊 / budget 用光）
+- `【关键事实 / Key facts】` —— 精确诊断：数字带对比（"5.3s / 30 docs（plan §5 假设 <200ms —— 27 倍慢）"）+ commit hash + PRD 锚点 + 测试状态 + 嫌疑/下一步诊断
+- `【你可以选 / Options】` —— `[Recommended]` 严格只标一个（或不标），每个选项一行：名字 + 代价 + 期望结果
+
+机器可解析头（`VERDICT:` / `mode:` / `phase:` / `attempt:` / `history:`）保持原样——orchestrator 解析逻辑零改动。`RETURN_TO_<writer>` 和 `APPROVE` 格式不动（那两类输出的读者是 agent，不是用户）。详见 `docs/design-v0.7.md` §14。相对 v0.7.4 纯 additive。
+
+### v0.7.4
+
+Reflexion 风格的跨 phase 经验持久化。`findings.md` 加了第 4 个 H2 段 `## Reflections`，append-only，由 `/super-manus:impl` orchestrator 在 phase close 时合成（仅当本 phase 有 ≥1 次 reviewer RETURN 才写）。每条是 `### Phase <n>: <name>` + 三个固定 bullet：`Misstep:`（表面事件）/`Root cause:`（根因）/**`Heuristic:`（给下个 phase 的可操作规则）**。**Heuristic 那一行是核心**——它是 Reflections 跟 `## Errors`（事件流水）和 `## Session log`（按时间叙述）的根本区别。
+
+下一个 phase spawn `impl-architect` 时，spawning prompt 多一个 `prior_reflections` 输入（把整段 `## Reflections` 原文塞进去）；架构师把每条 `Heuristic:` 当 checklist 来对照 `## Approach` 和 `## Files touched`。**作用域只在 update 内**（跨 update 反思持久化暂缓——会跟"PRD 是唯一 spec"这条不变量冲突）；**由 orchestrator 主线程合成**（reviewer 保持 read-only by tool surface 不破）。相对 v0.7.3 纯 additive——PRD schema 不动、路径迁移不动、cheat-prevention hash 基线不动。详见 `docs/design-v0.7.md` §13。
+
+v0.7.0 的 reviewer→writer `previous_attempt_feedback` 反馈通路是 plain Reflection——当场修当前的 bug。v0.7.4 加的是 Reflexion 那一层——把"writer 自己抓不出来的错"沉淀成下个 phase 默认就规避的规则。
+
+### v0.7.3
 
 修了 `impl-architect`：之前 agent 会对 `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` 直接 `Edit`（in-place 替换占位符），触发 Claude Code 对 plugin cache 下文件的 sensitive-file 权限提示，整个 phase 被卡住。原因是 seeding 流程（Bash + `sed` 输出到 `${update_dir}/`）被埋在 `## Idempotency` 末尾，容易被跳过。
 
