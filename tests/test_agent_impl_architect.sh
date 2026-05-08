@@ -41,6 +41,13 @@ grep -qiE "LSP unavailable|LSP not available|no language server" "$F" || { echo 
 # Idempotency: do not overwrite filled phase plans
 grep -qiE "idempotent|idempotency|do NOT overwrite|already drafted" "$F" || { echo "FAIL: must specify idempotency — don't overwrite filled phase plans"; exit 1; }
 
+# Write barrier: Edit/Write must never target the plugin template (CLAUDE_PLUGIN_ROOT is read-only).
+# Without this barrier the architect "edits" templates/phase_plan.md in-place to substitute
+# placeholders, which trips a sensitive-file permission prompt under the plugin cache.
+grep -qF 'CLAUDE_PLUGIN_ROOT' "$F" || { echo "FAIL: must mention CLAUDE_PLUGIN_ROOT in the write-barrier rule"; exit 1; }
+grep -qiE "READ-ONLY|read.only|never .{0,30}(Edit|Write).{0,30}(template|CLAUDE_PLUGIN_ROOT)|do NOT (Edit|Write).{0,30}(template|CLAUDE_PLUGIN_ROOT)" "$F" || { echo "FAIL: must declare templates/CLAUDE_PLUGIN_ROOT as read-only / forbid Edit on the template"; exit 1; }
+grep -qiE "seed.*template|sed.*template|Bash.*sed" "$F" || { echo "FAIL: must specify the Bash+sed seeding procedure (so Edit isn't applied to the template)"; exit 1; }
+
 # Budget: ≤5 LSP, ≤10 grep/Read
 grep -qiE "≤5 LSP|5 LSP" "$F" || { echo "FAIL: must mention ≤5 LSP call ceiling"; exit 1; }
 grep -qiE "≤10|10 grep|grep / Read" "$F" || { echo "FAIL: must mention ≤10 grep/Read ceiling"; exit 1; }

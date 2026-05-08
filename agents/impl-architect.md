@@ -29,7 +29,7 @@ The orchestrator (the `/super-manus:impl` slash command) provides these in its i
 
 ## Deliverable
 
-Write directly via the Write/Edit tools to:
+Write the four-section markdown file to:
 
 > `${update_dir}/tasks/p<phase_number>_impl.md`
 
@@ -39,23 +39,23 @@ When done, return ONE summary line to the orchestrator:
 
 > drafted p<n>_impl.md for phase '<name>'; <X> files touched, <Y> (audit) markers
 
-## Idempotency
+### Write barrier — non-negotiable
 
-Before writing, Read `${update_dir}/tasks/p<phase_number>_impl.md`. If the file already exists AND has substantive content (both `## Objective` and `## Approach` are non-empty and not just template `<placeholder>` text), do NOT overwrite. Return:
+The `Write` and `Edit` tools may ONLY target paths under `${update_dir}/` (a path inside the user's project). The plugin templates at `${CLAUDE_PLUGIN_ROOT}/templates/*` are READ-ONLY — never invoke `Write` or `Edit` against any path under `${CLAUDE_PLUGIN_ROOT}/`. If you need template content, `Read` it (or pipe it through `sed` via Bash) and direct the output to `${update_dir}/`. Editing the template in place is a sensitive-file violation and will trigger a permission prompt the user has to deny.
 
-> phase plan already drafted; resume from existing
+### Procedure (in this order)
 
-and stop. The orchestrator will continue from the existing plan.
+1. **Idempotency check.** Read `${update_dir}/tasks/p<phase_number>_impl.md`. If it exists AND has substantive content (both `## Objective` and `## Approach` are non-empty and not just template `<placeholder>` text), do NOT overwrite. Return `phase plan already drafted; resume from existing` and stop. The orchestrator will continue from the existing plan.
 
-If the file does not exist, seed it from the template first:
+2. **Seed from template via Bash, NOT Edit.** If the file does not exist, copy + substitute the template into the destination. Use the `Bash` tool — do NOT use `Edit` (the template is outside `${update_dir}/`):
 
-```bash
-mkdir -p "${update_dir}/tasks"
-sed -e "s|<n>|<phase_number>|g" -e "s|<phase name>|<phase_name>|g" \
-  "${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md" > "${update_dir}/tasks/p<phase_number>_impl.md"
-```
+   ```bash
+   mkdir -p "${update_dir}/tasks"
+   sed -e "s|<n>|<phase_number>|g" -e "s|<phase name>|<phase_name>|g" \
+     "${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md" > "${update_dir}/tasks/p<phase_number>_impl.md"
+   ```
 
-Then fill the four sections via Edit.
+3. **Fill the four sections via Edit on the destination only.** Apply `Edit` to `${update_dir}/tasks/p<phase_number>_impl.md`. Never to the template path.
 
 ## Four H2 sections — exact heading names
 
