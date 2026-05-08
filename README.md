@@ -343,7 +343,13 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.7.2 — current
+### v0.7.3 — current
+
+Fix in `impl-architect`: the agent was applying `Edit` to `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` to substitute placeholders in place, which trips Claude Code's sensitive-file permission prompt on the plugin cache and blocks the phase. The seeding step (Bash + `sed` into `${update_dir}/`) was buried at the end of `## Idempotency` and easy to skip.
+
+Restructure `agents/impl-architect.md ## Deliverable` with a non-negotiable **Write barrier** (`Edit`/`Write` may only target paths under `${update_dir}/`; templates under `${CLAUDE_PLUGIN_ROOT}/` are READ-ONLY) and an ordered three-step Procedure that pins Bash+sed seeding as the only way to populate the destination from the template. `tests/test_agent_impl_architect.sh` adds three assertions that lock the barrier. Pure agent-guidance fix; no PRD-schema, runtime-API, or migration changes.
+
+### v0.7.2
 
 `/super-manus:reverse-prd` gains two ergonomic improvements:
 

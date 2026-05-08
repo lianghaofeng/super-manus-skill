@@ -342,7 +342,13 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.7.2 —— 当前
+### v0.7.3 —— 当前
+
+修了 `impl-architect`：之前 agent 会对 `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` 直接 `Edit`（in-place 替换占位符），触发 Claude Code 对 plugin cache 下文件的 sensitive-file 权限提示，整个 phase 被卡住。原因是 seeding 流程（Bash + `sed` 输出到 `${update_dir}/`）被埋在 `## Idempotency` 末尾，容易被跳过。
+
+重构 `agents/impl-architect.md ## Deliverable`，加了一段不可协商的 **Write barrier**（`Edit`/`Write` 只能落在 `${update_dir}/` 下；`${CLAUDE_PLUGIN_ROOT}/` 下的模板是 READ-ONLY），并把流程拆成有序三步，把 Bash+sed seeding 钉为唯一一条"从模板生成目标文件"的路径。`tests/test_agent_impl_architect.sh` 加了三条断言把这条 barrier 锁死。纯 agent-guidance 修复，不动 PRD schema、运行时 API，也不需要迁移。
+
+### v0.7.2
 
 `/super-manus:reverse-prd` 加了两个易用性改进：
 
