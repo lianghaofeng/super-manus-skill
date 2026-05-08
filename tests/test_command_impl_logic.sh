@@ -126,4 +126,30 @@ grep -qiE "no pending|no more pending|fall through to.*end-of-update|fall throug
 grep -qF "/super-manus:impl-all" "$F" \
   || { echo "FAIL: v0.5 must cross-link the loop alternative /super-manus:impl-all"; exit 1; }
 
+# === v0.7.4 additive assertions ===========================================
+# v0.7.4 adds Reflexion-style cross-phase memory: orchestrator synthesizes a
+# Reflection entry at phase close (when the phase had >=1 reviewer RETURN) and
+# the next phase's impl-architect spawn includes ## Reflections as
+# `prior_reflections`.
+
+# Architect spawning prompt must include `prior_reflections` input.
+grep -qF "prior_reflections" "$F" \
+  || { echo "FAIL: v0.7.4 must pass prior_reflections to impl-architect (spawning prompt input)"; exit 1; }
+
+# Phase-close step must mention synthesis of ## Reflections (or the section name itself).
+grep -qF "## Reflections" "$F" \
+  || { echo "FAIL: v0.7.4 must reference findings.md ## Reflections (phase-close synthesis target)"; exit 1; }
+
+# The synthesis must reference the 3-bullet shape (Misstep / Root cause / Heuristic).
+grep -qF "Heuristic" "$F" \
+  || { echo "FAIL: v0.7.4 phase-close synthesis must produce a Heuristic bullet (the load-bearing line)"; exit 1; }
+grep -qF "Misstep" "$F" \
+  || { echo "FAIL: v0.7.4 phase-close synthesis must produce a Misstep bullet"; exit 1; }
+grep -qF "Root cause" "$F" \
+  || { echo "FAIL: v0.7.4 phase-close synthesis must produce a Root cause bullet"; exit 1; }
+
+# Synthesis must skip when the phase had zero RETURN events.
+grep -qiE "Zero RETURN|zero reviewer RETURN|skip.*entry|skipped when.*zero" "$F" \
+  || { echo "FAIL: v0.7.4 must skip Reflection entry when the phase had zero reviewer RETURN events"; exit 1; }
+
 echo OK

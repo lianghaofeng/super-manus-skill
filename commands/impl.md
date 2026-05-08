@@ -83,6 +83,7 @@ Compute these from the resolved target and pass them in the Agent tool's `prompt
 - `findings_path` — `$UPDATE_DIR/findings.md`
 - `progress_path` — `$UPDATE_DIR/progress.md`
 - `lsp_available` — `true` or `false`
+- `prior_reflections` — verbatim contents of `$UPDATE_DIR/findings.md ## Reflections` if non-empty (heuristics from prior phases of THIS update); absent / empty if no prior reflections exist. Read the section once before the first spawn of this phase; reuse the same value on any re-spawn within this phase.
 
 ### Spawning prompt skeleton
 
@@ -98,8 +99,9 @@ Compute these from the resolved target and pass them in the Agent tool's `prompt
 > - findings_path: `<absolute path>`
 > - progress_path: `<absolute path>`
 > - lsp_available: `<true|false>`
+> - prior_reflections: `<verbatim ## Reflections section text, or "(none)" if empty>`
 >
-> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. Return the summary line when done.
+> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor in this phase's `## Approach` and `## Files touched`. Return the summary line when done.
 
 The agent writes `$UPDATE_DIR/tasks/p<n>_impl.md` directly via the Write/Edit tools, seeding from `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` if the file does not yet exist (the template carries the four stable headings `## Objective` / `## Approach` / `## Files touched` / `## Verification`). It does NOT print the file to chat and it does NOT write code. If the file already has substantive content, it is idempotent — it returns "phase plan already drafted; resume from existing" and the orchestrator continues.
 
@@ -424,11 +426,29 @@ For manual bullets (`open URL, click X`), prompt the user once to confirm the ob
 
 When ALL `## Verification` commands pass:
 
-1. Edit `task_plan.md ## Phases` to flip the phase row's Status from `in_progress` to `closed`.
-2. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"` to regenerate `progress.md ## Outstanding`.
-3. Delete the temporary `$UPDATE_DIR/.test_hashes_p<n>.txt` file (it served its purpose).
+1. **Synthesize phase reflection (Reflexion-style cross-phase memory).** Read `$UPDATE_DIR/findings.md ## Errors` and count rows whose When-or-What cell mentions this phase (e.g., `phase p<n>` or `review #1/#2/#3 attempt <N>` rows the orchestrator wrote during this phase's RETURN handling). Two cases:
+   - **Zero RETURN rows for this phase** — the phase was clean on first try. Skip this step entirely; do NOT write an empty entry.
+   - **One or more RETURN rows for this phase** — synthesize a single H3 entry and append it to `$UPDATE_DIR/findings.md ## Reflections` (orchestrator main thread does this inline; no agent spawn). Exact shape:
+
+     ```markdown
+     ### Phase <n>: <phase_name>
+     - Misstep: <one sentence — what attempt 1 got wrong; the surface event from ## Errors row 1>
+     - Root cause: <one sentence — why the writer made that choice; inferred from reviewer's `issues` text>
+     - Heuristic: <one sentence — rule for next phase to avoid this; this is the load-bearing line>
+     ```
+
+     Voice rules (load-bearing — keep distinct from `## Errors` and `## Session log`):
+     - Misstep is the surface event; Root cause is causal; **Heuristic is prescriptive** ("Run head -1 on every declared input source before drafting ## Approach", not "we re-fixtured tests on real data").
+     - If the Heuristic line reads as a recap of what happened rather than a rule for next time, rewrite it.
+     - Three bullets, no more. No code, no file paths, no function names, no test commands — same hygiene as `findings.md ## Decisions`.
+     - Append (not prepend) so phase order matches reading order.
+2. Edit `task_plan.md ## Phases` to flip the phase row's Status from `in_progress` to `closed`.
+3. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"` to regenerate `progress.md ## Outstanding`.
+4. Delete the temporary `$UPDATE_DIR/.test_hashes_p<n>.txt` file (it served its purpose).
 
 The post-commit hook automatically appends commit lines to `$UPDATE_DIR/progress.md ## Completed commits`. Do **not** hand-edit `progress.md` — it is hook-managed.
+
+The synthesis step (1) deliberately runs AFTER the cheat-prevention hash check (Step 7) and `## Verification` (Step 8), so a phase that aborts early writes no reflection — only successfully closed phases contribute to the cross-phase memory.
 
 ## Terminal behavior — the differentiator from `/super-manus:impl-all`
 

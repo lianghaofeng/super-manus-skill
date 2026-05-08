@@ -73,10 +73,15 @@ while there exists a pending or in_progress phase in $UPDATE_DIR/task_plan.md:
   Step 7: re-hash test files; mismatch → ABORT phase, append "code-writer modified tests for phase p<n>" drift row, STOP loop
   Step 8: run every command in tasks/p<n>_impl.md ## Verification
     fail → invoke skills/systematic-debugging-in-phase, phase stays in_progress, STOP loop
-  Step 9: pass → flip phase Status to closed in task_plan.md
+  Step 9: pass → synthesize ### Phase <n> entry in findings.md ## Reflections
+            (only if this phase had ≥1 reviewer RETURN; orchestrator main thread inline, no spawn;
+             3 bullets — Misstep / Root cause / Heuristic — Heuristic must be prescriptive)
+          flip phase Status to closed in task_plan.md
           refresh-outstanding.sh "$UPDATE_DIR"
           delete $UPDATE_DIR/.test_hashes_p<n>.txt
   # ↑ end of per-phase block ↑
+  # next phase's architect spawn (Step 1) re-reads findings.md ## Reflections —
+  # heuristics from earlier phases of this same loop accumulate and inform the next plan
   loop continues automatically — no user pause
 end loop
 run end-of-update drift gate (3-pass) per /super-manus:impl

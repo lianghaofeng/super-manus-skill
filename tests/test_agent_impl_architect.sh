@@ -75,4 +75,14 @@ grep -qiE "not auto-discovered|NOT auto-discovered|auto-discovered" "$F" || { ec
 grep -qiE "phase[- ]test path command|explicit path|phase-test path" "$F" || { echo "FAIL: ## Verification must require an explicit phase-test path command"; exit 1; }
 grep -qiE "smoke command|user-visible" "$F" || { echo "FAIL: ## Verification must require a user-visible smoke command"; exit 1; }
 
+# === v0.7.4 additive assertions ===========================================
+# Architect must document the prior_reflections input + a procedure step that
+# treats Heuristic lines as a checklist for this phase's plan.
+grep -qF "prior_reflections" "$F" \
+  || { echo "FAIL: v0.7.4 must document the prior_reflections input"; exit 1; }
+grep -qF "Heuristic" "$F" \
+  || { echo "FAIL: v0.7.4 must reference the Heuristic line as the load-bearing element of prior_reflections"; exit 1; }
+grep -qiE "checklist|honor.*Heuristic" "$F" \
+  || { echo "FAIL: v0.7.4 must say the architect treats Heuristic lines as a checklist (not free reading)"; exit 1; }
+
 echo OK

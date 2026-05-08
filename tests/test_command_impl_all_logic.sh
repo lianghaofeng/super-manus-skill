@@ -86,4 +86,12 @@ grep -qiE "stable" "$F" || { echo "FAIL: must mention 'stable' roadmap status"; 
 grep -qiE "BLOCKED|cannot be marked done|cannot.*complete" "$F" \
   || { echo "FAIL: must say update is BLOCKED when pending drift remains"; exit 1; }
 
+# === v0.7.4 additive assertions ===========================================
+# Phase-close inside the loop must synthesize a ## Reflections entry (when
+# applicable) so the NEXT iteration's architect spawn picks it up.
+grep -qF "## Reflections" "$F" \
+  || { echo "FAIL: v0.7.4 loop must reference findings.md ## Reflections (phase-close synthesis)"; exit 1; }
+grep -qF "Heuristic" "$F" \
+  || { echo "FAIL: v0.7.4 loop must mention the Heuristic line (load-bearing)"; exit 1; }
+
 echo OK

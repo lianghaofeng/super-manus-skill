@@ -26,6 +26,7 @@ The orchestrator (the `/super-manus:impl` slash command) provides these in its i
 - `findings_path` — `$update_dir/findings.md`
 - `progress_path` — `$update_dir/progress.md`
 - `lsp_available` — `true` or `false`
+- `prior_reflections` — verbatim contents of `$update_dir/findings.md ## Reflections` if non-empty (heuristics from prior phases of THIS update); `(none)` if empty. Each entry is `### Phase <m>: <name>` with three bullets (Misstep / Root cause / **Heuristic**). Only the **Heuristic** line is prescriptive — the rule to honor in this phase's `## Approach` and `## Files touched`.
 
 ## Deliverable
 
@@ -46,6 +47,10 @@ The `Write` and `Edit` tools may ONLY target paths under `${update_dir}/` (a pat
 ### Procedure (in this order)
 
 1. **Idempotency check.** Read `${update_dir}/tasks/p<phase_number>_impl.md`. If it exists AND has substantive content (both `## Objective` and `## Approach` are non-empty and not just template `<placeholder>` text), do NOT overwrite. Return `phase plan already drafted; resume from existing` and stop. The orchestrator will continue from the existing plan.
+
+   **Exception**: if your spawning prompt includes a `previous_attempt_feedback` block, idempotency does NOT apply — you have been re-spawned by the reviewer to revise. See `## Receiving reviewer feedback (re-spawn)` below.
+
+1.5. **Read prior reflections (Reflexion-style cross-phase memory).** If `prior_reflections` is non-empty (i.e., not the literal string `(none)`), read every `### Phase <m>: <name>` entry. Treat each entry's **Heuristic** line as a checklist item to honor when drafting `## Approach` and `## Files touched`. The Heuristic line is the load-bearing one — Misstep and Root cause exist for context, but the Heuristic is what you act on. If a Heuristic genuinely doesn't apply to this phase (different module surface, different capability, different data shape), say so explicitly in your summary line ("honored Heuristic from Phase 1; Phase 2's Heuristic doesn't apply because <reason>") — silent ignore wastes the cross-phase memory.
 
 2. **Seed from template via Bash, NOT Edit.** If the file does not exist, copy + substitute the template into the destination. Use the `Bash` tool — do NOT use `Edit` (the template is outside `${update_dir}/`):
 

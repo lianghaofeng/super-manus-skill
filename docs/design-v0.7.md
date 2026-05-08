@@ -403,3 +403,117 @@ Considered: `/super-manus:reverse-prd --force` to overwrite without prompting. R
 Same backward-compatibility story as v0.7.1: pure additive. Existing whole-project invocations (no argument) continue to work unchanged; the only behavioral change is the hard-abort → confirmation switch on committed PRDs, which is strictly less restrictive.
 
 Plugin manifest bumped to **0.7.2**. Pure additive vs v0.7.1.
+
+## 13. v0.7.4 addendum — Reflexion-style cross-phase memory
+
+Adds a fifth section `## Reflections` to `findings.md` plus two small orchestrator hooks. Closes a real gap surfaced during a v0.7.3 design review: the v0.7 reviewer↔writer feedback loop is **plain Reflection** (within-trial verdict echo), not **Reflexion** (cross-trial durable lesson). Plain Reflection patches the immediate bug; Reflexion turns repeated bugs into rules the next architect avoids by default.
+
+### Structural mapping (Reflexion paper → super-manus)
+
+| Reflexion component | super-manus realization |
+| --- | --- |
+| Actor | impl-architect / impl-test-writer / impl-code-writer |
+| Evaluator | impl-reviewer at 3 checkpoints |
+| Critic → Actor feedback (within-trial) | `previous_attempt_feedback` block on re-spawn (v0.7.0, already shipped) |
+| **Self-reflection (root cause + heuristic)** | **NEW — orchestrator synthesizes at phase close** |
+| **Episodic memory** | **NEW — `findings.md ## Reflections` (update-scoped, H3-keyed by phase)** |
+| **Cross-trial context injection** | **NEW — next phase's architect spawning prompt includes prior `## Reflections`** |
+
+The within-trial loop (already in v0.7.0) handles "this attempt was wrong, here's how the writer fixes it on retry". The new layer handles "the writer kept making mistake X within this update — phase N+1's architect should default to avoiding it". Two layers stacked; they don't compete.
+
+### What changed
+
+1. **`templates/findings.md`** gains a fourth H2: `## Reflections`. Append-only, H3-keyed by phase. Format per entry:
+
+   ```markdown
+   ### Phase <n>: <name>
+   - Misstep: <one sentence — what attempt 1 got wrong; the surface event>
+   - Root cause: <one sentence — why the writer made that choice>
+   - Heuristic: <one sentence — rule for next phase to avoid this>
+   ```
+
+   Three bullets, fixed shape. The **Heuristic** line is the load-bearing one — it's what differentiates Reflections from `## Errors` (event log) and `## Session log` (chronological recap). If a phase closes with zero RETURN events, **no entry is written** — clean phases produce no reflection.
+
+2. **`commands/impl.md` Step 9 (Phase close)** gains a **new first step** before flipping Status:
+   - Read `$UPDATE_DIR/findings.md ## Errors` for rows tagged `phase p<n>` (review #1 / #2 / #3 RETURN events from THIS phase).
+   - If ≥1 row exists, synthesize a `### Phase <n>: <name>` entry per the template above — orchestrator main thread does this inline, no new agent spawn.
+   - Append (not prepend) to `findings.md ## Reflections`.
+   - If 0 rows exist, skip — phase was clean on first try.
+   - Then flip Status, run `refresh-outstanding.sh`, delete hash file (existing Step 9 actions).
+
+3. **`commands/impl.md` Step 1 (Spawn impl-architect)** spawning prompt skeleton gets one new optional input:
+   - `prior_reflections` — verbatim contents of `findings.md ## Reflections` if non-empty; absent if empty.
+   - The orchestrator reads the section once before spawning; on subsequent re-spawns within the same phase (per existing v0.7.0 retry budget), the same value is reused.
+
+4. **`agents/impl-architect.md` procedure** gains a new step 1.5 (between idempotency check and template seed):
+   - "If your spawning prompt includes a `prior_reflections` block, read it before drafting. Each entry is `### Phase <m>: <name>` with Misstep / Root cause / **Heuristic** bullets — treat the Heuristic line as a checklist item to honor in this phase's `## Approach` and `## Files touched`. If a Heuristic genuinely doesn't apply to this phase (different module surface, different capability), say so in your summary line — don't silently ignore."
+
+5. **`commands/impl-all.md` loop** mirrors impl.md: synthesis runs at each phase close inside the loop; the next phase's architect spawn includes the now-updated `prior_reflections`. Reflections accumulate across phases within a single `/super-manus:impl-all` run.
+
+### Voice boundaries (load-bearing)
+
+The three log layers in this update folder share a source-event ("phase 2 attempt 1 RETURN_TO_TEST_WRITER for inline-dict fixture") but record at different abstraction levels. Confusing them collapses Reflections back to a duplicate of `## Errors`:
+
+| Layer | Voice | Audience | Example for the same source event |
+| --- | --- | --- | --- |
+| `findings.md ## Errors` | Atomic, structured, third-person | Orchestrator / reviewer audit trail | `\| 2026-05-08 \| review #2 attempt 1 RETURN_TO_TEST_WRITER \| inline dict fixture disagrees with head -1; suggested: re-fixture from real data \|` |
+| `progress.md ## Session log` | Narrative, chronological | Human catching up on "what happened this week" | `- Closed phase 2 after re-fixturing tests on real data.` |
+| `findings.md ## Reflections` | Heuristic, atemporal, prescriptive | Next phase's impl-architect (via spawning prompt) | `Heuristic: Run head -1 on every declared input source before drafting ## Approach; do not infer schema from PRD prose.` |
+
+The Heuristic line is the test: if it reads as a rule a future architect could literally honor as a checklist item, it's a Reflection. If it reads as a recap of what occurred, it has drifted into Session log territory.
+
+### Why orchestrator-as-synthesizer (not a new agent)
+
+This was the design decision with the most candidates. Considered and rejected:
+
+- **impl-reviewer writes Reflections** — reviewer has the cleanest root-cause analysis (it produced the verdict text). Rejected: reviewer's `tools: Read, Glob, Grep, Bash` — no `Write` / `Edit` — is a v0.7.0 load-bearing invariant. Reviewer being read-only by tool surface is what makes its audits trustworthy. Granting it Write to one file punctures that.
+- **impl-architect writes Reflections** — architect has PM-voice synthesis chops. Rejected: architect's write surface is `tasks/p<n>_impl.md`. Phase-close is post-architect; re-waking it for a different file scope is a phase-end coda that doesn't fit its persona.
+- **impl-test-writer / impl-code-writer write Reflections** — first-person voice fits Reflexion best. Rejected: writers are stateless single-spawn agents; adding a dedicated reflection turn means a 5th spawn per phase (~+15-25% cost).
+- **New `impl-reflector` subagent** — clean separation. Rejected: agent sprawl for a low-frequency synthesis task. If quality of orchestrator-synthesized entries proves poor in practice, the upgrade path is to extract this step into `impl-reflector` later — zero migration cost.
+- **Orchestrator main thread synthesizes** — chosen. The data is already in `findings.md ## Errors` (orchestrator wrote those rows itself on every RETURN). Phase close is already orchestrator-owned (Status flip, hash cleanup, refresh-outstanding). Adding "synthesize 3-bullet entry from this-phase ## Errors rows" is the same flavor of work.
+
+This mirrors the existing **session log pattern**: hooks fire a checkpoint, the main agent judges + synthesizes + writes. v0.7.4 reuses the pattern at a different lifecycle point (phase close instead of every-N-turns / commit).
+
+### Why update-scoped (not project-global)
+
+Cross-update Reflections (project-global `docs/super-manus/reflections/<module>.md` accumulating heuristics across milestones) was considered. Rejected for v0.7.4:
+
+- **Conflicts with the "PRD is target spec, no other source of truth" invariant.** A persistent reflections store would be a second long-lived doctrine file alongside PRD. If PRD and reflections diverge over months, which wins? Adding that adjudication channel needs its own design pass.
+- **No retrieval matching.** Cross-update would want similarity matching (only feed reflections relevant to the current module's capabilities). Update-scoped sidesteps this — within one milestone (3-6 phases on one module), full-pool injection is fine signal/noise.
+- **Reflexion paper does cross-trial-on-same-task.** Within one update, phases ARE near-similar tasks on the same module. Across updates, phases are different tasks. Update scope honors the paper's "similar task" precondition without retrieval logic.
+
+If the update-scoped layer proves valuable in practice, cross-update is a separate v0.8 design discussion — at that point the questions become "where does it live", "how does it stay in sync with PRD evolution", "how is similarity defined", and those are too many decisions to bundle into v0.7.4.
+
+### Cheat-prevention preservation
+
+Same posture as v0.7.0:
+
+- Reviewer is still read-only by tool surface — Reflections are written by the orchestrator main thread, not by the reviewer.
+- The synthesis step runs **after** review #3 APPROVE — i.e., AFTER the cheat-prevention hash check has either passed or aborted the phase. A phase that aborts at the hash check writes no Reflection (the phase didn't close).
+- Reflections cannot influence the within-phase test/code review chain — they're only consumed at the next phase's architect spawn, downstream of all current-phase reviews.
+
+### Cascade implemented
+
+- `templates/findings.md` — adds `## Reflections` H2 + embedded H3 template comment.
+- `commands/impl.md` — Step 9 gains the synthesis sub-step; Step 1 spawning prompt gains `prior_reflections` input.
+- `commands/impl-all.md` — loop pseudocode mentions reflection synthesis at each phase close.
+- `agents/impl-architect.md` — `## Inputs` adds `prior_reflections`; procedure gains step 1.5 (read prior reflections, treat Heuristic lines as checklist).
+- `skills/using-sm/SKILL.md` — `findings.md` description gains the `## Reflections` bullet.
+- `CLAUDE.md` — schema list gains `## Reflections` for findings.md; "Where to look" gains v0.7.4 mention.
+- `tests/test_template_findings.sh` — asserts `## Reflections` heading present.
+- `tests/test_command_impl_logic.sh` / `tests/test_command_impl_all_logic.sh` — assert phase-close synthesis step + `prior_reflections` input.
+- `tests/test_agent_impl_architect.sh` — asserts `prior_reflections` input documented.
+
+### Migration
+
+Pure additive. Existing `findings.md` files (no `## Reflections` section) work fine — the orchestrator's synthesis step is a no-op until it runs the first phase under v0.7.4 against an existing update folder, at which point it appends the new H2 (the heading-presence test on the template only checks templates, not active update files). No PRD schema change. No path migration. No phase-test format change. No hash baseline change.
+
+Plugin manifest bumped to **0.7.4**. Pure additive vs v0.7.3.
+
+### Out of scope (v0.7.4)
+
+- **Cross-update reflections** (Option C in design discussion). Deferred — see "Why update-scoped" above.
+- **Reflection retrieval / similarity matching.** Deferred with cross-update; not needed at update scope.
+- **Reflection ESCALATION on persistent rule violation** (e.g., "architect violated Heuristic from Phase 1 in Phase 3 — escalate to user"). Considered overkill; the reviewer's existing checks catch the symptom even if the architect ignores the heuristic.
+- **First-person voice enforcement** (writers produce reflections in their own voice rather than orchestrator synthesizing). Not worth the per-phase extra spawn at this point. If orchestrator-synthesized Heuristics prove generic / unhelpful, revisit.
+- **Reflection visibility to reviewer.** Reflections are an architect-side input only. Reviewer continues to evaluate against PRD + plan + tests + code — adding "did architect honor Heuristic K?" to reviewer's checklist would re-couple the two layers we just separated.

@@ -73,6 +73,7 @@ The naming distinction is load-bearing — orchestrator and CI configs depend on
 - `## Decisions`: dated entries, **3 short lines max each**: `Chose: <one sentence>` / `Why: <one sentence>` / `Ruled out: <one sentence, optional>`. **No** code blocks, file paths, line numbers, function names, test command names. The artifact lives in `tasks/p<n>_impl.md` and commit messages — `findings.md` records the *judgment*, not the *artifact*. PRD revisions get a paired entry here when `/super-manus:prd-update <module>` runs.
 - `## Errors`: table `When | What failed | Resolution`. Each cell ≤ one short sentence.
 - `## Data points / research`: bullet form. Smoke numbers, eval scores, links.
+- `## Reflections` (v0.7.4): cross-phase memory, written ONLY by the `/super-manus:impl` orchestrator at phase close (skipped when a phase has zero reviewer RETURN events). Each entry is `### Phase <n>: <name>` followed by exactly three bullets — `Misstep:` (surface event), `Root cause:` (causal), `Heuristic:` (prescriptive rule for next phase). The next phase's `impl-architect` spawn includes the section verbatim as `prior_reflections`; the architect honors Heuristic lines as checklist items. Voice rule: Heuristics must be prescriptive ("Run head -1 on every declared input source before drafting") — if the line reads as a recap, it has drifted into `## Errors` / `## Session log` territory. Do NOT hand-edit.
 
 **`docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/progress.md`** — auto-managed; treat as read-only by default.
 - `## Completed commits`: post-commit hook appends one line per `git commit` (Bash-tool calls only).
@@ -101,7 +102,7 @@ The naming distinction is load-bearing — orchestrator and CI configs depend on
 | `roadmap.md` | Auto-managed by `start` / `brainstorm` / `sync` / `impl`. Hand-edit only the Note column. |
 | `prd_drift.md` | Append-only by `sync` / `impl` / `drive` on detected drift; Resolution updated by `prd-update`. |
 | `task_plan.md` (per update) | A phase status changes (`closed` / `in_progress` / `blocked`); a new phase is added or split. `## Goal` only changes if the per-module PRD's framing changes. |
-| `findings.md` (per update) | Any decision (with reasoning), any error, any research finding worth surviving the session. PRD revisions for this module also get a paired entry here. |
+| `findings.md` (per update) | Any decision (with reasoning), any error, any research finding worth surviving the session. PRD revisions for this module also get a paired entry here. **`## Reflections` is orchestrator-only** — appended at phase close by `/super-manus:impl` when a phase had ≥1 reviewer RETURN; never hand-edited. |
 | `progress.md` (per update) | NEVER directly. Wait for a hook reminder. Post-commit hook tells you to append to `## Completed commits`; Stop hook checkpoint asks you to consider writing to `## Session log`. |
 | `tasks/p<n>_impl.md` (per update) | A phase entered `in_progress`; the approach / DB schema / API design changes mid-phase; the verification step changes. |
 
@@ -180,7 +181,8 @@ The point is to surface tarpits early, not slog through them silently.
 - **Silently updating PRD** when implementation diverges — always log a drift row and let the user decide.
 - **Inventing a per-feature wrapper folder** — v0.4 has none. PRD lives at `docs/super-manus/prd/`, not `docs/super-manus/<something>/prd/`. If you find yourself constructing a feature-prefixed path, you're working from outdated v0.2/v0.3 instructions.
 - **Writing or reading `.super-manus/active`** — the file does not exist in v0.4. Always resolve via `sm_active_update` (no args).
-- Reordering or renaming schema headings — hooks parse by exact heading name (`## Phases`, `## Outstanding`, `## Completed commits`, `## Session log`, `## Modules`, etc.) and will silently produce wrong output if you rename them.
+- Reordering or renaming schema headings — hooks parse by exact heading name (`## Phases`, `## Outstanding`, `## Completed commits`, `## Session log`, `## Modules`, `## Reflections`, etc.) and will silently produce wrong output if you rename them.
+- Hand-editing `findings.md ## Reflections` — it is orchestrator-only (appended at phase close). Hand-edits race the `/super-manus:impl` synthesis step on the next phase close.
 - Creating ad-hoc files (`notes.md`, `decisions.md`, `todo.md`, `tests.md`) inside the super-manus folder — keep state in the canonical files.
 - Hand-editing `## Outstanding` in any `progress.md` — `scripts/refresh-outstanding.sh` overwrites it on the next refresh.
 

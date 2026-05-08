@@ -10,7 +10,7 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
 - `impl-test-writer` and `impl-code-writer` enforce the cheat-prevention boundary; their tests MUST assert the write barrier — `impl-test-writer` has no `Edit` tool; `impl-code-writer`'s persona forbids editing any file under `tests/` or `e2e/` (the orchestrator additionally hashes test files before/after to enforce mechanically).
 - Templates under `templates/` MUST keep their schema headings verbatim (parsed by hooks and scripts; renaming silently breaks the runtime):
   - `task_plan.md`: `## Goal`, `## Phases`
-  - `findings.md`: `## Decisions`, `## Errors`, `## Data points / research`
+  - `findings.md`: `## Decisions`, `## Errors`, `## Data points / research`, `## Reflections` (v0.7.4 — orchestrator-only, appended at phase close)
   - `progress.md`: `## Completed commits`, `## Session log`, `## Outstanding`
   - `phase_plan.md`: `## Objective`, `## Approach`, `## Files touched`, `## Verification`
   - `prd_index.md` (8 H2): `## Problem`, `## Audience`, `## Success metrics`, `## Demo`, `## Must`, `## Not doing`, `## Modules`, `## Data flow overview`
@@ -54,6 +54,7 @@ Invariants:
 ## Architecture
 
 - `/super-manus:impl` runs ONE phase through 4 agents with 3 review checkpoints: **impl-architect** (drafts `tasks/p<n>_impl.md`) → **impl-reviewer** [pre-test] → **impl-test-writer** (commits red phase tests + e2e) → **impl-reviewer** [pre-code] → **impl-code-writer** (writes source until tests green) → **impl-reviewer** [pre-close]. Reviewer is read-only by tool surface (no Write/Edit) and drives re-spawn loops; APPROVE / RETURN_TO_<writer> / ESCALATE_TO_USER per checkpoint, retry budget = 2 RETURNs (3rd ESCALATEs). Hash baseline for cheat-prevention is established AFTER review #2 APPROVE — never before — so cascade re-spawns (review #3 → test-writer) can re-hash on the new test commit.
+- **Reflexion-style cross-phase memory (v0.7.4)**: at each phase close (after review #3 APPROVE + Verification pass), the orchestrator main thread synthesizes a 3-bullet `### Phase <n>: <name>` entry into `findings.md ## Reflections` if the phase had ≥1 reviewer RETURN event. The next phase's `impl-architect` spawn includes the section verbatim as `prior_reflections`; architect honors `Heuristic:` lines as checklist items. Update-scoped (cross-update reflections deferred); orchestrator-written (reviewer stays read-only).
 - `/super-manus:impl-all` loops the same pipeline through all pending phases without pausing; loop-stops include reviewer ESCALATE_TO_USER.
 - `/super-manus:prd-update <module>` is dual-mode: forward iteration (no pending drift row → user adds/tightens a bullet before coding; skip findings.md write) or drift absorption (pending row → write findings.md decision + flip Resolution). Mode auto-detected.
 - Skills `tdd-in-phases` / `verification-before-phase-close` / `systematic-debugging-in-phase` are invoked by `/super-manus:impl` during phase execution. `using-sm` is the umbrella skill invoked by every `/super-manus:*` command.
@@ -68,6 +69,6 @@ Invariants:
 
 ## Where to look
 
-- **Current design**: `docs/design-v0.7.md` — read this before adding anything. Covers the 4-agent reviewer pipeline (v0.7.0) and the v0.7.1 PRD-template refinements (`## How it connects` Exposes/Consumes preamble + `## Data flow overview` `(for: <capability>)` edge annotation).
+- **Current design**: `docs/design-v0.7.md` — read this before adding anything. Covers the 4-agent reviewer pipeline (v0.7.0), the v0.7.1 PRD-template refinements (`## How it connects` Exposes/Consumes preamble + `## Data flow overview` `(for: <capability>)` edge annotation), the v0.7.2 `/super-manus:reverse-prd` per-module mode + soft-abort confirmation, and the v0.7.4 Reflexion-style cross-phase memory (`findings.md ## Reflections` synthesized at phase close, fed to next phase's impl-architect via `prior_reflections`).
 - Older designs at `docs/design-v0.{1,2,4,5,6}.md` — superseded, kept for historical reference only. Don't read unless you need to understand WHY a current invariant exists.
 - Per-task implementation plans live at `docs/plans/`.
