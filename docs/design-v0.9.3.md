@@ -201,20 +201,21 @@ Plus optionally extend `tests/test_template_prd_module.sh` if `templates/prd_mod
 
 No new test files. No regex lint. The discipline is enforced by the LLM architect at draft time, not by a static checker.
 
-### Open questions
+### Decisions
 
-1. **Template vs persona for R2/R3 instruction.** The use-case preamble (R2) and User-facing flow (R3) — should they appear as **placeholder sections** in `templates/prd_module.md` (so a fresh PRD has the headings ready and the architect just fills them), OR only as **persona instructions** in `agents/reverse-prd-architect.md` (architect knows to add them when applicable, doesn't pre-pollute the template)?
-   - Template approach: more visible, harder to forget, but creates empty headings for modules that don't qualify (R3 skip case especially).
-   - Persona approach: cleaner output for thin modules, but architect may forget to add for modules that DO qualify.
-   - Initial guess: persona-only for R3 (Mermaid is conditional on multi-step flow), template placeholder for R2 (use cases preamble is universal enough for non-trivial modules).
+**Template vs persona scoping (resolved)**:
+- **R2 (use-case preamble) → template**. `templates/prd_module.md` gets a `主要使用场景:` placeholder block at the top of `## What users get`. Architects fill it; thin utility modules can leave it as `(none — single-scenario module)` or delete the placeholder entirely.
+- **R3 (User-facing flow) → persona-only**. The Mermaid diagram is conditional on multi-step flow. No placeholder in `templates/prd_module.md`; architect adds the sub-section to `## How it connects` only when the module qualifies.
+
+This split matches the visibility/conditionality tradeoff: R2 is universal-enough to pre-shape the template; R3 is conditional and would create empty headings on most modules.
 
 ### Final scope
 
 The whole v0.9.3 milestone is now: one persona file edit (R1 + R2 + R3 instructions) + test extension on `test_agent_reverse_prd_architect.sh` (assertions for all three) + optional `templates/prd_module.md` update for R2 placeholder. Persona file grows from 334 lines to ~420 lines. No new commands, no new agents, no new modes. One small milestone, one phase plan, one phase to implement.
 
-### Status: open, no ship date — three requirements above are the spec
+### Status: ratified — ready for implementation
 
-User confirmed (across multiple turns):
+User-confirmed shape across multiple discussion turns:
 - "肯定是要 reverse-prd-architect 改" (R1 is needed)
 - "我只要产出来的 prd 文件是符合系统当前模块实现逻辑的, 然后以一种便于人理解的方式描述当前实际状态就行" (the goal: faithful + readable user-manual)
 - "用户视角流程图，这个要，用 mermaid 画" (R3)
@@ -223,5 +224,18 @@ User confirmed (across multiple turns):
 - "prd直接写现在系统的情况就好了啊，为什么要前和后的情况" (drop ❌/✅ before-after, use positive examples only)
 - "不需要特意禁用 As/I want/So that，直接让他用 pm 语气发挥就好了啊" (drop explicit ban; positive guidance only)
 - "给个大概的流程图就好了，不需要太详细" (R3 stays rough; drop strict trigger rules)
+- "R2 放模板 R3 只放 persona 可以" (template-vs-persona scoping resolved)
 
-Spec is rules-light, examples-led: positive guidance + concrete examples, architect uses PM-voice judgment for the rest. Ratify the one open question above (template-vs-persona scoping), then v0.9.3 can ship.
+Spec is rules-light, examples-led: positive guidance + concrete examples, architect uses PM-voice judgment for the rest.
+
+### Implementation milestone shape (when v0.9.3 ships)
+
+A single milestone with one phase, touching:
+
+1. `agents/reverse-prd-architect.md` — add `## PRD voice discipline` H2 section (R1) + extend `## What users get` heading description with use-case preamble guidance (R2 persona side) + extend `## How it connects` heading description with User-facing flow Mermaid sub-section guidance (R3).
+2. `templates/prd_module.md` — add `主要使用场景:` placeholder block at the top of `## What users get` (R2 template side).
+3. `tests/test_agent_reverse_prd_architect.sh` — assertions for R1 + R2 + R3 (per the Tests section above).
+4. `tests/test_template_prd_module.sh` — assertion that the use-case preamble placeholder appears in the template.
+5. `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` — version bump 0.9.2 → 0.9.3.
+
+Persona file 334 → ~420 lines. Template file gains ~5 lines for the preamble placeholder. No new commands, no new agents, no new modes.
