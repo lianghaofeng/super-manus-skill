@@ -58,100 +58,81 @@ User said: "记一下到 0.9.3 design 吧 先不改". Surface in a future sessio
 
 ---
 
-## 2. PRD voice discipline — prevent + retro-clean impl leakage
+## 2. PRD voice discipline — fix at the architect
+
+### What the PRD is supposed to be
+
+A PRD describes the **current actual state of the module** in a way that is **easy for a human to understand**. Two properties, both load-bearing:
+
+1. **Faithful** — every bullet matches what the code actually does; no fabricated capabilities, no stale claims.
+2. **Readable** — a PM, designer, support engineer, or end user can read the PRD without grepping the source code to figure out what each line means.
+
+The first property is enforced by `reverse-prd-architect`'s existing cross-validation discipline (runtime probe + source grep + `(audit)` markers for unverified claims). v0.9.0 + v0.8.3 made it solid.
+
+The second property is **not** enforced today, and v0.9.0 audit of teachagent `tutor-agent.md` shows the architect failing it.
 
 ### Observation
 
-Real-world reverse-prd output (teachagent `tutor-agent.md` after dynamic-analysis pass) demonstrates that `reverse-prd-architect` cheerfully promotes implementation tuning into PM-voice sections of the PRD. Concrete examples found in audit:
+Real-world reverse-prd output (teachagent `tutor-agent.md` after dynamic-analysis pass) demonstrates the architect promoting impl detail into PM-voice prose:
 
-- **LLM tuning parameters in `## What users get`**: `task_type=chinese_language`, `temperature=0.1`, `max_tokens=80`, `httpx.Timeout(0.3s)` — these are call-site config, invisible to end users.
-- **Internal state struct field names in user-facing prose**: `active_agent`, `current_mode`, `target_agent`, `intent_decision={source:"manual_override"}` — schema details, not user observations.
-- **Verbatim wire schemas**: `{"kind":"set_mode","mode":"chat|practice|lesson"}` JSON literal pasted into a capability bullet.
-- **Specific tuning constants**: "tail 6 条压成 ≤3 句 4 字段摘要 (课题 / 最近 KP / 学生状态 / 关键词)" — the 6 / 3 / 4 numbers are impl knobs, not UX claims.
+- LLM tuning parameters in `## What users get`: `task_type=chinese_language`, `temperature=0.1`, `max_tokens=80`, `httpx.Timeout(0.3s)`
+- Internal state struct field names: `active_agent`, `current_mode`, `target_agent`, `intent_decision={source:"manual_override"}`
+- Verbatim wire schemas: `{"kind":"set_mode","mode":"chat|practice|lesson"}`
+- Tuning constants as bullet content: "tail 6 条压成 ≤3 句 4 字段摘要"
 
-Symptom: bullets become unreadable to non-engineers (PMs, designers, support, end users) — exactly the audience the PRD is supposed to serve. This is the predictable failure mode of using runtime probe + source-grep evidence: the architect over-cites by pasting config in raw rather than translating to user observation.
+The bullets are **faithful** (they cite real code). They are **not readable** by anyone who hasn't already read the source. The architect's existing "be specific, ground claims" pressure rewarded verbatim impl reproduction over translation to user observation.
 
-The architect persona at `agents/reverse-prd-architect.md` currently has no voice discipline beyond "PM-flavored H2 sections." The cite bias of v0.8.3 reverse-prd ("be specific, ground claims in source") accidentally rewards verbatim impl reproduction.
+### Single requirement: architect persona gains voice discipline
 
-### Why this matters more than the grayfilter (item 1)
+`agents/reverse-prd-architect.md` adds a `## PRD voice discipline` section. The discipline says:
 
-This is **PRD-driven development** infrastructure rot. If the PRD that drives every downstream phase plan is itself muddied with impl-spec, the test-writer mirror-test risk goes up (test-writer reads the PRD's impl-detail and builds tests against the wire schema rather than user observation), and the user loses the ability to read PRD as the canonical user-visible contract.
+**Each bullet describes user-observable behavior, not the code that produces it.** Engineering evidence — file paths, function names, struct fields, constants, tuning parameters — goes into the `Backed by:` citation that already trails every bullet. The bullet body itself reads as PM voice.
 
-### Requirement R1 — architect prevention discipline (forward)
+**Worked examples** (concrete before/after the architect can pattern-match against):
 
-`agents/reverse-prd-architect.md` MUST add a `## PRD voice discipline` section that enumerates:
+```
+❌ Before: rule miss 才走 LLM gateway fallback (task_type=chinese_language,
+            temperature=0.1, max_tokens=80, httpx.Timeout(0.3s)), LLM 也 miss
+            则 stub passthrough current_mode. conf ≥ 0.5 且 target_agent != current
+            时把 active_agent + current_mode 写回 state...
 
-**Banned in PM-voice prose** (the body text of `## What users get` / `## Why this exists` / `## Users` / `## Success metric statements` / `## Quality bar` claim text):
+✅ After:  rule miss 才走 LLM 兜底分类 (300ms 超时硬约束), LLM 也无法判断时
+            维持当前 mode. 低置信度或目标 = 当前不切档 (避免反复抖动).
+            学生不必手动 set_mode, 下一轮 sub-agent 自然接管.
 
-1. LLM tuning parameters: `temperature`, `max_tokens`, `top_k`, `task_type`, model name (e.g. `gpt-4o`, `claude-opus`)
-2. Internal state struct field names referenced verbatim (`active_agent`, `current_mode`, etc.)
-3. HTTP/WS payload JSON literals (the schema goes elsewhere; the user observation goes here)
-4. Wire field names (`payload.intent_decision.source`)
-5. Tuning constants without user-observable framing (e.g. "frozen-set of 23 keywords", "tail 6 turns", "≤3 sentences" used as engineering knob)
+           Backed by: intent_classifier.py:139-191 (rule layer) +
+           intent_classifier.py:217-251 (LLM fallback) +
+           supervisor.py:45-90 (gating)
+```
 
-**Allowed in PM-voice prose** (genuine user-facing contract surface):
+The before is faithful. The after is faithful AND readable. Same evidence chain, same cite line; just the bullet body translated from "what the code does" to "what the user observes."
 
-1. WS event names the client UI binds (`lesson.choice_needed`, `mode.switched`) — the user-visible protocol
-2. HTTP route paths (`/api/ask`, `/healthz`, `/metrics`)
-3. User-observable durations / counts when expressed as user observation: "切档延迟 ≤ 300ms" ✅; "`httpx.Timeout(0.3s)`" ❌ (same number, opposite voice)
-4. Concrete UX numbers ("15-30 min session", "p95 first-token <2s")
+**Self-check the architect runs before committing each bullet**:
 
-**Rewrite rule** (the operating principle, generalizable beyond the lists above):
+> Could a PM, customer success engineer, or support engineer who has not read the source code understand this bullet? If not, the impl detail belongs in the `Backed by:` cite line, not the bullet body.
 
-> Replace "the system does X with parameter Y at line Z" with "the user experiences observable behavior B" and put X/Y/Z in the `Backed by:` citation, NOT in the bullet body.
+### How existing dirty PRDs get cleaned
 
-**Self-check before write**:
+`/super-manus:reverse-prd <module>` is already the regeneration path. Once the architect persona has the discipline, running reverse-prd on a dirty PRD produces a clean one. Same command, better output.
 
-> For every bullet you draft, ask: "would a PM / customer success engineer / support engineer who has never seen the source code understand this without grepping?" If not, rewrite. The `Backed by:` cite line is where engineering evidence belongs.
+No separate `voice-pass` mode. No `--flag`. No lint regex. The architect IS the lint.
 
-### Requirement R2 — `/super-manus:prd-update <module>` retro-cleanup mode
+### Tests
 
-`commands/prd-update.md` MUST gain a third mode in addition to its existing two (forward iteration / drift absorption):
+Single test extension:
 
-**Mode 3: voice-pass cleanup** — invoked explicitly via `/super-manus:prd-update <module> --voice-pass` (flag name TBD), OR auto-detected when `prd-update` opens an existing PRD whose body contains impl-leakage patterns above a threshold.
+`tests/test_agent_reverse_prd_architect.sh` asserts:
+- A `## PRD voice discipline` section heading exists in the persona file
+- The discipline contains at least one worked before/after example
+- The "self-check question" (PM / support engineer comprehension test) appears verbatim
+- The principle "engineering evidence goes in `Backed by:` cite, not bullet body" appears verbatim
 
-Procedure:
+No new test files. No regex lint. The discipline is enforced by the LLM architect at draft time, not by a static checker.
 
-1. Read `prd/<module>.md`.
-2. **Lint pass** — regex-scan PM-voice sections for the banlist (R1 categories 1-5). Output per-match list with file:line.
-3. **Spawn `reverse-prd-architect` in `voice-cleanup` mode** (new mode parameter — architect's existing scope/per-module mode is preserved). The architect:
-   - Receives the lint hits as input.
-   - For each hit, drafts a PM-voice rewrite that preserves the user-observable claim and demotes impl detail to the `Backed by:` cite line.
-   - Returns a side-by-side diff (before/after per bullet).
-4. Orchestrator surfaces each rewrite via `AskUserQuestion` (multi-question, one per bullet) — user picks `accept` / `reject` / `edit-myself`.
-5. On accept, edit the PRD in place — preserve the `Backed by:` cite line unchanged so the evidence chain holds.
-6. Append a row to `prd_drift.md` documenting the voice-pass: `| <date> | <module> | voice-cleanup applied: N bullets reworded | resolved-by-prd-update |` — the drift log captures the cleanup so it shows up in `git log -p prd/<module>.md` audit.
+### Open question (just one)
 
-This mode is **idempotent** — running twice on a clean PRD lints zero hits and exits with "no impl-leakage detected; PRD already in PM voice."
+How many before/after examples does the architect persona need to reliably internalize the discipline? One per leakage category (LLM params / state-struct names / wire schema / tuning constants) = ~4 examples. Two examples per category for redundancy = ~8. Past 8 the persona file gets long without much marginal benefit. Initial guess: 4 worked examples is enough; iterate if real PRD outputs still leak.
 
-### Requirement R3 — tests
+### Status: open, no ship date — single requirement above is the spec
 
-1. `tests/test_agent_reverse_prd_architect.sh` MUST assert:
-   - `## PRD voice discipline` section heading is present
-   - The five banned categories are enumerated by name
-   - The "rewrite rule" (replace impl phrasing with user-observable phrasing) appears verbatim
-   - The "self-check" question (PM / support engineer would understand) appears verbatim
-2. New test `tests/test_prd_voice_lint.sh` — runs the banlist regex against a synthetic PRD fixture with intentional leakage, asserts the lint catches all of them. Edge cases: a "## Quality bar" line containing "300ms" must NOT trip lint when phrased as user observation (test asserts the lint distinguishes "≤ 300ms" from "`httpx.Timeout(0.3s)`").
-3. `tests/test_command_prd_update_logic.sh` extension — assert the new `voice-pass` mode is documented and the dispatch logic mentions all three modes (forward / drift / voice-pass).
-
-### How this fits PRD-driven development
-
-The v0.9.3 design doc (this file) IS the requirement spec. R1 / R2 / R3 are the three normative claims. When v0.9.3 actually ships:
-
-- R1 lands as agent persona changes (`agents/reverse-prd-architect.md`)
-- R2 lands as command logic + new architect mode (`commands/prd-update.md`, `agents/reverse-prd-architect.md` new mode parameter)
-- R3 lands as test files
-
-The user's existing dirty PRDs (e.g. teachagent `tutor-agent.md`) get cleaned by running `/super-manus:prd-update tutor-agent --voice-pass` once — no manual editing required.
-
-### Open questions before ship
-
-- **Lint precision.** The banlist must NOT false-positive on legitimate user-observable mentions ("response within 300ms" is fine; "`httpx.Timeout(0.3s)`" is not). Need to design the regex to distinguish — likely "presence of code-formatting backticks around the impl detail" is the signal.
-- **Threshold for auto-detect.** If `prd-update` should auto-suggest voice-pass mode when leakage is detected (rather than requiring the explicit flag), what's the trigger threshold? "≥1 hit" surfaces too often; "≥5 hits" lets small leakage accumulate. Probably "≥3 hits in a single section" or "≥1 hit in `## What users get` (highest user visibility)" — needs experimentation.
-- **`AskUserQuestion` cost on big cleanups.** A PRD with 20 leakage hits would mean 20 user prompts. Should the cleanup batch them ("here are 20 rewrites; review all together") rather than one-at-a-time? Probably batch UI is friendlier; needs UX iteration.
-- **Cite preservation guarantee.** R2 step 5 says "preserve the `Backed by:` cite line unchanged." If the rewrite changes which file/line is the most precise evidence, the cite may need updating too. Conservative shape: the architect proposes both bullet-body and cite-line rewrites; the user approves both as a unit. Permissive shape: cite stays frozen (forces architect to translate without changing evidence). Conservative wins on safety; permissive wins on simplicity. TBD.
-- **Granularity of voice-pass on multi-module project.** Run on one module at a time (current `--voice-pass <module>` shape) or whole-project sweep? Whole-project is faster but harder to review; per-module is safer. Probably per-module ships first; whole-project as a follow-up if usage demand surfaces.
-
-### Status: open, no ship date — R1/R2/R3 ratification needed first
-
-User said: "肯定是要 reverse-prd-architect 改…和 0.9.3 一起更新吧…要符合 prd 文档风格，改 requirement 之后能落实到 impl". This entry IS the requirement spec; once you ratify R1-R3 (or amend them), v0.9.3 can ship as a single milestone covering all three.
+User said: "我只要产出来的 prd 文件是符合系统当前模块实现逻辑的, 然后以一种便于人理解的方式描述当前实际状态就行" — this entry IS the spec. Ratify the discipline + worked examples count, then v0.9.3 can ship as a small persona-edit + test-extension milestone.
