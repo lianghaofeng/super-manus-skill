@@ -15,6 +15,11 @@ grep -qE "^name: impl-code-writer$" "$F" || { echo "FAIL: frontmatter 'name' mus
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools'"; exit 1; }
 
+# v0.8.0: writer-tier routing. Code-writer is constrained by red tests (green = success);
+# opus + high is sufficient. See docs/design-v0.8.md §4.
+grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus'"; exit 1; }
+grep -qE "^effort: high$" "$F" || { echo "FAIL: frontmatter must declare 'effort: high' (writer-tier, test-constrained)"; exit 1; }
+
 # Tools whitelist: Read, Write, Edit, Glob, Grep, Bash. Edit IS allowed (code-writer
 # edits source code) but the persona forbids editing tests/ and e2e/.
 for tool in Read Write Edit Glob Grep Bash; do

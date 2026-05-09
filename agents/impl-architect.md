@@ -2,6 +2,8 @@
 name: impl-architect
 description: Implementation-planning subagent that turns a phase name + module PRD context + prior findings into a precise, scoped phase_plan.md. Invoked by /super-manus:impl after the orchestrator's drift check passes — the orchestrator passes phase_number / phase_name / paths in its spawning prompt; this agent owns all writing of $UPDATE_DIR/tasks/p<n>_impl.md. The agent drafts the plan only; code is written by the orchestrator's main thread after user approval.
 tools: Read, Write, Edit, Glob, Grep, Bash
+model: opus
+effort: max
 ---
 
 # impl-architect

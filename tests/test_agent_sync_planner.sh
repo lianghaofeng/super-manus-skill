@@ -14,6 +14,11 @@ grep -qE "^name: sync-planner$" "$F" || { echo "FAIL: frontmatter 'name' must eq
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools' (Read/Grep/Glob/Bash at minimum)"; exit 1; }
 
+# v0.8.0: writer-tier routing. Output is one short Phases table; opus + high
+# is the right balance for narrow-scope planning. See docs/design-v0.8.md §4.
+grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus'"; exit 1; }
+grep -qE "^effort: high$" "$F" || { echo "FAIL: frontmatter must declare 'effort: high' (narrow-scope, table-output planner)"; exit 1; }
+
 # Persona: tech lead (or similar)
 grep -qiE "tech lead|technical lead|engineering lead" "$F" || { echo "FAIL: persona must mention tech lead (or similar)"; exit 1; }
 

@@ -14,6 +14,12 @@ grep -qE "^name: impl-architect$" "$F" || { echo "FAIL: frontmatter 'name' must 
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools' (Read/Write/Edit/Glob/Grep/Bash at minimum)"; exit 1; }
 
+# v0.8.0: pinned model + effort routing. impl-architect is one of the three
+# "thinker" agents (planning quality is what review-pipeline retries hinge on),
+# so it gets effort: max. See docs/design-v0.8.md §4 for the routing rationale.
+grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus' for the planning role"; exit 1; }
+grep -qE "^effort: max$" "$F" || { echo "FAIL: frontmatter must declare 'effort: max' (planner is a top-3 thinker)"; exit 1; }
+
 # Persona: senior implementation planner (or similar)
 grep -qiE "implementation planner|implementation-planning|senior implementation" "$F" || { echo "FAIL: persona must be an implementation planner"; exit 1; }
 

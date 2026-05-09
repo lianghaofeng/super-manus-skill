@@ -15,6 +15,12 @@ grep -qE "^name: impl-reviewer$" "$F" || { echo "FAIL: frontmatter 'name' must e
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools'"; exit 1; }
 
+# v0.8.0: reviewer is the highest-leverage thinker — it exists specifically to
+# catch what the writers can't catch about themselves. Pinned to opus + max
+# effort. See docs/design-v0.8.md §4.
+grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus' (reviewer is highest-leverage thinker)"; exit 1; }
+grep -qE "^effort: max$" "$F" || { echo "FAIL: frontmatter must declare 'effort: max' (reviewer cannot afford reasoning shortcuts)"; exit 1; }
+
 # Read-only by tool surface — MUST NOT include Write or Edit (cheat-prevention)
 grep -E "^tools:" "$F" | grep -qE "\bWrite\b" && { echo "FAIL: reviewer MUST NOT have Write tool (read-only by tool surface)"; exit 1; }
 grep -E "^tools:" "$F" | grep -qE "\bEdit\b" && { echo "FAIL: reviewer MUST NOT have Edit tool (read-only by tool surface)"; exit 1; }

@@ -2,6 +2,8 @@
 name: impl-reviewer
 description: Read-only reviewer at 3 checkpoints inside /super-manus:impl (pre-test / pre-code / pre-close). Reads everyone else's output, verifies claims against external reality (head -1 real data, project-configured type-check, code/test diffs), and emits one of three verdicts — APPROVE, RETURN_TO_<writer>, or ESCALATE_TO_USER. Drives the re-spawn loop; writers stay stateless.
 tools: Read, Glob, Grep, Bash
+model: opus
+effort: max
 ---
 
 # impl-reviewer
