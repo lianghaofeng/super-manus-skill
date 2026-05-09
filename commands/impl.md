@@ -85,7 +85,7 @@ To globally cap effort across all super-manus agents, export `CLAUDE_CODE_EFFORT
 
 ## Step 1 — Spawn impl-architect
 
-If no drift, the orchestrator delegates per-phase impl-plan drafting to the `impl-architect` subagent (Agent tool, `subagent_type="impl-architect"`). The agent owns the persona ("senior implementation planner"), the four-section template population (`## Objective`, `## Approach`, `## Files touched`, `## Verification`), and the source-priority hierarchy. Do NOT inline that persona here — see [agents/impl-architect.md](../agents/impl-architect.md).
+If no drift, the orchestrator delegates per-phase impl-plan drafting to the `impl-architect` subagent (Agent tool, `subagent_type="impl-architect"`). The agent owns the persona ("senior implementation planner"), the five-section template population (v0.9.0: `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification`), and the source-priority hierarchy. Do NOT inline that persona here — see [agents/impl-architect.md](../agents/impl-architect.md).
 
 Why a subagent: phase-plan drafting needs LSP + grep budget on the module's entry files plus a focused PM/engineering voice. Embedding it in the main thread bloats orchestrator context and fragments the persona.
 
@@ -132,6 +132,7 @@ The orchestrator MUST:
 1. Verify `$UPDATE_DIR/tasks/p<n>_impl.md` exists and has non-empty `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification` sections (5 sections, v0.9.0).
 2. If any of the five headings is missing or empty, surface a one-line warning to the user ("impl-architect produced an incomplete plan; please review tasks/p<n>_impl.md before continuing") — do NOT silently fix.
 3. Surface the agent's summary line verbatim to the user.
+4. **Migration handling (v0.9.0).** If the architect's summary line begins with `migrated legacy plan; added Edge cases section`, surface an extra one-line warning to the user **before proceeding to Step 2 (impl-reviewer pre-test)**: `"⚠ legacy 4-section plan migrated to 5-section shape; please review the newly-inserted ## Edge cases section in tasks/p<n>_impl.md before tests are written — it was drafted by the architect without your prior approval of those edges."` Do NOT skip pre-test review on a migrated plan; the reviewer's enumeration check is exactly what we want to catch a hastily-inserted section.
 
 Engineering detail (DB schema, API endpoints, code snippets, file diffs) lives in this phase plan — NOT in the per-module PRD. The PRD answered "this module IS what"; this phase plan answers "this phase DOES what".
 

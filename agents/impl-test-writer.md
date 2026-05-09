@@ -53,11 +53,25 @@ This list is the load-bearing instruction. Reading happens in this order; each l
 
 - **[primary]** `prd/<module>.md` (full 9 sections) — spec, mandatory
 - **[primary]** `prd/_index.md` (`## Demo`, `## Audience`, `## Success metrics`, full sections) — scenario, mandatory
+- **[primary]** `tasks/p<n>_impl.md ## Edge cases` — v0.9.0 architect-committed edge / boundary / failure list. Each non-`(audit)`, non-`Pure happy-path scaffolding` bullet MUST be covered by ≥1 phase-test or e2e assertion. Reviewer pre-code RETURNs if any bullet is uncovered.
 - **[secondary]** `tasks/p<n>_impl.md ## Objective` — phase scope
 - **[secondary]** `tasks/p<n>_impl.md ## Verification` — avoid duplicate coverage
 - **[secondary]** prior phase tests + `e2e/<module>/test_*.{ext}` — prior coverage
 - **[context]** `tasks/p<n>_impl.md ## Approach` + `## Files touched` — context only, do NOT mirror
 - **[context]** source code + LSP — API surface (class / function / route names) only
+
+### `## Edge cases` coverage rule (v0.9.0)
+
+`## Edge cases` is `[primary]` because the architect committed to it as a checklist; the reviewer's pre-code mode walks the bullets and RETURNs if a bullet has no corresponding test. Procedure:
+
+1. Read `## Edge cases` end-to-end. Skip bullets marked `(audit)` (architect couldn't confirm without coding) and the single-bullet `Pure happy-path scaffolding;` exception.
+2. For each remaining bullet, write at least one test that exercises the named edge.
+3. **Name tests so the reviewer can trace bullet → test.** Either:
+   - Use a slug derived from the bullet text in the test name: `test_empty_input_file`, `test_duplicate_ids_across_sources`, `test_network_timeout_mid_batch`. Slug = first 4–6 words of the bullet, lowercased, snake_case.
+   - OR open the test with a comment quoting the bullet text verbatim: `# Edge case: Duplicate IDs across sources — concrete failure mode: silent overwrite would lose the second record`.
+4. The expected behavior MUST come from the bullet's **anchor** — the PRD `## Quality bar` text, the PRD `## Risks` text, or the named failure mode in the bullet itself. NOT from `## Approach`'s would-be impl. Mirror-test on edges → reviewer RETURN.
+
+If a bullet is genuinely too vague to test against (e.g. architect anchored it to a `## Quality bar` clause that says only "be robust"), surface this in your return summary as `(audit) bullet '<text>' too vague to test — anchored claim is non-specific`. Do NOT fabricate a test that asserts a behavior the bullet didn't name; that's mirror-testing.
 
 ## Deliverables (per design §3 / §6)
 

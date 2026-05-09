@@ -77,6 +77,29 @@ grep -qF "test_<capability>" "$F" || { echo "FAIL: must mention Python-style tes
 grep -qE "\.phase\.ts" "$F" || { echo "FAIL: must mention Node/TS-style *.phase.ts phase test naming"; exit 1; }
 grep -qE "test\.ts|\.test\.ts" "$F" || { echo "FAIL: must mention Node/TS-style *.test.ts e2e naming"; exit 1; }
 
+# === v0.9.0 additive assertions ===========================================
+# Test-writer must read the architect-committed ## Edge cases section as
+# [primary] and cover every non-(audit), non-scaffolding bullet. Reviewer
+# pre-code RETURNs on uncovered bullets — this contract has to be visible
+# to the test-writer, otherwise round-1 is wasted by spec.
+
+grep -qF "## Edge cases" "$F" \
+  || { echo "FAIL: v0.9.0 test-writer must reference ## Edge cases (architect-committed coverage checklist)"; exit 1; }
+grep -qiE "primary.{0,40}Edge cases|Edge cases.{0,60}primary" "$F" \
+  || { echo "FAIL: v0.9.0 test-writer must list ## Edge cases as a [primary] read source (not [context])"; exit 1; }
+# Coverage rule must be explicit — every non-(audit), non-scaffolding bullet covered by ≥1 test
+grep -qiE "every.{0,40}bullet|each.{0,30}bullet.{0,30}(test|assert)|covered by .{0,5}1 .{0,15}assertion" "$F" \
+  || { echo "FAIL: v0.9.0 test-writer must say every non-(audit) Edge cases bullet is covered by ≥1 assertion"; exit 1; }
+# Naming convention so reviewer can trace bullet → test (B1)
+grep -qiE "test_<edge_slug>|slug.{0,30}bullet|name tests|test name|comment quoting" "$F" \
+  || { echo "FAIL: v0.9.0 test-writer must specify a naming convention so reviewer can trace edge bullets to tests"; exit 1; }
+# (audit) skip rule
+grep -qiE "skip.{0,20}\(audit\)|\(audit\).{0,30}skip" "$F" \
+  || { echo "FAIL: v0.9.0 test-writer must say (audit) Edge cases bullets are skipped when computing coverage"; exit 1; }
+# Anchor-driven expectations — bullet's PRD/named-failure anchor drives the assertion
+grep -qiE "anchor.{0,30}(PRD|Quality bar|Risks|named failure)|expected behavior.{0,30}anchor" "$F" \
+  || { echo "FAIL: v0.9.0 test-writer must derive expected behavior from the bullet's anchor (PRD ## Quality bar / ## Risks / named failure mode)"; exit 1; }
+
 # Returns ONE summary line mentioning phase tests + e2e + red.
 grep -qiF "phase tests" "$F" || { echo "FAIL: return summary must mention 'phase tests'"; exit 1; }
 grep -qiF "e2e" "$F" || { echo "FAIL: return summary must mention e2e"; exit 1; }

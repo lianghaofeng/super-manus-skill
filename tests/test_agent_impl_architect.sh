@@ -122,4 +122,28 @@ grep -qiE "legacy .{0,10}plan|legacy 4.section|pre.dat" "$F" \
 grep -qiE "insert .{0,30}Edge cases|added Edge cases" "$F" \
   || { echo "FAIL: v0.9.0 must specify in-place insertion of ## Edge cases for legacy plans (not full overwrite)"; exit 1; }
 
+# Negative regression: stale "four-section" copy must NOT describe the v0.9.0
+# deliverable. The phrase is allowed only in legacy-context references that
+# explicitly tag it as pre-v0.9.0 / v0.8.x. Anywhere else → contradiction with
+# the new five-section reality.
+# Allowed forms: "was four-section", "pre-v0.9.0", "4-section" with v0.8.x tag.
+# Disallowed: "the four-section markdown file", "Fill the four sections", "four-section template population".
+grep -qE "four-section markdown file|Fill the four sections|four-section template population" "$F" \
+  && { echo "FAIL: v0.9.0 must NOT describe the deliverable as 'four-section' (the architect now writes 5 sections)"; exit 1; } || true
+
+# B3: (audit) policy must explicitly extend to ## Edge cases (reviewer pre-test
+# enforces (audit) resolution there; without policy mention, architect may not
+# know the policy applies to the new section).
+grep -qiE "applies.{0,30}Edge cases|Edge cases.{0,30}\(audit\)|\(audit\) policy.{0,200}Edge cases" "$F" \
+  || { echo "FAIL: v0.9.0 (audit) policy must explicitly extend to ## Edge cases"; exit 1; }
+
+# D: scaffolding-clause challenge handler in re-spawn protocol. Architect must
+# have a specific path for "reviewer challenged my Pure happy-path scaffolding
+# clause" — concede or reject-with-evidence. Generic "address each issue" is
+# too weak (per cross-agent audit Agent #4 finding).
+grep -qiE "scaffolding.{0,15}challenge|challenged.{0,30}scaffolding|scaffolding.clause challenge" "$F" \
+  || { echo "FAIL: v0.9.0 architect re-spawn handler must have a specific path for scaffolding-clause challenges"; exit 1; }
+grep -qiE "concede|replace .{0,30}scaffolding|reject with evidence|kept scaffolding exception" "$F" \
+  || { echo "FAIL: v0.9.0 scaffolding-challenge protocol must specify concede vs reject-with-evidence (not silent ignore)"; exit 1; }
+
 echo OK

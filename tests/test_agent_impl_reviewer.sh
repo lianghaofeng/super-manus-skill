@@ -141,27 +141,37 @@ grep -qiE "do not collapse|both .{0,40}load[- ]bearing|both layers are load" "$F
 #      rejects vague / unanchored bullets; reviewer pre-code rejects
 #      uncovered bullets.
 
-# pre-test: ## Edge cases enumeration check
+# pre-test: ## Edge cases enumeration check — must land in pre-test (mode header
+# at line ~42 in agent file). Tightened to require Edge-cases-specific framing,
+# not bare token presence.
 grep -qF "## Edge cases" "$F" \
   || { echo "FAIL: v0.9.0 must check ## Edge cases enumeration in pre-test mode"; exit 1; }
-grep -qiE "concrete .{0,10}testable|testable|concrete failure mode|vague.{0,40}return|untestable" "$F" \
-  || { echo "FAIL: v0.9.0 pre-test must reject vague / untestable Edge cases bullets"; exit 1; }
-grep -qiE "anchored|anchor" "$F" \
-  || { echo "FAIL: v0.9.0 pre-test must require Edge cases bullets to be anchored (PRD ## Quality bar / ## Risks / named failure mode)"; exit 1; }
+# Look for the v0.9.0-specific check #4 marker — "## Edge cases enumeration"
+# language. Bare 'anchored' alone is too weak; require it co-occurring with
+# Edge-cases context.
+awk '/^### Mode `pre-test`/,/^### Mode `pre-code`/' "$F" | grep -qF "## Edge cases" \
+  || { echo "FAIL: v0.9.0 pre-test mode body must specifically reference ## Edge cases enumeration check"; exit 1; }
+awk '/^### Mode `pre-test`/,/^### Mode `pre-code`/' "$F" | grep -qiE "anchored|anchor.{0,10}(PRD|Quality bar|Risks)" \
+  || { echo "FAIL: v0.9.0 pre-test mode must require Edge cases bullets to be anchored to PRD ## Quality bar / ## Risks"; exit 1; }
+awk '/^### Mode `pre-test`/,/^### Mode `pre-code`/' "$F" | grep -qiE "vague|untestable|concrete .{0,10}testable" \
+  || { echo "FAIL: v0.9.0 pre-test must reject vague / untestable Edge cases bullets in pre-test body (not just generic prose)"; exit 1; }
 
-# pre-code: every Edge cases bullet must have a corresponding test assertion
-grep -qiE "Coverage of .{0,5}## Edge cases|every .{0,30}Edge cases bullet|Edge cases.{0,30}coverage" "$F" \
-  || { echo "FAIL: v0.9.0 pre-code must require every Edge cases bullet to be covered by ≥1 test assertion"; exit 1; }
+# pre-code: every Edge cases bullet must have a corresponding test assertion.
+# Match must land inside pre-code mode body, not stray references elsewhere.
+awk '/^### Mode `pre-code`/,/^### Mode `pre-close`/' "$F" | grep -qiE "Coverage of .{0,5}## Edge cases|every .{0,30}Edge cases bullet|each bullet.{0,40}Edge cases" \
+  || { echo "FAIL: v0.9.0 pre-code must require every Edge cases bullet to be covered by ≥1 test assertion (must land in pre-code mode body)"; exit 1; }
 
-# pre-close: reviewer runs phase tests + e2e tests itself (A — the false-green-claim defense)
-grep -qiE "do not trust|not trust .{0,15}code.writer|false[- ]green[- ]claim|run .{0,40}yourself" "$F" \
+# pre-close: reviewer runs phase tests + e2e tests itself (A — the false-green-claim defense).
+# Match must land inside pre-close mode body.
+awk '/^### Mode `pre-close`/,/^## Budget/' "$F" | grep -qiE "do not trust|not trust .{0,15}code.writer|false[- ]green[- ]claim|run .{0,40}yourself" \
   || { echo "FAIL: v0.9.0 pre-close must require reviewer to run phase + e2e tests itself, not trust code-writer's claim"; exit 1; }
-grep -qiE "false[- ]green[- ]claim" "$F" \
+awk '/^### Mode `pre-close`/,/^## Budget/' "$F" | grep -qiE "false[- ]green[- ]claim" \
   || { echo "FAIL: v0.9.0 pre-close must use the 'false-green-claim' verdict tag for reported-green-but-actually-red"; exit 1; }
-# Run-once policy must be preserved (no iterating / no debugging during the run)
-grep -qiE "Run.{0,20}ONCE|one run.{0,15}one verdict|do not iterate|do NOT iterate" "$F" \
-  || { echo "FAIL: v0.9.0 pre-close test-run policy must be 'run ONCE; do NOT iterate' (preserves the run-once invariant)"; exit 1; }
-# Budget table must surface the new run-line
+# Run-once policy: pre-close body must explicitly say 'Run ... ONCE' or 'one run; one verdict'.
+# The bare 'do not iterate' phrase pre-existed in v0.8, so we require the v0.9.0-specific framing.
+awk '/^### Mode `pre-close`/,/^## Budget/' "$F" | grep -qiE "Run .{0,30}ONCE|one run.{0,15}one verdict" \
+  || { echo "FAIL: v0.9.0 pre-close must explicitly say 'Run ... ONCE' or 'one run; one verdict' (the v0.8 'do not iterate' phrase is too weak)"; exit 1; }
+# Budget table must surface the new run-line.
 grep -qiE "phase.test.{0,10}runs|e2e.test runs|phase.test / e2e" "$F" \
   || { echo "FAIL: v0.9.0 budget table must list the per-phase-test / per-e2e run allowance"; exit 1; }
 
