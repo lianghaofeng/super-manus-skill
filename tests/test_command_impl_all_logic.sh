@@ -34,8 +34,8 @@ grep -qF "roadmap.md" "$F" || { echo "FAIL: must reference roadmap.md (basename 
 
 # Spawns ALL FOUR agents — architect, reviewer (3 invocations), test-writer, code-writer.
 for sub in impl-architect impl-reviewer impl-test-writer impl-code-writer; do
-  grep -qE "subagent_type=\"${sub}\"" "$F" \
-    || { echo "FAIL: must spawn ${sub} via subagent_type=\"${sub}\""; exit 1; }
+  grep -qE "subagent_type=\"super-manus:${sub}\"" "$F" \
+    || { echo "FAIL: must spawn ${sub} via subagent_type=\"super-manus:${sub}\" (v0.9.2 — plugin-namespaced; bare name fails CC resolution)"; exit 1; }
 done
 
 # Reviewer 3 invocation modes — pre-test / pre-code / pre-close (v0.7)

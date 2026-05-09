@@ -34,7 +34,7 @@ grep -qiF "pending" "$F" || { echo "FAIL: must mention pending phase auto-select
 grep -qF "phase_plan.md" "$F" || { echo "FAIL: must use phase_plan.md template to seed missing impl plan"; exit 1; }
 grep -qF "agents/impl-architect.md" "$F" || { echo "FAIL: must link to agents/impl-architect.md"; exit 1; }
 grep -qF "impl-architect" "$F" || { echo "FAIL: must reference the impl-architect agent by name"; exit 1; }
-grep -qE 'subagent_type="impl-architect"' "$F" || { echo "FAIL: must spawn the agent via subagent_type=\"impl-architect\""; exit 1; }
+grep -qE 'subagent_type="super-manus:impl-architect"' "$F" || { echo "FAIL: must spawn the agent via subagent_type=\"super-manus:impl-architect\" (v0.9.2 — plugin-namespaced; bare name fails CC plugin agent resolution)"; exit 1; }
 
 # Spawning prompt must enumerate the ten inputs the impl-architect agent expects
 for input in project_root module update_dir phase_number phase_name module_prd_path task_plan_path findings_path progress_path lsp_available; do
@@ -72,8 +72,8 @@ grep -qiF "findings.md" "$F" || { echo "FAIL: revert path must require a finding
 
 # Spawns ALL FOUR agents — architect / reviewer / test-writer / code-writer (v0.7).
 for sub in impl-architect impl-reviewer impl-test-writer impl-code-writer; do
-  grep -qE "subagent_type=\"${sub}\"" "$F" \
-    || { echo "FAIL: v0.7 must spawn ${sub} via subagent_type=\"${sub}\""; exit 1; }
+  grep -qE "subagent_type=\"super-manus:${sub}\"" "$F" \
+    || { echo "FAIL: v0.9.2 must spawn ${sub} via subagent_type=\"super-manus:${sub}\" (plugin-namespaced; bare name fails CC resolution)"; exit 1; }
 done
 
 # === v0.7 additive assertions =============================================

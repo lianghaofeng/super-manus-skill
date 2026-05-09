@@ -39,7 +39,7 @@ grep -qF "prd/<module>.md" "$F" || { echo "FAIL: sync.md must reference per-modu
 
 # Must reference the sync-planner subagent by name and spawn it via Agent tool with subagent_type
 grep -qF "sync-planner" "$F" || { echo "FAIL: sync.md must reference the sync-planner agent by name"; exit 1; }
-grep -qE 'subagent_type="sync-planner"' "$F" || { echo "FAIL: sync.md must spawn the agent via subagent_type=\"sync-planner\""; exit 1; }
+grep -qE 'subagent_type="super-manus:sync-planner"' "$F" || { echo "FAIL: sync.md must spawn the agent via subagent_type=\"super-manus:sync-planner\" (v0.9.2 — plugin-namespaced; bare name fails CC resolution)"; exit 1; }
 
 # Spawning prompt must enumerate the six inputs the agent expects
 for input in project_root module update_name module_prd_path prd_diff lsp_available; do

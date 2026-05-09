@@ -85,7 +85,7 @@ To globally cap effort across all super-manus agents, export `CLAUDE_CODE_EFFORT
 
 ## Step 1 — Spawn impl-architect
 
-If no drift, the orchestrator delegates per-phase impl-plan drafting to the `impl-architect` subagent (Agent tool, `subagent_type="impl-architect"`). The agent owns the persona ("senior implementation planner"), the five-section template population (v0.9.0: `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification`), and the source-priority hierarchy. Do NOT inline that persona here — see [agents/impl-architect.md](../agents/impl-architect.md).
+If no drift, the orchestrator delegates per-phase impl-plan drafting to the `impl-architect` subagent (Agent tool, `subagent_type="super-manus:impl-architect"`). The agent owns the persona ("senior implementation planner"), the five-section template population (v0.9.0: `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification`), and the source-priority hierarchy. Do NOT inline that persona here — see [agents/impl-architect.md](../agents/impl-architect.md).
 
 Why a subagent: phase-plan drafting needs LSP + grep budget on the module's entry files plus a focused PM/engineering voice. Embedding it in the main thread bloats orchestrator context and fragments the persona.
 
@@ -138,7 +138,7 @@ Engineering detail (DB schema, API endpoints, code snippets, file diffs) lives i
 
 ## Step 2 — Spawn impl-reviewer (mode=pre-test) [v0.7]
 
-Before spending test-writer + code-writer budget, the orchestrator spawns `impl-reviewer` (Agent tool, `subagent_type="impl-reviewer"`) in `pre-test` mode to check whether the architect's plan is grounded in real data and free of unresolved `(audit)` markers. The reviewer is read-only by tool surface (no Write/Edit) and emits one of three verdicts. See [agents/impl-reviewer.md](../agents/impl-reviewer.md) for the persona and per-mode checklist.
+Before spending test-writer + code-writer budget, the orchestrator spawns `impl-reviewer` (Agent tool, `subagent_type="super-manus:impl-reviewer"`) in `pre-test` mode to check whether the architect's plan is grounded in real data and free of unresolved `(audit)` markers. The reviewer is read-only by tool surface (no Write/Edit) and emits one of three verdicts. See [agents/impl-reviewer.md](../agents/impl-reviewer.md) for the persona and per-mode checklist.
 
 ### Inputs to pass
 
@@ -193,7 +193,7 @@ Track per-checkpoint counter `counter[#1]` (resets per phase, NOT per attempt). 
 
 ## Step 3 — Spawn impl-test-writer
 
-After review #1 APPROVES, the orchestrator spawns the `impl-test-writer` subagent (Agent tool, `subagent_type="impl-test-writer"`). The agent owns the persona ("senior test engineer"), the read-priority hierarchy, the e2e decision tree, and the per-language naming conventions. Do NOT inline that persona here — see [agents/impl-test-writer.md](../agents/impl-test-writer.md).
+After review #1 APPROVES, the orchestrator spawns the `impl-test-writer` subagent (Agent tool, `subagent_type="super-manus:impl-test-writer"`). The agent owns the persona ("senior test engineer"), the read-priority hierarchy, the e2e decision tree, and the per-language naming conventions. Do NOT inline that persona here — see [agents/impl-test-writer.md](../agents/impl-test-writer.md).
 
 Why a subagent: tests anchored in PRD spec (not impl plan) need a distinct persona from the planner. Splitting the persona prevents the architect's `## Approach` framing from leaking into test structure.
 
@@ -312,7 +312,7 @@ done
 
 Keep the hash file in `$UPDATE_DIR` so cascade re-spawn (e.g., RETURN_TO_TEST_WRITER from review #3) can reload it after the new test commit. **The hash baseline always reflects the latest reviewer-approved test commit.** When test-writer is re-spawned and re-commits, this Step 5 reruns and the baseline is refreshed.
 
-Then spawn the `impl-code-writer` subagent (Agent tool, `subagent_type="impl-code-writer"`). The agent owns the persona ("senior implementation engineer"), the iteration loop, and the hard rule that NO test files may be edited. Do NOT inline that persona here — see [agents/impl-code-writer.md](../agents/impl-code-writer.md).
+Then spawn the `impl-code-writer` subagent (Agent tool, `subagent_type="super-manus:impl-code-writer"`). The agent owns the persona ("senior implementation engineer"), the iteration loop, and the hard rule that NO test files may be edited. Do NOT inline that persona here — see [agents/impl-code-writer.md](../agents/impl-code-writer.md).
 
 ### Inputs to pass in the spawning prompt
 

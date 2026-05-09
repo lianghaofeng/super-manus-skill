@@ -68,16 +68,16 @@ while there exists a pending or in_progress phase in $UPDATE_DIR/task_plan.md:
   # ↓ identical to /super-manus:impl steps below ↓
   drift check (per skills/using-sm/SKILL.md §4 — Drift check protocol; LSP + grep, double-source)
     on conflict → append prd_drift.md row, surface user, point at /super-manus:prd-update, STOP loop
-  Step 1: spawn impl-architect (subagent_type="impl-architect") → writes $UPDATE_DIR/tasks/p<n>_impl.md
-  Step 2: spawn impl-reviewer (subagent_type="impl-reviewer", mode=pre-test) — counter[#1] tracking
+  Step 1: spawn impl-architect (subagent_type="super-manus:impl-architect") → writes $UPDATE_DIR/tasks/p<n>_impl.md
+  Step 2: spawn impl-reviewer (subagent_type="super-manus:impl-reviewer", mode=pre-test) — counter[#1] tracking
     APPROVE → continue; RETURN_TO_ARCHITECT → re-spawn Step 1 (≤2 retries); ESCALATE → STOP loop
-  Step 3: spawn impl-test-writer (subagent_type="impl-test-writer") → commits red phase tests + e2e tests
-  Step 4: spawn impl-reviewer (subagent_type="impl-reviewer", mode=pre-code) — counter[#2] tracking
+  Step 3: spawn impl-test-writer (subagent_type="super-manus:impl-test-writer") → commits red phase tests + e2e tests
+  Step 4: spawn impl-reviewer (subagent_type="super-manus:impl-reviewer", mode=pre-code) — counter[#2] tracking
     APPROVE → continue; RETURN_TO_TEST_WRITER → re-spawn Step 3 (≤2 retries);
     RETURN_TO_ARCHITECT → cascade back to Step 1; ESCALATE → STOP loop
   Step 5: snapshot SHA-256 of every reviewer-approved test file → $UPDATE_DIR/.test_hashes_p<n>.txt
-          spawn impl-code-writer (subagent_type="impl-code-writer") → commits source files only (no tests)
-  Step 6: spawn impl-reviewer (subagent_type="impl-reviewer", mode=pre-close) — counter[#3] tracking
+          spawn impl-code-writer (subagent_type="super-manus:impl-code-writer") → commits source files only (no tests)
+  Step 6: spawn impl-reviewer (subagent_type="super-manus:impl-reviewer", mode=pre-close) — counter[#3] tracking
     APPROVE → continue; RETURN_TO_CODE_WRITER → re-spawn Step 5 code-writer (≤2 retries);
     RETURN_TO_TEST_WRITER → cascade back to Step 3 (refresh hash on re-commit);
     RETURN_TO_ARCHITECT → cascade back to Step 1; ESCALATE → STOP loop

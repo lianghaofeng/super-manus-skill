@@ -145,7 +145,7 @@ Append `runtime_facts` to the spawning prompt as the 9th input (after `lsp_avail
 
 ## Hand off content generation to the architect subagent
 
-Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module — for whole-project mode. For per-module mode the orchestrator skipped Stage 1 and the module list is the single row `<module>`. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn the **`reverse-prd-architect`** agent (Agent tool, `subagent_type="reverse-prd-architect"`). The architect+PM persona, ASCII diagram rules, source-priority hierarchy, `(audit)` policy, granularity default, and Drift check protocol references all live in [agents/reverse-prd-architect.md](../agents/reverse-prd-architect.md). Do NOT duplicate them here.
+Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module — for whole-project mode. For per-module mode the orchestrator skipped Stage 1 and the module list is the single row `<module>`. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn the **`reverse-prd-architect`** agent (Agent tool, `subagent_type="super-manus:reverse-prd-architect"`). The architect+PM persona, ASCII diagram rules, source-priority hierarchy, `(audit)` policy, granularity default, and Drift check protocol references all live in [agents/reverse-prd-architect.md](../agents/reverse-prd-architect.md). Do NOT duplicate them here.
 
 ### Per-agent model override (v0.8.2)
 
