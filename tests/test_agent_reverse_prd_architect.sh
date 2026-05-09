@@ -133,4 +133,53 @@ grep -qE "(\b60\b|cap.*60|60.*cap)" "$F" || { echo "FAIL: must declare hard cap 
 grep -qiE "runtime_facts.*free|free.*runtime_facts|already in your input" "$F" \
   || { echo "FAIL: tool budget must rank runtime_facts as a free (already-in-input) high-density source"; exit 1; }
 
+# === v0.9.3 additive assertions ===========================================
+# v0.9.3 makes PRD output read like a user manual, not a design doc. Three
+# changes land together in the architect persona:
+#   R1: ## PRD voice discipline H2 — bullet body PM voice; impl evidence
+#       lives in Backed by: cite (NOT in bullet body).
+#   R2: ## What users get description gains 主要使用场景 preamble guidance.
+#   R3: ## How it connects description gains User-facing flow Mermaid
+#       sub-section guidance for modules with multi-step user flows.
+
+# R1: ## PRD voice discipline section exists
+grep -qF "## PRD voice discipline" "$F" \
+  || { echo "FAIL: v0.9.3 must declare a '## PRD voice discipline' H2 section"; exit 1; }
+# R1: principle — engineering evidence in Backed by cite, not bullet body
+grep -qiE "Backed by.*cite|cite line.*Backed by|impl.*evidence.*Backed by|engineering evidence.*Backed by" "$F" \
+  || { echo "FAIL: v0.9.3 voice discipline must state engineering evidence belongs in Backed by: cite (not bullet body)"; exit 1; }
+# Helper awk: extract section body between a starting H-level heading and the next H-level heading.
+# Range patterns fail when start-line also matches end-pattern; flag-based scan does not.
+# Usage: section_body <start-pattern> < file
+section_body_h2() { awk -v start="$1" '$0 ~ start{f=1; next} /^## /&&f{exit} f' "$F"; }
+section_body_h3() { awk -v start="$1" '$0 ~ start{f=1; next} /^### /&&f{exit} f' "$F"; }
+
+# R1: ≥2 positive example capability bullets (one shows Backed by cite, another shows different leakage category)
+voice_examples=$(section_body_h2 "^## PRD voice discipline" | grep -cE "^- \*\*" || true)
+[ "${voice_examples:-0}" -ge 2 ] \
+  || { echo "FAIL: v0.9.3 voice discipline must contain ≥2 positive example capability bullets (found ${voice_examples:-0})"; exit 1; }
+# R1: self-check question — PM / support engineer comprehension test
+grep -qiE "PM.*support engineer|support engineer.*PM|customer success engineer|not read the source code" "$F" \
+  || { echo "FAIL: v0.9.3 voice discipline must include a PM/support-engineer comprehension self-check question"; exit 1; }
+
+# R2: ## What users get description references 主要使用场景 preamble
+section_body_h3 "^### \`## What users get\`" | grep -qF "主要使用场景" \
+  || { echo "FAIL: v0.9.3 ## What users get description must reference 主要使用场景 preamble"; exit 1; }
+# R2: format guidance — bold name + colon + one-line scenario in PM voice
+section_body_h3 "^### \`## What users get\`" | grep -qiE "bold name.*colon|场景名.*场景描述|场景描述.*PM voice" \
+  || { echo "FAIL: v0.9.3 ## What users get description must specify the bold-name-colon-one-line-scenario format"; exit 1; }
+# R2: scenario maps to ≥1 capability mapping rule
+section_body_h3 "^### \`## What users get\`" | grep -qiE "map to .{0,5}1 capability|≥1 capability bullet|capability bullet below" \
+  || { echo "FAIL: v0.9.3 ## What users get description must specify each scenario maps to ≥1 capability bullet"; exit 1; }
+
+# R3: ## How it connects description references User-facing flow sub-section
+section_body_h3 "^### \`## How it connects\`" | grep -qF "User-facing flow" \
+  || { echo "FAIL: v0.9.3 ## How it connects description must reference User-facing flow sub-section"; exit 1; }
+# R3: example Mermaid block exists in the User-facing flow guidance
+section_body_h3 "^### \`## How it connects\`" | grep -qiE "flowchart|mermaid" \
+  || { echo "FAIL: v0.9.3 User-facing flow guidance must show a Mermaid example"; exit 1; }
+# R3: skip-when-single-step rule
+section_body_h3 "^### \`## How it connects\`" | grep -qiE "single-step.*skip|skip.*single-step|no empty headings|CRUD API.*skip|passive metric.*skip" \
+  || { echo "FAIL: v0.9.3 User-facing flow guidance must specify the skip-when-single-step rule (no empty headings)"; exit 1; }
+
 echo OK

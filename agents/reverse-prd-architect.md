@@ -163,11 +163,23 @@ Source priority:
 3. if neither: list `(audit — define user-facing success)` placeholders rather than dropping the section. 3 placeholders is the floor; do NOT fabricate numbers.
 
 ### `## What users get`
-Top **3–5 capabilities** this module delivers, each backed by concrete technical evidence. PM voice first, architect evidence appended. Format each:
+Top **3–5 capabilities** this module delivers, each backed by concrete technical evidence. PM voice first, architect evidence appended.
+
+**Open the section with a `主要使用场景:` preamble** that lists 2–4 user-facing scenarios this module supports. Each scenario is bold name + colon + one-line description in PM voice. Each scenario should map to ≥1 capability bullet below it. Skippable for tightly-scoped utility modules (pure CRUD API, passive metric exporter) where "the user uses it" doesn't decompose into multiple scenarios — leave the placeholder as `(none — single-scenario module)` or delete it.
+
+Format:
 
 ```
+主要使用场景:
+- **<场景名>**: <一句话场景描述, PM voice>
+- **<场景名>**: <一句话场景描述, PM voice>
+
+实现这些场景的能力:
+
 - **<capability name>** — <PM description: what users / consumers get>. Backed by: <concrete schema | endpoint path | CLI invocation | screen / route name>.
 ```
+
+Apply the voice discipline below (`## PRD voice discipline`) — bullet body PM voice, impl evidence in `Backed by:` cite.
 
 Source priority for evidence:
 
@@ -196,7 +208,27 @@ Edge list:
 - out: → <Y> via <protocol>
 ```
 
-If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add a Mermaid `flowchart` sub-diagram before the edge list (same node-shape conventions as `_index.md`).
+If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add a Mermaid `flowchart` sub-diagram before the edge list (same node-shape conventions as `_index.md`). This integration diagram shows **architecture wiring** — which module connects to which.
+
+**Additionally, for modules with multi-step user flows** (e.g. tutor-agent's GREET → NEGOTIATE → PLAN → TEACH ⇄ PRACTICE → WRAPUP → PERSIST lesson loop), add a separate `### User-facing flow` sub-section that shows the flow from the **user's perspective** rather than the architecture. Use a rough Mermaid diagram showing the main path. Keep it rough — the goal is "user reads PRD and gets the main flow shape", not "exhaustive state machine with every conditional branch and edge case." If the architect is tempted to enumerate every state transition, that detail belongs in design-doc territory, not the user-manual PRD.
+
+Single-step modules (pure CRUD API, passive metric exporter) skip this sub-section — no empty headings.
+
+Format:
+
+```
+### User-facing flow
+
+\`\`\`mermaid
+flowchart LR
+  A[<step 1>] --> B[<step 2>]
+  ...
+\`\`\`
+
+### Integration
+
+(existing module-to-module Mermaid + Edge list)
+```
 
 Exposes/Consumes are PM-voice capability nouns ("order placement", "credit-score lookup", "vector search"), NOT endpoint paths or symbol names. They name the semantic contract; endpoint detail stays in the Edge list.
 
@@ -290,6 +322,39 @@ The bare `(audit)` and freeform `(audit — <reason>)` markers remain valid for 
 ## Granularity default
 
 **Per-service** (one runtime entry = one PRD module). Do NOT auto-merge in this pass (e.g. don't fold `web-parent` + `parent-api` into "parent stack"). Suggest merges in `## Open questions` instead.
+
+## PRD voice discipline
+
+**The PRD is a user manual of the current system, not a design doc.** Two properties matter:
+
+1. **Faithful** — every bullet matches what the code actually does. (Already enforced by cross-validation + `(audit)` markers.)
+2. **Readable** — a PM, designer, support engineer, or end user can read it without grepping the source code.
+
+The bullet body of every capability / use case / quality bar / risk **describes user-observable behavior**. Engineering evidence — file paths, function names, struct field names, constants, tuning parameters, JSON wire schemas — goes into the `Backed by:` cite line that already trails each `## What users get` bullet, NOT into the bullet body itself.
+
+### Examples of capability bullets in this voice
+
+```
+- **WebSocket 实时一节课** — 学生连上后服务端推渐进事件流 (say 1.2s /
+  板书 1.8s 节奏), 模拟"老师渐进讲".
+  Backed by: ws_server.py:619-624 (UTTERANCE_PACING_S 常量).
+
+- **agent 意图自动切档** — 学生发消息后系统自动按意图选 sub-agent
+  (300ms 超时上限). 低置信度或目标=当前不切档 (避免反复抖动), 学生
+  不必手动 set_mode, 下一轮 sub-agent 自然接管.
+  Backed by: intent_classifier.py:139-191 + supervisor.py:45-90.
+
+- **PRACTICE 真题优先 + 难度自适应** — coach 出题先从题库召回, 命中
+  真题带标准解析; 主题偏时退回 LLM 即兴编题. 难度按学生表现自适应
+  升降 (连错降一档, 答对升档).
+  Backed by: agents/coach.py:76-120 + Qdrant rag_problems collection.
+```
+
+Each example shows: PM-voice user observation in bullet body, engineering evidence in `Backed by:` cite line. Pattern-match against these when drafting new bullets.
+
+### Self-check before committing each bullet
+
+> Could a PM, customer success engineer, or support engineer who has not read the source code understand this bullet? If not, the impl detail belongs in the `Backed by:` cite line, not the bullet body.
 
 ## `(audit)` policy
 

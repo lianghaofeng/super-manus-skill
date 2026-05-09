@@ -23,4 +23,13 @@ grep -qF "<module name>" "$F" || { echo "FAIL: missing <module name> placeholder
 grep -qi "no changelog" "$F" || { echo "FAIL: header should forbid changelog markers"; exit 1; }
 # Header comment must call out the 2000-word ceiling
 grep -qF "2000 words" "$F" || { echo "FAIL: header should state 2000 words ceiling"; exit 1; }
+
+# v0.9.3: ## What users get gains a 主要使用场景 preamble placeholder
+# (use-case scenarios bound to capability bullets below). This makes the
+# PRD read like a user manual: scenarios first, capabilities second.
+grep -qF "主要使用场景" "$F" \
+  || { echo "FAIL: v0.9.3 must include 主要使用场景 use-case preamble placeholder in ## What users get"; exit 1; }
+grep -qiE "实现这些场景的能力|capabilities? .{0,30}implement" "$F" \
+  || { echo "FAIL: v0.9.3 must include the '实现这些场景的能力' separator between scenarios and capabilities"; exit 1; }
+
 echo OK

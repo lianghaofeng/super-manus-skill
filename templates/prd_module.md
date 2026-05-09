@@ -15,7 +15,16 @@
 
 ## What users get
 
-<top 3–5 capabilities the module delivers, PM voice first, technical evidence appended. Format:
+<open with 主要使用场景: list of 2–4 user-facing scenarios this module supports (skip for single-scenario utility modules), then list 3–5 capabilities. Bullet body PM voice; impl evidence (file paths, line numbers, function names, tuning constants) goes in the Backed by: cite, NOT in the bullet body.
+
+Format:
+
+主要使用场景:
+- **<场景名>**: <一句话场景描述, PM voice>
+- **<场景名>**: <一句话场景描述, PM voice>
+
+实现这些场景的能力:
+
 - **<Capability>** — <PM description: what users can now do>. Backed by: <concrete schema | endpoint | screen | CLI command>.>
 
 ## How it connects
