@@ -132,7 +132,51 @@ docs/design-v0.9.0.md                  # this file
 
 `tests/run-all.sh` continues to pass with the updated assertions. No test was deleted or weakened — every v0.9.0 test addition is additive on top of v0.8.x discipline. The five-section template is enforced both at the template level (`test_template_phase_plan.sh`) and at the agent level (`test_agent_impl_architect.sh`); the reviewer's new behaviors are enforced in `test_agent_impl_reviewer.sh`.
 
-## 8. Open questions
+## 8. Known limitations & open questions
 
-- **Edge case anchor coverage.** Reviewer pre-test currently checks "if PRD `## Quality bar` or `## Risks` contain clauses the phase plausibly stresses, ≥1 Edge cases bullet must address it." This is reviewer-judgment-dependent ("plausibly stresses"). Future tightening could require the architect to enumerate **which** PRD clauses each phase stresses (in a separate plan field), so the reviewer's check becomes mechanical. Deferred — current shape ships first to gather usage data.
-- **Pure happy-path scaffolding exception.** Concern: this becomes the path-of-least-resistance for architects who don't want to enumerate edges. Reviewer's challenge mechanism (RETURN if a plausible edge can be named) is the brake. If real usage shows the exception is over-used, future tightening is to require the architect to name which scaffolding pattern qualifies (and reviewer checks against a small allow-list).
+The cross-validation audit run on v0.9.0 (three independent reviewer agents) surfaced three known limitations the surgical release does NOT solve. They are recorded here so the next contributor doesn't re-discover them and so v1.0.0 design starts from this floor.
+
+### C1 — Ritualized-but-useless edge bullets (real, unaddressed)
+
+**Manifestation.** Architect fills `## Edge cases` with shape-compliant but semantically empty bullets, e.g.:
+
+```
+- Empty input — anchored in PRD ## Quality bar "be robust"
+```
+
+The bullet IS anchored (cites a real `## Quality bar` clause), IS concrete-input-shape-named ("Empty input"), passes reviewer pre-test enumeration check. But "be robust" gives the test-writer no behavior to assert — they either invent a behavior (becoming de facto spec author, which v0.9.0 explicitly tries to prevent) or write a tautology like `assert run([]) is not None`, which then passes pre-code coverage check #3 because a test exists with the matching name.
+
+**Why v0.9.0 doesn't fix it.** The mechanical fix is to require the architect to enumerate **which exact PRD clause text** each bullet addresses, then have the reviewer mechanically pin bullet → clause → assertion-target chain. That requires:
+1. PRD `## Quality bar` clauses to be specific enough to drive assertions (most aren't today).
+2. A new plan field listing the verbatim PRD clause text per bullet.
+3. Reviewer logic to parse the clause and verify the test asserts on the named behavior.
+
+That's a v1.0.0-shaped intervention (touches PRD authoring discipline + plan template + reviewer + test-writer). v0.9.0 is surgical; it lifts enumeration from implicit to architect-committed, but stops short of mechanical clause-pinning.
+
+**Mitigation today.** User reviews `## Edge cases` at plan-approve time; if a bullet looks ritual, push back before tests are written. The reviewer's `(audit)` escalation in the test-writer (`bullet too vague to test`) surfaces some of these — but only when test-writer notices, which is unreliable.
+
+### C2 — Pre-close test-run wall-clock cost is unbounded (real, unaddressed)
+
+**Manifestation.** Pre-close check #6 runs phase tests + every touched e2e file, ONCE. There is no time ceiling in the budget table — only a per-invocation count. A project with a 3-minute e2e suite pays 3 minutes per pre-close review; with retry budget 2, that's potentially 9 minutes of pure reviewer wait per phase, with no progress indicator.
+
+**Why v0.9.0 doesn't fix it.** Adding a wall-clock escape hatch (e.g. "skip if e2e exceeds X seconds, surface as `(test-run-skipped: too slow)` non-blocking note") is a NEW design decision — what's the threshold? Per-project override? Falls back to what? The right shape isn't obvious without seeing real-project usage data. Adding an ad-hoc threshold without that data risks false negatives (slow-but-real failures get skipped).
+
+**Mitigation today.** The orchestrator's overall ESCALATE_TO_USER path catches budget-exhaustion. Users on slow-test-suite projects will notice the latency and can either (a) speed up their e2e via parallelization, (b) accept the latency, or (c) configure `.super-manus/agents.yml` to use a faster model for impl-reviewer (cheaper-but-faster review may converge in fewer retries).
+
+### C3 — Mid-update plugin upgrade race with hash baseline (rare, unaddressed)
+
+**Manifestation.** A user has an in-flight phase from v0.8.4 with phase tests already committed (4-section plan, no `## Edge cases`). They upgrade the plugin to v0.9.0 mid-update. Next `/super-manus:impl` resume:
+1. Architect re-spawns, detects 4-section plan, inserts `## Edge cases` (migration succeeds).
+2. Orchestrator resumes the phase. If resume lands at pre-code (because the test-writer step already ran in the old version), pre-code check #3 walks the freshly-inserted `## Edge cases` and demands per-bullet test coverage.
+3. The existing test commit was hashed for cheat-prevention before v0.9.0 shipped. Test-writer re-spawn rewrites tests, but the hash baseline mismatch may abort the phase.
+
+**Why v0.9.0 doesn't fix it.** Adding a resume-state guard ("on legacy migration, re-enter at pre-test, not at the cached resume point") requires the orchestrator to track plan-shape-version per phase, which is new state. The race is also rare in practice (plugin upgrade mid-update is uncommon).
+
+**Mitigation today.** Document the failure mode here. If a user hits it, the workaround is to abort the current phase (`task_plan.md` row → `pending`), let architect re-draft fresh, let test-writer re-write fresh. One lost phase of work; not data loss. v1.0.0 may add resume-state versioning.
+
+### Open questions for v1.0.0
+
+- Mechanical PRD clause pinning (fixes C1).
+- Wall-clock ceiling for pre-close test runs with project-configurable threshold (fixes C2).
+- Resume-state versioning + automatic re-entry-at-pre-test on legacy migration (fixes C3).
+- Opt-in sub-reviewer fan-out (the architectural ceiling discussed during v0.9.0 design — security / perf / coverage sub-reviewers each with their own external tool grounding). Mirrors the existing type-check opt-in pattern.
