@@ -100,23 +100,36 @@ Table with one row per module from `module_list`:
 ### `## Data flow overview`
 This section MUST contain (in this order):
 
-(a) **An ASCII architecture diagram** — see Diagram rules below.
+(a) **A Mermaid architecture diagram** — see Diagram rules below.
 (b) **An edge list backup** — one line per edge: `<A> --<protocol>--> <B> [path/topic] (for: <capability>)`. The `(for: <capability>)` parenthetical names the PM-voice capability the edge carries (e.g. `(for: order placement)`, `(for: vector search)`). Source the capability from the consuming module's `## What users get` bullet that this edge backs; if no single capability is identifiable, mark `(for: (audit))`.
-(c) **An offline-modules line** — `Offline / batch modules: <comma-separated list>` listing every module from the Modules table that does NOT appear as a box in the diagram.
+(c) **An offline-modules line** — `Offline / batch modules: <comma-separated list>` listing every module from the Modules table that does NOT appear as a node in the diagram.
 (d) **1–2 sentences** in plain language explaining the architecture's core runtime loop.
 
 ## Diagram rules (mandatory for `_index.md ## Data flow overview`)
 
-Use box-drawing characters: `┌ ┐ └ ┘ ─ │ ▲ ▼ ◄ ► ├ ┤ ┬ ┴ ┼`
+Use a Mermaid `flowchart` block. Pick `flowchart TD` (top-down) or `flowchart LR` (left-to-right) based on what reads naturally; do NOT mix both.
 
-Each box is one of two kinds:
+Three node shapes encode role:
 
-- **MODULE box** — its label MUST exactly equal a module name from the `## Modules` table.
-- **INFRA-DEP box** — its label is the image name (postgres, qdrant, redis, prometheus, etc.).
+- **MODULE node** — `<id>[<name>]` (default rectangle). Label MUST exactly equal a module name from the `## Modules` table. Mermaid IDs cannot contain hyphens, so convert `parent-api` → `parent_api` for the ID and keep `parent-api` as the label: `parent_api[parent-api]`.
+- **INFRA-DEP node** — `<id>[(<image>)]` (cylinder shape, used for storage/queue infra: postgres, qdrant, redis, kafka, etc.) or `<id>[/<image>/]` (parallelogram, for stateless infra: prometheus, grafana, jaeger). Label is the image name.
+- **EXTERNAL-ACTOR node** — `<id>([<actor>])` (stadium shape, for browser / mobile / cron). May enter the diagram but is NOT a module box.
 
-Arrows show data flow direction. Label every edge with protocol (HTTP / WS / gRPC / SQL / NATS subject / Redis prefix / env URL). External-actor arrows (browser / mobile / cron) may enter the diagram but should not have boxes.
+Every edge MUST carry a **protocol label**: HTTP / WS / gRPC / SQL / NATS subject / Redis prefix / env URL name. The protocol label goes inside the edge syntax: `--|HTTP|-->`. Per-edge `(for: <capability>)` annotation lives in the edge list backup (b), NOT inside the Mermaid block — the diagram stays visually clean.
 
-**MODULE–DIAGRAM INVARIANT (HARD CONSTRAINT)**: every module-typed box label MUST match a row in the `## Modules` table exactly. Conversely, every module in the `## Modules` table MUST either appear as a box in the diagram OR be listed in the offline-modules line right after the diagram. No module is silently absent.
+A minimal valid example:
+
+````
+```mermaid
+flowchart LR
+  browser([browser]) -->|HTTPS| web[web-app]
+  web -->|HTTP /api| api[parent-api]
+  api -->|SQL| db[(postgres)]
+  api -->|NATS subject:orders.placed| audit[order-audit]
+```
+````
+
+**MODULE–DIAGRAM INVARIANT (HARD CONSTRAINT)**: every module-typed node label MUST match a row in the `## Modules` table exactly. Conversely, every module in the `## Modules` table MUST either appear as a node in the Mermaid block OR be listed in the offline-modules line right after the diagram. No module is silently absent.
 
 Diagram source: build the diagram from the **compose `depends_on` graph + env-URL graph** (env vars containing sibling URLs, queue subjects, S3 bucket names) only. Do NOT infer edges from textual reasoning.
 
@@ -183,7 +196,7 @@ Edge list:
 - out: → <Y> via <protocol>
 ```
 
-If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add an ASCII sub-diagram before the edge list (same box-drawing characters as `_index.md`).
+If the module has ≥2 sequential steps, conditional branching, or a feedback loop, ALSO add a Mermaid `flowchart` sub-diagram before the edge list (same node-shape conventions as `_index.md`).
 
 Exposes/Consumes are PM-voice capability nouns ("order placement", "credit-score lookup", "vector search"), NOT endpoint paths or symbol names. They name the semantic contract; endpoint detail stays in the Edge list.
 

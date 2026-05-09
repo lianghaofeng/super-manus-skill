@@ -54,9 +54,22 @@ for h in "## Why this exists" "## Users" "## Success" "## What users get" "## Ho
   grep -qF "$h" "$F" || { echo "FAIL: agent must document <module>.md heading '$h'"; exit 1; }
 done
 
-# ASCII diagram requirement for _index.md ## Data flow overview
-grep -qiE "ASCII|box-drawing" "$F" || { echo "FAIL: _index.md ## Data flow overview must include an ASCII diagram"; exit 1; }
-grep -qE "┌|┐|└|┘|─|│" "$F" || { echo "FAIL: must list box-drawing characters as the ASCII palette"; exit 1; }
+# v0.8.3: Mermaid is the canonical format for the architecture diagram
+# (replaces the v0.7.x box-drawing ASCII spec). Render natively in GitHub PR
+# review and IDE preview, structured DSL agents can both write and parse.
+grep -qF "Mermaid" "$F" || { echo "FAIL: _index.md ## Data flow overview must require a Mermaid diagram (v0.8.3)"; exit 1; }
+grep -qE "flowchart\s+(TD|LR)" "$F" || { echo "FAIL: must specify Mermaid flowchart direction (TD or LR)"; exit 1; }
+# Three node-shape conventions: module rectangle / infra cylinder / external stadium —
+# spec must enumerate at least the module + infra distinction (the load-bearing one).
+grep -qE "MODULE node" "$F" || { echo "FAIL: must declare the MODULE node shape rule"; exit 1; }
+grep -qE "INFRA-DEP node" "$F" || { echo "FAIL: must declare the INFRA-DEP node shape rule"; exit 1; }
+# Spec must include at least one Mermaid syntax example to anchor the architect's output.
+grep -qE '```mermaid' "$F" || { echo "FAIL: spec must include a fenced \`\`\`mermaid example block"; exit 1; }
+# Box-drawing palette must be GONE (was the v0.7.x spec, superseded by Mermaid).
+if grep -qE "┌|┐|└|┘" "$F"; then
+  echo "FAIL: v0.8.3 spec must not retain the v0.7.x ASCII box-drawing palette — Mermaid replaces it"
+  exit 1
+fi
 
 # Module–diagram 1:1 invariant
 grep -qiE "module.diagram invariant|module box label|exactly equal a module name" "$F" || { echo "FAIL: must declare the module-diagram 1:1 invariant"; exit 1; }

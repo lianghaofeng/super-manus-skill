@@ -307,3 +307,42 @@ For users on Opus 4.7 main threads (likely the common case), this change is **in
 - 3 thinker-agent tests unchanged.
 - `test_template_agents_yml.sh` asserts `CLAUDE_CODE_EFFORT_LEVEL` is documented + rejects the old "effort not overridable" claim.
 - `test_command_impl_logic.sh` asserts `CLAUDE_CODE_EFFORT_LEVEL` is documented as the effort override path.
+
+## 10. v0.8.3 — Mermaid replaces ASCII box-drawing for architecture diagrams
+
+### Why
+
+The pre-v0.8.3 spec required `prd/_index.md ## Data flow overview` and the `<module>.md ## How it connects` sub-diagram to use ASCII box-drawing characters (`┌ ┐ └ ┘ ─ │ ▲ ▼` etc.). That choice predates the current rendering ecosystem — in 2026, GitHub / GitLab / VS Code preview / Obsidian / IDE markdown viewers all render Mermaid natively, while ASCII box-drawing only renders identically in monospace plain-text viewers. The PR review experience is the dominant consumption path for these PRDs, and ASCII art is hostile to it.
+
+Concretely:
+
+- **GitHub/GitLab PR review**: ASCII art renders as fixed-width text (legible but cramped); Mermaid renders inline as a real diagram.
+- **Maintenance**: aligning ASCII characters by hand on every edge add/remove is fiddly; Mermaid edges are one-line declarations (`api -->|HTTP| db`).
+- **Agent parsing**: counterintuitively, Mermaid's structured DSL is *easier* for agents to read than ASCII box arrangements — `flowchart TD; api[parent-api]; api --> db[(postgres)]` is parseable line-by-line; box layouts require 2D parsing.
+
+### Spec change
+
+`agents/reverse-prd-architect.md ## Diagram rules` rewritten:
+
+- Top-level diagram in `_index.md` and any sub-diagram in `<module>.md` use a `mermaid` fenced code block with `flowchart TD` or `flowchart LR`.
+- Three node shapes encode role:
+  - **MODULE** — `<id>[<name>]` (rectangle); `<id>` is alphanumeric+underscore (Mermaid IDs cannot have hyphens), `<name>` is the kebab-case display label that must match the `## Modules` table verbatim.
+  - **INFRA-DEP** — `<id>[(<image>)]` (cylinder, for storage/queue infra) or `<id>[/<image>/]` (parallelogram, for stateless infra).
+  - **EXTERNAL-ACTOR** — `<id>([<actor>])` (stadium shape).
+- Edges carry protocol labels inline: `parent_api -->|HTTP /api/orders| order_api`. The `(for: <capability>)` PM-voice annotation lives in the edge list backup, NOT inside the Mermaid block — keeps the diagram visually clean.
+
+A minimal example is included in the agent spec to anchor the architect's output.
+
+### What stays the same
+
+- **MODULE-DIAGRAM 1:1 invariant** — every module-typed node label still must match a row in the `## Modules` table; modules absent from the diagram still need to land in the offline-modules line. Shape-agnostic — Mermaid implements it just as well as ASCII.
+- **Edge list backup, offline-modules line, 1–2 sentence loop summary** — sections (b) (c) (d) of `## Data flow overview` unchanged. The Mermaid block replaces only the visual diagram.
+- **Diagram source rules** — built from compose `depends_on` graph + env-URL graph; not from textual reasoning.
+
+### Tests
+
+- `tests/test_agent_reverse_prd_architect.sh` drops the `┌|┐|└|┘|─|│` ASCII palette assertion. Replaces with: requires `Mermaid` keyword, `flowchart (TD|LR)` syntax, both `MODULE node` and `INFRA-DEP node` shape rules documented, and at least one fenced ```` ```mermaid ```` example block. Also adds a negative assertion: the spec must NOT retain the old box-drawing palette.
+
+### Migration
+
+Existing PRD bundles with ASCII diagrams continue to work — readers get them as fixed-width text, same as before. Re-running `/super-manus:reverse-prd <module>` regenerates the affected file with a Mermaid block. Whole-project `/super-manus:reverse-prd` regenerates the `_index.md` diagram. No automatic rewrite of existing ASCII diagrams; users opt in by re-running.

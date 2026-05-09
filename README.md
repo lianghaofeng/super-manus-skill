@@ -363,7 +363,13 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.8.2 — current
+### v0.8.3 — current
+
+`prd/_index.md ## Data flow overview` and `prd/<module>.md ## How it connects` sub-diagrams switch from ASCII box-drawing to **Mermaid** `flowchart` blocks. ASCII art was the v0.7-era choice; in 2026 GitHub/GitLab/VS Code/Obsidian all render Mermaid inline, so PR review of architecture diagrams becomes visual instead of fixed-width text. Three node shapes encode role: `<id>[<name>]` for modules (rectangle), `<id>[(<image>)]` for storage/queue infra (cylinder), `<id>([<actor>])` for external actors (stadium); edge labels carry protocol (`parent_api -->|HTTP /api/orders| order_api`). MODULE-DIAGRAM 1:1 invariant unchanged — every module-typed node label still must match a row in `## Modules`.
+
+`(for: <capability>)` semantic annotation moves out of the diagram into the edge list backup — keeps the Mermaid block visually clean. Existing ASCII diagrams continue to work; re-running `/super-manus:reverse-prd` regenerates them in Mermaid. See [docs/design-v0.8.md](docs/design-v0.8.md) §10.
+
+### v0.8.2
 
 Two corrections layered together. **Layer B**: writer agents (`impl-test-writer` / `impl-code-writer` / `sync-planner`) switch frontmatter `model: opus` → `model: inherit`. v0.8.0 had pinned everything to `opus`, which silently disabled Claude Code's `CLAUDE_CODE_SUBAGENT_MODEL` env var (it only routes subagents whose frontmatter is `inherit`) and silently overcharged users on Sonnet 4.6 main threads. With `inherit`, writers follow the main session's model — Opus main thread → opus writers (unchanged for current Opus users), Sonnet main thread → sonnet writers (auto cost saving). Thinker agents (`impl-architect` / `impl-reviewer` / `reverse-prd-architect`) stay pinned to `model: opus` as the quality floor — silent downgrade on a Sonnet main thread would erase the value of v0.7's review pipeline.
 

@@ -361,7 +361,13 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.8.2 —— 当前
+### v0.8.3 —— 当前
+
+`prd/_index.md ## Data flow overview` 和 `prd/<module>.md ## How it connects` 的子图从 ASCII box-drawing 字符切到 **Mermaid** `flowchart` 块。ASCII 是 v0.7 时代的选择，在 2026 年的 GitHub / GitLab / VS Code / Obsidian 里 Mermaid 都能 inline 渲染——架构图在 PR review 时直接以图的形式可视，而不再是定宽文本。三种 node 形状区分角色：`<id>[<name>]` 模块（矩形）、`<id>[(<image>)]` 存储/队列类 infra（圆柱）、`<id>([<actor>])` 外部 actor（体育场形）；边的 label 携带协议（`parent_api -->|HTTP /api/orders| order_api`）。MODULE-DIAGRAM 1:1 不变量没变——所有 module 类型节点的 label 仍必须跟 `## Modules` 表的行一一对应。
+
+`(for: <capability>)` 这种语义标注从图里搬到边列表 backup 里——保持 Mermaid 块视觉清爽。已有 ASCII 图继续可读；重跑 `/super-manus:reverse-prd` 会用 Mermaid 重新生成。详见 [docs/design-v0.8.md](docs/design-v0.8.md) §10。
+
+### v0.8.2
 
 两层修正一起发。**Layer B**：3 个 writer agent（`impl-test-writer` / `impl-code-writer` / `sync-planner`）的 frontmatter 从 `model: opus` 改成 `model: inherit`。v0.8.0 把所有 6 个 agent 都钉死成 `opus`，副作用是悄无声息地堵了 Claude Code 原生的 `CLAUDE_CODE_SUBAGENT_MODEL` 环境变量通道（这个 env var **只对 frontmatter 是 `inherit` 的 subagent 生效**，显式 `model: opus` 完全无视它），同时让 Sonnet 4.6 主线程的用户被默默全程跑 opus、白多花钱。改成 `inherit` 之后，writer 跟随主会话模型——Opus 主线程 → opus writer（Opus 用户体感无变化），Sonnet 主线程 → sonnet writer（自动省钱）。3 个 thinker agent（`impl-architect` / `impl-reviewer` / `reverse-prd-architect`）保持 `model: opus` 作为质量底线——这三个一旦悄悄降级到 sonnet，v0.7 review pipeline 的价值就被抹平了。
 
