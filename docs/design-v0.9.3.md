@@ -92,24 +92,25 @@ These three changes ship together because they all answer the same goal: "make t
 
 **Each bullet describes user-observable behavior, not the code that produces it.** Engineering evidence — file paths, function names, struct fields, constants, tuning parameters — goes into the `Backed by:` citation that already trails every bullet. The bullet body itself reads as PM voice.
 
-**Worked examples** (concrete before/after the architect can pattern-match against):
+**Example capability bullets in this voice** (positive examples — what good looks like, the architect pattern-matches against these):
 
 ```
-❌ Before: rule miss 才走 LLM gateway fallback (task_type=chinese_language,
-            temperature=0.1, max_tokens=80, httpx.Timeout(0.3s)), LLM 也 miss
-            则 stub passthrough current_mode. conf ≥ 0.5 且 target_agent != current
-            时把 active_agent + current_mode 写回 state...
+- **WebSocket 实时一节课** — 学生连上后服务端推渐进事件流 (say 1.2s /
+  板书 1.8s 节奏), 模拟"老师渐进讲".
+  Backed by: ws_server.py:619-624 (UTTERANCE_PACING_S 常量).
 
-✅ After:  rule miss 才走 LLM 兜底分类 (300ms 超时硬约束), LLM 也无法判断时
-            维持当前 mode. 低置信度或目标 = 当前不切档 (避免反复抖动).
-            学生不必手动 set_mode, 下一轮 sub-agent 自然接管.
+- **agent 意图自动切档** — 学生发消息后系统自动按意图选 sub-agent
+  (300ms 超时上限). 低置信度或目标=当前不切档 (避免反复抖动), 学生不必
+  手动 set_mode, 下一轮 sub-agent 自然接管.
+  Backed by: intent_classifier.py:139-191 + supervisor.py:45-90.
 
-           Backed by: intent_classifier.py:139-191 (rule layer) +
-           intent_classifier.py:217-251 (LLM fallback) +
-           supervisor.py:45-90 (gating)
+- **PRACTICE 真题优先 + 难度自适应** — coach 出题先从题库召回, 命中真题
+  带标准解析; 主题偏时退回 LLM 即兴编题. 难度按学生表现自适应升降
+  (连错降一档, 答对升档).
+  Backed by: agents/coach.py:76-120 + Qdrant rag_problems collection.
 ```
 
-The before is faithful. The after is faithful AND readable. Same evidence chain, same cite line; just the bullet body translated from "what the code does" to "what the user observes."
+Each example shows: PM-voice user observation in bullet body, engineering evidence in `Backed by:` cite. Architect pattern-matches against these when drafting new bullets.
 
 **Self-check the architect runs before committing each bullet**:
 
@@ -136,13 +137,9 @@ PRD as user manual benefits from "scenarios first, capabilities second" reading 
   Backed by: ws_server.py:271-336.
 ```
 
-**Format rules** for use-case bullets (kept lightweight):
+**Format**: bold name + colon + one-line scenario in PM voice. 2–4 use cases typical. Each use case should map to ≥1 capability bullet below.
 
-- Bold name + colon + one-line scenario description.
-- NO rigid `As [Actor], I want [Action], so that [Value]` template — too mechanical, forces awkward phrasing.
-- Each use-case should map to ≥1 capability bullet below it (architect verifies the mapping when drafting).
-- 2–4 use cases is typical; if you have 1, the module is probably too thin to need this preamble (skip it); if you have >5, you're listing capabilities not scenarios (consolidate).
-- Skippable for tightly-scoped utility modules (a pure CRUD API, a passive metric exporter) where "the user uses it" doesn't decompose into multiple scenarios.
+Architect uses PM-voice judgment for the scenario sentence — no fixed template. Skippable for tightly-scoped utility modules (pure CRUD API, passive metric exporter) where "the user uses it" doesn't decompose into multiple scenarios.
 
 #### R3. User-facing flow Mermaid sub-section in `## How it connects`
 
@@ -169,9 +166,9 @@ flowchart LR
 (existing Mermaid showing web-student → ws_server → supervisor → tutor sub-graph etc.)
 ```
 
-**Trigger rule** for the architect: only add User-facing flow when the module has **≥3 sequential user-visible steps** OR conditional branching the user observes. A pure CRUD API ("user POSTs, server returns") doesn't need it. Tutor-agent does. Reverse-prd does (Stage 1 / Stage 2 / Stage 3).
+For modules with a multi-step user flow, add a rough Mermaid diagram showing the main path. Single-step modules (CRUD API, passive metric exporter) skip the sub-section — no empty headings.
 
-If the module doesn't qualify, the architect skips the sub-section (no empty headings).
+Keep it rough. The goal is "user reads PRD and gets the main flow shape", NOT "exhaustive state machine with every conditional branch and edge case." If the architect is tempted to enumerate every state transition, that detail belongs in design-doc territory, not the user-manual PRD.
 
 ### How existing dirty PRDs get cleaned
 
@@ -185,29 +182,28 @@ Test extensions on existing `tests/test_agent_reverse_prd_architect.sh` (no new 
 
 R1 (voice discipline) assertions:
 - A `## PRD voice discipline` section heading exists in the persona file
-- The discipline contains at least one worked before/after example
+- The discipline contains ≥2 positive example capability bullets
 - The "self-check question" (PM / support engineer comprehension test) appears verbatim
 - The principle "engineering evidence goes in `Backed by:` cite, not bullet body" appears verbatim
 
 R2 (use cases preamble) assertions:
 - The `## What users get` description in the persona file mentions "use cases" / "使用场景" / "用例" preamble
-- Format guidance: bold name + colon + one-line scenario; explicitly NO `As [Actor], I want [Action]` template
+- Format guidance "bold name + colon + one-line scenario in PM voice" appears
 - The "≥1 capability maps to each use case" mapping rule appears
+- ≥2 positive use-case examples appear
 
 R3 (user-facing flow) assertions:
 - The `## How it connects` description in the persona file mentions "User-facing flow" sub-section
-- The trigger rule (≥3 sequential user-visible steps OR conditional branching) appears
-- The "skip when unqualified" rule appears (no empty headings)
+- ≥1 example Mermaid diagram appears
+- The "skip if single-step / no empty headings" rule appears
 
-Plus optionally extend `tests/test_template_prd_module.sh` if `templates/prd_module.md` is updated in lockstep with the persona changes (TBD whether the template carries the use-case preamble placeholder by default or only the persona instruction does).
+Plus optionally extend `tests/test_template_prd_module.sh` if `templates/prd_module.md` is updated in lockstep (TBD per Open Question 2).
 
 No new test files. No regex lint. The discipline is enforced by the LLM architect at draft time, not by a static checker.
 
 ### Open questions
 
-1. **Worked examples count for R1.** How many before/after examples does the architect persona need to reliably internalize voice discipline? One per leakage category (LLM params / state-struct names / wire schema / tuning constants) = ~4 examples. Two per category for redundancy = ~8. Initial guess: 4 worked examples is enough; iterate if real PRD outputs still leak.
-
-2. **Template vs persona for R2/R3 instruction.** The use-case preamble (R2) and User-facing flow (R3) — should they appear as **placeholder sections** in `templates/prd_module.md` (so a fresh PRD has the headings ready and the architect just fills them), OR only as **persona instructions** in `agents/reverse-prd-architect.md` (architect knows to add them when applicable, doesn't pre-pollute the template)?
+1. **Template vs persona for R2/R3 instruction.** The use-case preamble (R2) and User-facing flow (R3) — should they appear as **placeholder sections** in `templates/prd_module.md` (so a fresh PRD has the headings ready and the architect just fills them), OR only as **persona instructions** in `agents/reverse-prd-architect.md` (architect knows to add them when applicable, doesn't pre-pollute the template)?
    - Template approach: more visible, harder to forget, but creates empty headings for modules that don't qualify (R3 skip case especially).
    - Persona approach: cleaner output for thin modules, but architect may forget to add for modules that DO qualify.
    - Initial guess: persona-only for R3 (Mermaid is conditional on multi-step flow), template placeholder for R2 (use cases preamble is universal enough for non-trivial modules).
@@ -224,6 +220,8 @@ User confirmed (across multiple turns):
 - "用户视角流程图，这个要，用 mermaid 画" (R3)
 - "用例/用户故事 要的 简单描述" (R2 confirmed)
 - "Verify by 这个不要了" (no per-capability acceptance criteria)
-- Format preference: "**bold 用例名 + 一句话场景描述**" — no rigid As/I want/So that
+- "prd直接写现在系统的情况就好了啊，为什么要前和后的情况" (drop ❌/✅ before-after, use positive examples only)
+- "不需要特意禁用 As/I want/So that，直接让他用 pm 语气发挥就好了啊" (drop explicit ban; positive guidance only)
+- "给个大概的流程图就好了，不需要太详细" (R3 stays rough; drop strict trigger rules)
 
-Ratify the two open questions above (worked examples count + template-vs-persona scoping), then v0.9.3 can ship.
+Spec is rules-light, examples-led: positive guidance + concrete examples, architect uses PM-voice judgment for the rest. Ratify the one open question above (template-vs-persona scoping), then v0.9.3 can ship.
