@@ -80,13 +80,25 @@ echo
 
 # ---------- 2. Listening ports ----------
 echo "--- Listening ports ---"
+# v0.9.3: grayfilter drops processes that are guaranteed-non-project on macOS
+# / Linux developer machines (system / IDE / chat-app noise). Without the
+# filter, lsof | head -40 spends most of its quota on ControlCe, rapportd,
+# Code\x20H Helper, Electron, language_, WeChat, privoxy, ss-local, and
+# docker-desktop's own management process com.docke — none of which can be
+# super-manus modules. Filter is intentionally conservative; only entries
+# that are 100% confidence "not a project process" land here. See
+# docs/design-v0.9.3.md item 1 for criteria + how to extend the list.
+LISTEN_NOISE_RE='^(ControlCe|rapportd|Code\\x20H|Electron|language_|WeChat|privoxy|ss-local|com\.docke)'
 listen_out=""
 if command -v lsof >/dev/null 2>&1; then
   listen_out=$(with_timeout 3 lsof -iTCP -sTCP:LISTEN -P -n \
     | awk 'NR==1 || $0 ~ /LISTEN/' \
+    | grep -vE "$LISTEN_NOISE_RE" \
     | head -40 || true)
 elif command -v ss >/dev/null 2>&1; then
-  listen_out=$(with_timeout 3 ss -tlnp 2>/dev/null | head -40 || true)
+  listen_out=$(with_timeout 3 ss -tlnp 2>/dev/null \
+    | grep -vE "$LISTEN_NOISE_RE" \
+    | head -40 || true)
 fi
 if [ -z "$listen_out" ]; then
   echo "(probe unavailable: neither lsof nor ss returned data)"

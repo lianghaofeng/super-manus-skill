@@ -52,9 +52,15 @@ Plus a regression test (`tests/test_probe_runtime.sh` extension) that asserts th
 
 These three questions need to be answered before v0.9.3 implements. Until then: deferred.
 
-### Status: open, no ship date
+### Status: shipped in v0.9.3 (alongside R1+R2+R3)
 
-User said: "记一下到 0.9.3 design 吧 先不改". Surface in a future session when probe-runtime usage data is richer.
+`scripts/probe-runtime.sh` step 2 ("Listening ports") gained a `LISTEN_NOISE_RE` grayfilter that drops the canonical macOS / Linux dev-machine noise processes:
+
+```bash
+LISTEN_NOISE_RE='^(ControlCe|rapportd|Code\\x20H|Electron|language_|WeChat|privoxy|ss-local|com\.docke)'
+```
+
+Filter is applied to both lsof and ss output paths. `tests/test_probe_runtime.sh` extended with assertion #10 — must define the grayfilter regex AND must include the canonical noise sources (ControlCe, rapportd, Electron, WeChat) so future contributors don't silently shrink the list. Real-world test on contributor's machine: lsof output went from 40 lines (~30 noise + ~10 signal) to 4 lines (4 real project python3.1 processes). Grayfilter is intentionally conservative — only entries that are 100% confidence "not a project process" land here.
 
 ---
 

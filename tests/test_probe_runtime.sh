@@ -93,4 +93,17 @@ grep -q 'with_timeout' "$S" \
 grep -qE 'declared_ports|known_infra_ports|candidate_ports' "$S" \
   || { echo "FAIL: OpenAPI probe must constrain its port set (compose/--ports/intersect-with-listening), not scan all listening ports"; exit 1; }
 
+# 10. v0.9.3: Listening-ports grayfilter must drop guaranteed-non-project
+#     processes (macOS / Linux dev-machine noise). Without it, lsof | head -40
+#     spends most quota on ControlCe / Code Helper / WeChat / etc., diluting
+#     the architect's signal-to-noise ratio.
+grep -qE 'LISTEN_NOISE_RE|listen.{0,15}grayfilter|grep -vE.*ControlCe' "$S" \
+  || { echo "FAIL: v0.9.3 must define a listening-ports grayfilter for guaranteed-non-project processes"; exit 1; }
+# The filter list must include the canonical noise sources (each present in
+# real macOS lsof output observed during reverse-prd usage).
+for noise in ControlCe rapportd Electron WeChat; do
+  grep -qF "$noise" "$S" \
+    || { echo "FAIL: grayfilter must include '$noise' (canonical macOS dev-machine noise process)"; exit 1; }
+done
+
 echo OK
