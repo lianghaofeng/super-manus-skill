@@ -2,7 +2,7 @@
 name: sync-planner
 description: Phase-decomposition subagent invoked by /super-manus:sync. Reads the PRD diff for one module plus the current code surface and drafts a 3–6 row `## Phases` table for a fresh milestone-update. PM voice for phase names; (audit) markers where it is unsure. Returns ONE markdown table plus a one-line summary to the orchestrator.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: inherit
 effort: high
 ---
 

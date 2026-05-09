@@ -20,10 +20,18 @@ done
 active_overrides=$(grep -cE "^[a-z][a-z0-9-]*:" "$F" || true)
 [ "$active_overrides" = "0" ] || { echo "FAIL: template must have ZERO uncommented agent lines, found $active_overrides"; exit 1; }
 
-# Must document that effort: is NOT overridable (avoid users wasting time
-# editing a no-op).
-grep -qiE "effort.*not.*overridable|effort.*not.*here|not exposed.*effort" "$F" \
-  || { echo "FAIL: template must explain effort: is not overridable"; exit 1; }
+# v0.8.2: must document that effort: is overridable via CLAUDE_CODE_EFFORT_LEVEL
+# env var (highest priority — overrides frontmatter). The template should not
+# silently leave users thinking effort is fixed.
+grep -qF "CLAUDE_CODE_EFFORT_LEVEL" "$F" \
+  || { echo "FAIL: template must document CLAUDE_CODE_EFFORT_LEVEL as the effort override path"; exit 1; }
+grep -qiE "highest.*priority|highest-priority|wins|overrides.*frontmatter" "$F" \
+  || { echo "FAIL: template must clarify env var has highest priority (overrides plugin frontmatter)"; exit 1; }
+# Must NOT carry the old (wrong) claim that effort is unoverridable
+if grep -qiE "effort.*not.*overridable|effort.*is NOT.*overridable" "$F"; then
+  echo "FAIL: template still claims effort is not overridable (it IS, via env var) — remove that claim"
+  exit 1
+fi
 
 # Must document that the file is for STATIC user prefs, not dynamic state —
 # this is the load-bearing distinction with the v0.3-era .super-manus/active.

@@ -68,7 +68,7 @@ Make one workspace-symbols call (or any cheap LSP probe). Capture the result as 
 
 Spawn the **`sync-planner`** agent (Agent tool, `subagent_type="sync-planner"`). The persona ("senior tech lead"), source-priority hierarchy, and phase-decomposition rules live in [agents/sync-planner.md](../agents/sync-planner.md) — do NOT duplicate them here. The orchestrator only owns the inputs.
 
-### Per-agent model override (v0.8.1)
+### Per-agent model override (v0.8.1+)
 
 Before the spawn, resolve the override model:
 
@@ -77,7 +77,7 @@ source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
 override=$(sm_agent_model sync-planner)
 ```
 
-If `$override` is non-empty (`opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool. Empty → omit and use the agent's pinned `model: opus`. `effort:` is plugin-author-pinned and not overridable here.
+If `$override` is non-empty (`opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool. Empty → omit and let the agent's frontmatter `model: inherit` apply (writer-tier; follows the main session's model — Sonnet main → sonnet, Opus main → opus). `CLAUDE_CODE_SUBAGENT_MODEL` env var also routes inherit-mode subagents. `effort:` follows `CLAUDE_CODE_EFFORT_LEVEL` env var (highest) → frontmatter `high` → model default.
 
 Pass these six inputs in the spawning prompt:
 

@@ -129,25 +129,47 @@ The budget remains honor-system — the architect tracks calls in its own scratc
 
 ## 4. Per-agent model + effort routing
 
-Pre-v0.8 every subagent inherited its model from the parent thread — running on Opus 4.7 meant every spawn used Opus 4.7 at default reasoning depth. v0.8 pins each agent's model and effort explicitly via frontmatter, so the routing is consistent regardless of which model the user has selected for their main thread, and the heaviest reasoning is concentrated where it matters most.
+Pre-v0.8 every subagent inherited its model from the parent thread — running on Opus 4.7 meant every spawn used Opus 4.7 at default reasoning depth. v0.8 pins each agent's model and effort explicitly via frontmatter (with a refinement in v0.8.2 — see below), so the routing is consistent regardless of which model the user has selected for their main thread, and the heaviest reasoning is concentrated where it matters most.
 
 | Agent | model | effort | Why |
 |---|---|---|---|
 | `reverse-prd-architect` | opus | max | Whole-project PRD synthesis + ASCII diagram + cross-validation in one pass — heaviest single-shot agent in the plugin |
 | `impl-architect` | opus | max | Phase planning is where the v0.7 reviewer pipeline was added to catch fabrication; reasoning quality here determines whether the next two writers are doing useful work |
 | `impl-reviewer` | opus | max | Exists specifically to catch what the writers can't catch about themselves; cannot afford reasoning shortcuts |
-| `impl-test-writer` | opus | high | Constrained by the architect's plan; writing tests is structured translation, not synthesis |
-| `impl-code-writer` | opus | high | TDD-bound (red → green = success); model + tests provide a clear correctness signal |
-| `sync-planner` | opus | high | Output is one 3–6 row Phases table; narrow scope, short output |
+| `impl-test-writer` | **inherit** | high | Constrained by the architect's plan; writing tests is structured translation. v0.8.2 — let main-thread model flow through (Sonnet main → sonnet writer for free; Opus main → opus writer) |
+| `impl-code-writer` | **inherit** | high | TDD-bound (red → green = success); model + tests provide a clear correctness signal. v0.8.2 — same rationale |
+| `sync-planner` | **inherit** | high | Output is one 3–6 row Phases table; narrow scope, short output. v0.8.2 — same rationale |
 
-**Why not drop writer-tier agents to sonnet?** Considered and rejected. The cost saving is real (sonnet is ~3x cheaper than opus), but two failure modes pushed us back to opus everywhere:
+**Why thinkers stay pinned to opus**: planning + review failures cascade. A bad plan wastes a test-writer + code-writer cycle; a missed reviewer call ships broken code. These three agents are the v0.7 review pipeline's reason for existing. We refuse to silently downgrade them when a user happens to be on a cheaper main thread — they explicitly must override via `.super-manus/agents.yml` (v0.8.1) if they want sonnet for these.
 
-1. The TDD-bound code-writer occasionally encounters a phase whose tests reveal a non-obvious refactor (the red tests didn't anticipate a structural change). Sonnet 4.6 handles most of these but has a higher rate of "make tests green via narrow patch that breaks existing e2e." Reviewer catches it but adds a re-spawn cycle that erases the cost saving.
-2. Mixed-model pipelines complicate user mental model — "why did this phase fail with the same plan as last week?" can stem from sonnet/opus capability gaps that look identical to other failure modes.
+**Why writers use `inherit`**: writing tests + writing code under TDD discipline are constrained roles. Sonnet 4.6 handles them well, and the alternative (hard-pin opus) silently overcharges Sonnet-main users. The `inherit` value is documented in Claude Code's subagent model resolution order — when the frontmatter is `inherit`, the runtime falls through to (1) `CLAUDE_CODE_SUBAGENT_MODEL` env var, (2) the parent session's model. So users have two native override knobs for writers without touching plugin files.
 
-The split is purely on `effort:` instead, which lets the runtime allocate fewer reasoning tokens to constrained roles without changing model.
+**Effort priority** (high → low, per Claude Code docs):
 
-**Override for users**: `model:` can be overridden per spawn (the orchestrator could read a config file and pass `model:` to the Agent tool); `effort:` cannot — there is no spawn-time `effort` parameter. To change a single agent's effort for one project, drop a copy of `agents/<name>.md` (with adjusted frontmatter) at `.claude/agents/<name>.md` in the project root — Claude Code prefers project-scope agents over plugin-scope. A future v0.8.1 may add a `docs/super-manus/agents.yml` for `model:` overrides; effort would still require the local-file approach.
+1. `CLAUDE_CODE_EFFORT_LEVEL` env var — wins over everything below
+2. Per-spawn parameter (Agent tool — super-manus does not use this)
+3. Frontmatter `effort:` (the plugin's `max` for thinkers / `high` for writers)
+4. Model default
+
+The frontmatter `effort:` values are **defaults**, not floors. A user who exports `CLAUDE_CODE_EFFORT_LEVEL=medium` globally caps super-manus to medium effort across all six agents. That's the user's call — the plugin documents the default but doesn't fight the env var.
+
+**Model priority** (high → low):
+
+1. Per-spawn `model:` parameter to Agent tool — super-manus uses this when `.super-manus/agents.yml` declares an override (v0.8.1+)
+2. CLI `--agents '<json>'` inline definitions — orthogonal to plugin config
+3. Frontmatter `model:` field
+4. `CLAUDE_CODE_SUBAGENT_MODEL` env var — applies ONLY to subagents whose frontmatter says `model: inherit` (v0.8.2 makes 3 writers eligible for this)
+5. Parent session's model — fallback for `inherit` agents when env var is absent
+
+**Override paths summarized**:
+
+| Want to do | Path |
+|---|---|
+| Switch one agent's model in this project | `.super-manus/agents.yml` (v0.8.1 — written once, committed) |
+| Switch all writer-tier subagent models for one shell | `export CLAUDE_CODE_SUBAGENT_MODEL=...` (v0.8.2 — works because writers are `inherit`) |
+| Cap effort across all subagents globally | `export CLAUDE_CODE_EFFORT_LEVEL=...` |
+| Replace one agent for one project | Drop `agents/<name>.md` at `.claude/agents/<name>.md` (project scope > plugin scope; full frontmatter override including `effort:`) |
+| Override at CLI launch | `claude --agents '{"<name>": {...}}'` (highest precedence; rare) |
 
 ## 5. Files touched
 
@@ -230,8 +252,8 @@ Each spawning command (`commands/{impl,impl-all,reverse-prd,sync}.md`) gains a "
 
 ### What v0.8.1 does NOT add
 
-- **`effort:` override**: Claude Code's Agent tool exposes only `model` at spawn time. The plugin author's `effort:` choice in agent frontmatter is the floor; users who genuinely need a different effort drop a copy of `agents/<name>.md` at project-level `.claude/agents/<name>.md` (Claude Code prefers project scope over plugin scope).
-- **Per-update / per-phase override**: a single `.super-manus/agents.yml` applies project-wide; we don't differentiate "use sonnet for module X but opus for module Y." Splitting that finer-grained is a v0.9 question if the demand shows up.
+- **`effort:` override via this file**: `.super-manus/agents.yml` routes `model:` only. Claude Code provides a separate, native env-var path for effort (`CLAUDE_CODE_EFFORT_LEVEL`) that is the highest-priority effort source — see §4 for the priority table. The plugin's frontmatter `effort:` values (`max` / `high`) are defaults, not floors. v0.8.0's docs incorrectly described frontmatter effort as unoverridable; v0.8.2 corrects that.
+- **Per-update / per-phase override**: a single `.super-manus/agents.yml` applies project-wide; we don't differentiate "use sonnet for module X but opus for module Y." Splitting finer-grained is a v0.9 question if the demand shows up.
 - **Auto-detection of best model per task**: human-curated only.
 
 ### Tests
@@ -240,3 +262,48 @@ Each spawning command (`commands/{impl,impl-all,reverse-prd,sync}.md`) gains a "
 - `tests/test_command_start_logic.sh` — `sm-start.sh` seeds `.super-manus/agents.yml` from the template; seeded file has zero active overrides.
 - `tests/test_template_agents_yml.sh` — template lists all 6 agents (commented), explains effort: limitation, lists valid model values.
 - `tests/test_command_{impl,impl_all,reverse_prd,sync}_logic.sh` — each command markdown declares the override section + references `sm_agent_model` + `.super-manus/agents.yml`.
+
+## 9. v0.8.2 — Writers switch to `model: inherit` + correct override docs
+
+### Why
+
+v0.8.0 pinned every agent to `model: opus`. That looked like the right move for "consistent quality regardless of main thread," but it had two consequences I missed in v0.8.0's design pass:
+
+1. It blocks Claude Code's native `CLAUDE_CODE_SUBAGENT_MODEL` env var. That env var **only routes subagents whose frontmatter is `model: inherit`** — explicit `model: opus` ignores it entirely. With all six agents pinned, the env var was a no-op in our plugin, and users who'd already configured it in their shell (e.g., to default subagents to sonnet) silently saw it bypassed.
+2. It silently overcharges users on Sonnet 4.6 main threads. They opted into Sonnet for a reason; getting opus on every super-manus subagent invocation is the opposite of what they expected.
+
+Plus v0.8.0 docs incorrectly claimed `effort:` couldn't be overridden — Claude Code's `CLAUDE_CODE_EFFORT_LEVEL` env var **is** the highest-priority effort source, overriding frontmatter. That was a doc bug, not a design bug, but it would have misled users.
+
+### Behavior change
+
+Three writer-tier agents switch frontmatter `model: opus` → `model: inherit`:
+
+- `agents/impl-test-writer.md`
+- `agents/impl-code-writer.md`
+- `agents/sync-planner.md`
+
+The three thinker-tier agents (impl-architect / impl-reviewer / reverse-prd-architect) stay `model: opus` — they are the quality floor, and a Sonnet main thread getting sonnet-grade planning + review would silently degrade super-manus's value proposition.
+
+For users on Opus 4.7 main threads (likely the common case), this change is **invisible** at runtime: writer agents still resolve to opus through inheritance. The change only takes effect for users on a different main model, or users who've set `CLAUDE_CODE_SUBAGENT_MODEL`.
+
+### What v0.8.2 does NOT change
+
+- `.super-manus/agents.yml` schema and behavior — still flat `<agent>: <model>` with `opus | sonnet | haiku`.
+- `effort:` frontmatter values — still `max` / `high`.
+- `sm_agent_model` helper — still `opus | sonnet | haiku` validation; users who want "use the inherit fallback" simply leave the entry commented (which falls through to frontmatter, which is now `inherit` for writers).
+- The `runtime probe` work from v0.8.0 — orthogonal to model routing.
+
+### Doc corrections in v0.8.2 (Layer A)
+
+- §4 rewritten: full priority tables for both `model:` and `effort:`, override-path summary table.
+- §8 polished: "what v0.8.1 does NOT add" no longer claims effort is unoverridable.
+- `templates/agents.yml`: comment block explains effort env var path; writer examples updated to `sonnet` (since override-to-sonnet is now the realistic use case for Opus main users wanting cost savings on writers).
+- `commands/{impl,impl-all,reverse-prd,sync}.md`: each "Per-agent model override" section documents the env var paths.
+- `CLAUDE.md`: `## Where to look` v0.8 line updated to point at this section.
+
+### Tests
+
+- 3 writer-agent tests now assert `^model: inherit$` instead of `^model: opus$`.
+- 3 thinker-agent tests unchanged.
+- `test_template_agents_yml.sh` asserts `CLAUDE_CODE_EFFORT_LEVEL` is documented + rejects the old "effort not overridable" claim.
+- `test_command_impl_logic.sh` asserts `CLAUDE_CODE_EFFORT_LEVEL` is documented as the effort override path.

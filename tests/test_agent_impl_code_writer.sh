@@ -15,10 +15,13 @@ grep -qE "^name: impl-code-writer$" "$F" || { echo "FAIL: frontmatter 'name' mus
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools'"; exit 1; }
 
-# v0.8.0: writer-tier routing. Code-writer is constrained by red tests (green = success);
-# opus + high is sufficient. See docs/design-v0.8.md §4.
-grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus'"; exit 1; }
-grep -qE "^effort: high$" "$F" || { echo "FAIL: frontmatter must declare 'effort: high' (writer-tier, test-constrained)"; exit 1; }
+# v0.8.0/v0.8.2: writer-tier routing. Code-writer is constrained by red tests
+# (green = success). v0.8.2 switched `model: opus` → `model: inherit` so a
+# Sonnet main thread runs writers on Sonnet automatically, and
+# CLAUDE_CODE_SUBAGENT_MODEL env var works as native override. See
+# docs/design-v0.8.md §4 + §9.
+grep -qE "^model: inherit$" "$F" || { echo "FAIL: writer-tier agents must use 'model: inherit' (v0.8.2)"; exit 1; }
+grep -qE "^effort: high$" "$F" || { echo "FAIL: frontmatter must declare 'effort: high' (writer-tier default; CLAUDE_CODE_EFFORT_LEVEL overrides if set)"; exit 1; }
 
 # Tools whitelist: Read, Write, Edit, Glob, Grep, Bash. Edit IS allowed (code-writer
 # edits source code) but the persona forbids editing tests/ and e2e/.

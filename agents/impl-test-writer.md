@@ -2,7 +2,7 @@
 name: impl-test-writer
 description: Writes phase tests + e2e tests in red (failing) state for one phase of a super-manus update. Read-everything, write-tests-only. Commits before code-writer runs.
 tools: Read, Write, Glob, Grep, Bash
-model: opus
+model: inherit
 effort: high
 ---
 

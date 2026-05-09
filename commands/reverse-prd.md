@@ -147,7 +147,7 @@ Append `runtime_facts` to the spawning prompt as the 9th input (after `lsp_avail
 
 Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module — for whole-project mode. For per-module mode the orchestrator skipped Stage 1 and the module list is the single row `<module>`. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn the **`reverse-prd-architect`** agent (Agent tool, `subagent_type="reverse-prd-architect"`). The architect+PM persona, ASCII diagram rules, source-priority hierarchy, `(audit)` policy, granularity default, and Drift check protocol references all live in [agents/reverse-prd-architect.md](../agents/reverse-prd-architect.md). Do NOT duplicate them here.
 
-### Per-agent model override (v0.8.1)
+### Per-agent model override (v0.8.1+)
 
 Before the spawn, resolve the override model:
 
@@ -156,7 +156,7 @@ source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
 override=$(sm_agent_model reverse-prd-architect)
 ```
 
-If `$override` is non-empty (`opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool. Empty → omit and use the agent's pinned `model: opus`. `effort:` is plugin-author-pinned and not overridable here.
+If `$override` is non-empty (`opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool. Empty → omit and use the agent's pinned `model: opus` (thinker — quality floor for whole-project PRD synthesis). `effort:` is governed by `CLAUDE_CODE_EFFORT_LEVEL` env var (highest priority, overrides everything) → frontmatter (`max` for this agent) → model default; not configurable via `.super-manus/agents.yml`.
 
 Why a subagent: the writing pass needs a fresh context (no chat-history pollution), a focused architect/PM persona, and a sustained reading budget across many source files. Embedding it in the main thread bloats context and fragments the persona.
 

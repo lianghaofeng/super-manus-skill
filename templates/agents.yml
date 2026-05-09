@@ -12,23 +12,38 @@
 #                       active-update pointers, session caches, or anything
 #                       that would drift out of sync with the filesystem.
 #
-# `effort:` is NOT overridable here — Claude Code's Agent tool does not expose
-# `effort` at spawn time, so override would be a no-op. The plugin-author-pinned
-# values (`max` for thinkers / `high` for writers) live in agents/<name>.md.
-# To change effort for one project, drop a copy of agents/<name>.md at
-# .claude/agents/<name>.md in the project root — Claude Code prefers
-# project-scope agent files over plugin-scope.
+# `effort:` is governed separately from `model:`. This file routes ONLY model.
+# Claude Code's native override path for effort is the environment variable
+# `CLAUDE_CODE_EFFORT_LEVEL`, which is the highest-priority effort source —
+# it wins over frontmatter, plugin config, and per-spawn parameters.
+# Set it in your shell to globally cap effort for ALL agents in this and
+# every other plugin:
+#
+#   export CLAUDE_CODE_EFFORT_LEVEL=medium     # save tokens
+#   export CLAUDE_CODE_EFFORT_LEVEL=max        # ignore plugin defaults, push hard
+#
+# The frontmatter values shipped by super-manus (max for thinkers / high for
+# writers) are DEFAULTS, not floors — env var wins. To override effort for
+# just one project / one agent without affecting others, drop a copy of
+# agents/<name>.md at .claude/agents/<name>.md in the project root —
+# Claude Code prefers project-scope agent files over plugin-scope.
 #
 # Uncomment + edit a line to override that agent. Default (everything commented)
-# means "use the plugin's pinned model: opus for every agent".
+# means: thinkers run on opus (frontmatter-pinned), writers inherit the main
+# session's model (frontmatter `model: inherit` since v0.8.2).
 
-# Thinkers — these benefit most from opus + max effort, downgrade with care
+# Thinkers — pinned to opus in frontmatter (quality floor for planning + review).
+# Override here only if you accept lower-quality plans or weaker review catches.
 #impl-architect: opus
 #impl-reviewer: opus
 #reverse-prd-architect: opus
 
-# Writers — opus + high by default; sonnet is a reasonable cost-saving trade
-# if you accept slightly higher reviewer-retry rate
-#impl-test-writer: opus
-#impl-code-writer: opus
-#sync-planner: opus
+# Writers — `model: inherit` in frontmatter, so they follow the main session's
+# model by default. On a Sonnet 4.6 main thread you already get sonnet for
+# free; on an Opus 4.7 main thread you can pin sonnet here to save cost.
+# Alternative: export CLAUDE_CODE_SUBAGENT_MODEL=claude-sonnet-4-6 in your
+# shell — that env var also routes inherit-mode subagents (so this file and
+# the env var both work; this file is per-project, env var is per-shell).
+#impl-test-writer: sonnet
+#impl-code-writer: sonnet
+#sync-planner: sonnet

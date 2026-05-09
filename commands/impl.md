@@ -63,7 +63,7 @@ Decide: does the phase intent introduce a capability not declared in `## What us
 
 Before spawning any agent, attempt one workspace-symbol call against the module to set `lsp_available=true|false`. Pass the boolean to all three agents so they can apply the protocol's fallback path correctly.
 
-## Per-agent model override (v0.8.1)
+## Per-agent model override (v0.8.1+)
 
 For EVERY subagent spawn in this command (impl-architect / impl-reviewer at 3 checkpoints / impl-test-writer / impl-code-writer), before invoking the Agent tool, resolve the override model:
 
@@ -72,9 +72,16 @@ source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
 override=$(sm_agent_model <agent-name>)
 ```
 
-If `$override` is non-empty (one of `opus` / `sonnet` / `haiku`), pass `model: "$override"` as an argument to the Agent tool invocation — this overrides the agent file's frontmatter default. If empty (no entry, commented out, missing `.super-manus/agents.yml`), omit `model` and the agent's pinned `model: opus` applies.
+If `$override` is non-empty (one of `opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool — this overrides the agent file's frontmatter. If empty (no entry, commented out, or no `.super-manus/agents.yml`), omit `model:` and let the agent's frontmatter apply: `opus` for thinkers (architect / reviewer / reverse-prd-architect), `inherit` for writers (test-writer / code-writer / sync-planner — they follow the main session's model unless `CLAUDE_CODE_SUBAGENT_MODEL` env var is set).
 
-`effort:` is plugin-author-pinned in the agent frontmatter (`max` for thinkers, `high` for writers) and is NOT overridable here — Claude Code's Agent tool does not expose `effort` at spawn time.
+`effort:` is NOT routed through this file. Effort priority (high → low):
+
+1. `CLAUDE_CODE_EFFORT_LEVEL` env var (highest — overrides everything)
+2. Per-spawn parameter (Agent tool — not used by super-manus)
+3. Frontmatter `effort:` (the plugin's `max` for thinkers / `high` for writers)
+4. Model default
+
+To globally cap effort across all super-manus agents, export `CLAUDE_CODE_EFFORT_LEVEL` in your shell. To override effort for one specific agent in one project without touching others, drop a copy of `agents/<name>.md` at `.claude/agents/<name>.md` (Claude Code prefers project-scope > plugin-scope).
 
 ## Step 1 — Spawn impl-architect
 

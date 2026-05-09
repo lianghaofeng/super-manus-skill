@@ -15,11 +15,13 @@ grep -qE "^name: impl-test-writer$" "$F" || { echo "FAIL: frontmatter 'name' mus
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools' (Read/Write/Glob/Grep/Bash; NO Edit)"; exit 1; }
 
-# v0.8.0: writer-tier routing. Tests are constrained by the architect's plan,
-# so the test-writer doesn't need max-effort reasoning — opus + high is the
-# right balance. See docs/design-v0.8.md §4.
-grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus'"; exit 1; }
-grep -qE "^effort: high$" "$F" || { echo "FAIL: frontmatter must declare 'effort: high' (writer-tier, plan-constrained)"; exit 1; }
+# v0.8.0/v0.8.2: writer-tier routing. Tests are constrained by the architect's
+# plan, so the test-writer doesn't need max-effort reasoning. v0.8.2 switched
+# `model: opus` → `model: inherit` so the user's main-thread choice flows
+# through (and CLAUDE_CODE_SUBAGENT_MODEL env var works as native override).
+# See docs/design-v0.8.md §4 + §9.
+grep -qE "^model: inherit$" "$F" || { echo "FAIL: writer-tier agents must use 'model: inherit' (v0.8.2 — let main-thread choice flow through)"; exit 1; }
+grep -qE "^effort: high$" "$F" || { echo "FAIL: frontmatter must declare 'effort: high' (writer-tier default; CLAUDE_CODE_EFFORT_LEVEL overrides if set)"; exit 1; }
 
 # Tools whitelist: Read, Write, Glob, Grep, Bash. Must NOT list Edit (write-permission
 # barrier — test-writer cannot edit; only writes new files).

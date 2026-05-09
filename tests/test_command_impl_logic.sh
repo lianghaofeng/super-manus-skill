@@ -161,7 +161,9 @@ grep -qF "sm_agent_model" "$F" \
   || { echo "FAIL: v0.8.1 must invoke sm_agent_model helper for model resolution"; exit 1; }
 grep -qF ".super-manus/agents.yml" "$F" \
   || { echo "FAIL: v0.8.1 override must reference .super-manus/agents.yml as the config source"; exit 1; }
-grep -qiE "effort.*not.*overridable|not overridable|effort.*pinned|effort.*plugin-author" "$F" \
-  || { echo "FAIL: v0.8.1 must document that effort is NOT overridable (plugin-author-pinned)"; exit 1; }
+grep -qF "CLAUDE_CODE_EFFORT_LEVEL" "$F" \
+  || { echo "FAIL: v0.8.2 must document the CLAUDE_CODE_EFFORT_LEVEL env var as the effort override path (effort is overridable, just not via .super-manus/agents.yml)"; exit 1; }
+grep -qiE "effort.*highest|highest.*effort|env var.*highest|highest.*priority" "$F" \
+  || { echo "FAIL: v0.8.2 must clarify env var has highest priority (overrides frontmatter)"; exit 1; }
 
 echo OK

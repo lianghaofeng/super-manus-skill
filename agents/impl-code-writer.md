@@ -2,7 +2,7 @@
 name: impl-code-writer
 description: Writes implementation code to make red phase tests + e2e tests pass. Read-only on test files; orchestrator hashes tests before/after to detect tamper.
 tools: Read, Write, Edit, Glob, Grep, Bash
-model: opus
+model: inherit
 effort: high
 ---
 
