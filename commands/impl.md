@@ -123,14 +123,14 @@ Compute these from the resolved target and pass them in the Agent tool's `prompt
 >
 > Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor in this phase's `## Approach` and `## Files touched`. Return the summary line when done.
 
-The agent writes `$UPDATE_DIR/tasks/p<n>_impl.md` directly via the Write/Edit tools, seeding from `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` if the file does not yet exist (the template carries the four stable headings `## Objective` / `## Approach` / `## Files touched` / `## Verification`). It does NOT print the file to chat and it does NOT write code. If the file already has substantive content, it is idempotent — it returns "phase plan already drafted; resume from existing" and the orchestrator continues.
+The agent writes `$UPDATE_DIR/tasks/p<n>_impl.md` directly via the Write/Edit tools, seeding from `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` if the file does not yet exist (the template carries the five stable headings `## Objective` / `## Approach` / `## Edge cases` / `## Files touched` / `## Verification` — `## Edge cases` was added in v0.9.0 to lift "test coverage" from "did test-writer remember?" to an architect-committed checklist). It does NOT print the file to chat and it does NOT write code. If the file already has substantive content in all five sections, it is idempotent — it returns "phase plan already drafted; resume from existing" and the orchestrator continues. If the file exists with the legacy 4-section shape (no `## Edge cases`), the architect inserts the section in place and returns "migrated legacy plan; added Edge cases section".
 
 ### After the architect returns
 
 The orchestrator MUST:
 
-1. Verify `$UPDATE_DIR/tasks/p<n>_impl.md` exists and has non-empty `## Objective`, `## Approach`, `## Files touched`, `## Verification` sections.
-2. If any of the four headings is missing or empty, surface a one-line warning to the user ("impl-architect produced an incomplete plan; please review tasks/p<n>_impl.md before continuing") — do NOT silently fix.
+1. Verify `$UPDATE_DIR/tasks/p<n>_impl.md` exists and has non-empty `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification` sections (5 sections, v0.9.0).
+2. If any of the five headings is missing or empty, surface a one-line warning to the user ("impl-architect produced an incomplete plan; please review tasks/p<n>_impl.md before continuing") — do NOT silently fix.
 3. Surface the agent's summary line verbatim to the user.
 
 Engineering detail (DB schema, API endpoints, code snippets, file diffs) lives in this phase plan — NOT in the per-module PRD. The PRD answered "this module IS what"; this phase plan answers "this phase DOES what".

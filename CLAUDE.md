@@ -14,7 +14,7 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
   - `task_plan.md`: `## Goal`, `## Phases`
   - `findings.md`: `## Decisions`, `## Errors`, `## Data points / research`, `## Reflections` (orchestrator-appended at phase close)
   - `progress.md`: `## Completed commits`, `## Session log`, `## Outstanding`
-  - `phase_plan.md`: `## Objective`, `## Approach`, `## Files touched`, `## Verification`
+  - `phase_plan.md` (5 H2, v0.9.0): `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification`
   - `prd_index.md` (8 H2): `## Problem`, `## Audience`, `## Success metrics`, `## Demo`, `## Must`, `## Not doing`, `## Modules`, `## Data flow overview`
   - `prd_module.md` (9 H2): `## Why this exists`, `## Users`, `## Success`, `## What users get`, `## How it connects`, `## Quality bar`, `## Risks`, `## Out of scope`, `## Open questions`
   - `roadmap.md`: `## Modules`
@@ -76,6 +76,7 @@ Invariants:
 
 ## Where to look
 
-- `docs/design-v0.8.md` — current design. Read before changing the runtime probe, Cross-validation protocol, model/effort routing, or `agents.yml` override mechanism.
+- `docs/design-v0.9.0.md` — current reviewer-upgrade design (v0.9.0). Read before changing edge-case enumeration discipline, the pre-close test-run requirement, or the reviewer's grep/Read budget.
+- `docs/design-v0.8.md` — v0.8 design. Read before changing the runtime probe, Cross-validation protocol, model/effort routing, or `agents.yml` override mechanism.
 - `docs/design-v0.*.md` (other) — earlier design rationale. Consult when you need to understand *why* a current invariant exists; not required reading for normal contributions.
 - `docs/plans/` — per-task implementation plans.

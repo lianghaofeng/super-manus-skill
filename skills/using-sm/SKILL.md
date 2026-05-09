@@ -82,7 +82,7 @@ The naming distinction is load-bearing — orchestrator and CI configs depend on
 
 **`docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update-name>/tasks/p<n>_impl.md`** — per-phase technical plan (lazy).
 - Created by `/super-manus:impl` when the next pending phase needs a plan. Trivial phases don't need one.
-- Sections: `## Objective` (what "done" means) / `## Approach` (chosen technical route — DB schema, API endpoints, code snippets, file diffs all live here) / `## Files touched` / `## Verification`.
+- Sections (5 H2, v0.9.0): `## Objective` (what "done" means) / `## Approach` (chosen technical route — DB schema, API endpoints, code snippets, file diffs all live here) / `## Edge cases` (3–5 concrete bullets anchored in PRD `## Quality bar` / `## Risks` or named failure modes — checklist the test-writer is checked against) / `## Files touched` / `## Verification`.
 - Lifecycle: fill `## Objective` first, evolve `## Approach` in place, leave the file as historical record when the phase closes.
 
 **`docs/super-manus/roadmap.md`** — module status table. `| Module | Status | Note |`. Status values: `not-started` / `iterating` / `stable` / `blocked`.

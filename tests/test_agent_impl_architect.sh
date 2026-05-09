@@ -33,10 +33,14 @@ grep -qF "tasks/p" "$F" || { echo "FAIL: must specify the tasks/p<n>_impl.md wri
 grep -qF "_impl.md" "$F" || { echo "FAIL: must specify the p<n>_impl.md filename pattern"; exit 1; }
 grep -qiE "do NOT print|not print to chat|do not print" "$F" || { echo "FAIL: must explicitly forbid printing the file to chat"; exit 1; }
 
-# Four exact H2 section names — Objective / Approach / Files touched / Verification
-for h in "## Objective" "## Approach" "## Files touched" "## Verification"; do
+# Five exact H2 section names — Objective / Approach / Edge cases / Files touched / Verification (v0.9.0)
+for h in "## Objective" "## Approach" "## Edge cases" "## Files touched" "## Verification"; do
   grep -qF "$h" "$F" || { echo "FAIL: agent must document section '$h'"; exit 1; }
 done
+
+# v0.9.0: section header rename "Four H2" → "Five H2"
+grep -qiE "Five H2 sections|five H2|5 H2" "$F" \
+  || { echo "FAIL: v0.9.0 must update the section heading to 'Five H2 sections' (was 'Four H2 sections')"; exit 1; }
 
 # Drift check protocol references — LSP, double-source, LSP-unavailable fallback
 grep -qF "Drift check protocol" "$F" || { echo "FAIL: must reference the using-sm Drift check protocol"; exit 1; }
@@ -90,5 +94,32 @@ grep -qF "Heuristic" "$F" \
   || { echo "FAIL: v0.7.4 must reference the Heuristic line as the load-bearing element of prior_reflections"; exit 1; }
 grep -qiE "checklist|honor.*Heuristic" "$F" \
   || { echo "FAIL: v0.7.4 must say the architect treats Heuristic lines as a checklist (not free reading)"; exit 1; }
+
+# === v0.9.0 additive assertions ===========================================
+# Architect must enumerate concrete edge cases anchored in PRD ## Quality bar
+# / ## Risks, with vague labels (error_handling: yes) explicitly called out as
+# rejection-worthy. The reviewer pre-test relies on this enumeration to walk
+# bullets and check coverage downstream.
+grep -qiE "3.{0,3}5 bullets" "$F" \
+  || { echo "FAIL: v0.9.0 must specify 3-5 bullets for ## Edge cases"; exit 1; }
+grep -qiE "anchored|anchor" "$F" \
+  || { echo "FAIL: v0.9.0 must require Edge cases bullets to be anchored (PRD ## Quality bar / ## Risks / named failure mode)"; exit 1; }
+grep -qF "## Quality bar" "$F" \
+  || { echo "FAIL: v0.9.0 must reference PRD ## Quality bar as a primary anchor source for Edge cases"; exit 1; }
+grep -qF "## Risks" "$F" \
+  || { echo "FAIL: v0.9.0 must reference PRD ## Risks as a primary anchor source for Edge cases"; exit 1; }
+grep -qiE "concrete .{0,10}testable|testable|concrete failure mode" "$F" \
+  || { echo "FAIL: v0.9.0 must require Edge cases bullets to be concrete + testable"; exit 1; }
+grep -qiE "error_handling: yes|vague.{0,30}untestable|untestable" "$F" \
+  || { echo "FAIL: v0.9.0 must explicitly reject vague labels (error_handling: yes) as Edge cases content"; exit 1; }
+grep -qiE "happy.path scaffolding|pure happy.path" "$F" \
+  || { echo "FAIL: v0.9.0 must document the pure-happy-path scaffolding exception (single-bullet form)"; exit 1; }
+
+# Legacy 4-section migration path — architect must handle plans that pre-date
+# v0.9.0 (no ## Edge cases) by inserting the section in place, NOT overwriting.
+grep -qiE "legacy .{0,10}plan|legacy 4.section|pre.dat" "$F" \
+  || { echo "FAIL: v0.9.0 must document the legacy 4-section migration path"; exit 1; }
+grep -qiE "insert .{0,30}Edge cases|added Edge cases" "$F" \
+  || { echo "FAIL: v0.9.0 must specify in-place insertion of ## Edge cases for legacy plans (not full overwrite)"; exit 1; }
 
 echo OK

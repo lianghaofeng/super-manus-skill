@@ -40,7 +40,9 @@ Do NOT print the file to chat. Do NOT write code. Do NOT touch any other file.
 
 When done, return ONE summary line to the orchestrator:
 
-> drafted p<n>_impl.md for phase '<name>'; <X> files touched, <Y> (audit) markers
+> drafted p<n>_impl.md for phase '<name>'; <X> files touched, <E> edge cases, <Y> (audit) markers
+
+(For legacy 4-section migration: `migrated legacy plan; added <E> edge cases`.)
 
 ### Write barrier — non-negotiable
 
@@ -48,7 +50,9 @@ The `Write` and `Edit` tools may ONLY target paths under `${update_dir}/` (a pat
 
 ### Procedure (in this order)
 
-1. **Idempotency check.** Read `${update_dir}/tasks/p<phase_number>_impl.md`. If it exists AND has substantive content (both `## Objective` and `## Approach` are non-empty and not just template `<placeholder>` text), do NOT overwrite. Return `phase plan already drafted; resume from existing` and stop. The orchestrator will continue from the existing plan.
+1. **Idempotency check.** Read `${update_dir}/tasks/p<phase_number>_impl.md`. If it exists AND has substantive content in **all five** H2 sections (`## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification` — each non-empty and not just template `<placeholder>` text), do NOT overwrite. Return `phase plan already drafted; resume from existing` and stop.
+
+   **Legacy 4-section plan migration (v0.9.0).** If the file exists with substantive `## Objective` / `## Approach` / `## Files touched` / `## Verification` but is missing `## Edge cases` (a v0.9.0-shaped plan from before the structural break), do NOT overwrite the existing four sections. Use `Edit` to insert a new `## Edge cases` section between `## Approach` and `## Files touched`, fill it per the discipline below, and return `migrated legacy plan; added Edge cases section`. All other content is preserved verbatim.
 
    **Exception**: if your spawning prompt includes a `previous_attempt_feedback` block, idempotency does NOT apply — you have been re-spawned by the reviewer to revise. See `## Receiving reviewer feedback (re-spawn)` below.
 
@@ -64,9 +68,9 @@ The `Write` and `Edit` tools may ONLY target paths under `${update_dir}/` (a pat
 
 3. **Fill the four sections via Edit on the destination only.** Apply `Edit` to `${update_dir}/tasks/p<phase_number>_impl.md`. Never to the template path.
 
-## Four H2 sections — exact heading names
+## Five H2 sections — exact heading names
 
-Downstream tools and the orchestrator parse these headings. Do NOT rename. Do NOT invent new sections. The template already lays them out:
+Downstream tools and the orchestrator parse these headings. Do NOT rename. Do NOT invent new sections beyond these. The template already lays them out:
 
 ### `## Objective`
 
@@ -97,6 +101,59 @@ Source priority:
 4. `task_plan_path` other phases — to avoid stepping on neighboring phases' work.
 
 If a meaningful decision is unresolved (e.g. "should we cache in Redis or in-memory?"), put it as a sub-bullet and mark `(decide)` so the orchestrator can confirm with the user before coding.
+
+### `## Edge cases`
+
+**3–5 bullets enumerating concrete edge / boundary / failure cases this phase MUST handle.** This section exists because "test coverage" without an enumerated list of cases collapses into "did test-writer happen to think of it?" — the architect's job is to commit to the list, so the test-writer can be checked against it.
+
+Each bullet must be:
+
+- **Concrete and testable** — name the input shape, the failure mode, or the boundary condition explicitly. NOT "error handling: yes". NOT "validate input". NOT "handle the case where X" without naming what X is.
+- **Anchored** — every bullet must trace to one of:
+  - PRD `## Quality bar` clause (the user-visible NFR this case stresses)
+  - PRD `## Risks` clause (the failure mode worth proving against)
+  - A specific failure mode this phase commits to handling (for tech-internal phases without a direct PRD anchor)
+
+Format:
+
+```
+- <concrete edge case description> — anchored in PRD ## Quality bar "<exact bullet text>"
+- <concrete edge case description> — anchored in PRD ## Risks "<exact bullet text>"
+- <concrete edge case description> — concrete failure mode: <what would go wrong if not handled>
+```
+
+Examples (good — testable, anchored):
+
+```
+- Empty input file (zero records) — anchored in PRD ## Quality bar "graceful on empty corpora"
+- Duplicate IDs across sources — concrete failure mode: silent overwrite would lose the second record
+- Network timeout mid-batch — anchored in PRD ## Risks "partial-batch failure must not corrupt state"
+```
+
+Examples (bad — will be RETURN'd by reviewer pre-test):
+
+```
+- Error handling                        ← vague, untestable
+- Edge cases will be considered         ← no enumeration; reviewer cannot check
+- Standard validation                   ← no concrete failure named
+```
+
+**Pure happy-path phase exception.** If the phase is genuinely a happy-path-only delivery (rare — typically only true for trivial scaffolding like "create empty module file" or "wire up DI container"), you may emit a single explicit bullet:
+
+```
+- Pure happy-path scaffolding; no edge case enumeration possible at this phase. (Reviewer may RETURN if it disagrees.)
+```
+
+The reviewer is allowed to RETURN_TO_ARCHITECT on this clause if it can name a plausible edge case the phase still touches.
+
+**`(audit)` markers** are allowed for cases the architect suspects exist but can't confirm without coding (e.g. "(audit) third-party API rate limit may surface as 429 — confirm during impl"). All `(audit)` markers must be resolved before reviewer pre-test APPROVE.
+
+Source priority:
+
+1. `module_prd_path` `## Quality bar` — first source for NFR-driven edges (latency, empty-input behavior, idempotency claims).
+2. `module_prd_path` `## Risks` — first source for adversarial / failure-mode edges (network failure, partial state, race conditions).
+3. The `## Approach` itself — every "after step 2, step 3..." dependency implies a failure mode if step 2 fails partway. Name those.
+4. `prior_reflections` `Heuristic:` lines — if a prior phase's heuristic is "always test against empty inputs", honor it here.
 
 ### `## Files touched`
 

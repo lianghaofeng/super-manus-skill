@@ -10,6 +10,27 @@
 
 <the chosen technical route: bullets, ordered steps, or short prose. Code snippets, pseudo-code, file diffs, DB schema, API endpoints, interface contracts all live here.>
 
+## Edge cases
+
+<3–5 bullets. Each bullet names a concrete edge / boundary / failure case this phase MUST handle, anchored in PRD `## Quality bar` or `## Risks` (or, for tech-internal phases, a specific failure mode). NOT vague labels like "error_handling: yes". Each bullet is a checklist item the test-writer must cover with at least one assertion.>
+
+<!--
+Examples (good):
+  - Empty input file (zero records) — anchored in PRD ## Quality bar "graceful on empty corpora"
+  - Duplicate IDs across sources — concrete failure mode: silent overwrite would lose the second record
+  - Network timeout mid-batch — anchored in PRD ## Risks "partial-batch failure must not corrupt state"
+
+Examples (bad — will be rejected by reviewer pre-test):
+  - "Error handling" (vague, untestable)
+  - "Edge cases will be considered" (no enumeration)
+  - "Standard validation" (no concrete failure named)
+
+If a phase is genuinely a pure happy-path delivery (rare — usually only true for trivial scaffolding), state so explicitly with one bullet:
+  - Pure happy-path scaffolding; no edge case enumeration possible at this phase. (Reviewer may RETURN if it disagrees.)
+
+(audit) markers are allowed for cases the architect suspects but cannot confirm without coding. Reviewer MUST see them resolved before pre-test APPROVE.
+-->
+
 ## Files touched
 
 - `path/to/file` — <one-line reason>

@@ -75,9 +75,10 @@ grep -qF "code_writer_stuck" "$F" || { echo "FAIL: pre-close must reference code
 # Karpathy reference (using-sm/SKILL.md §9)
 grep -qF "using-sm/SKILL.md §9" "$F" || grep -qiE "karpathy" "$F" || { echo "FAIL: must reference using-sm §9 / karpathy guidelines"; exit 1; }
 
-# Budget — tighter than writers (per design §2)
+# Budget — tighter than writers (per design §2). v0.9.0 bumped grep/Read 15 → 25
+# to accommodate the new ## Edge cases coverage walk + pre-close test-run check.
 grep -qE "LSP calls.*≤5|≤5.*LSP|LSP.*≤ 5" "$F" || { echo "FAIL: must specify ≤5 LSP call budget per review"; exit 1; }
-grep -qE "grep.*Read.*≤15|≤15.*grep|grep.*≤ 15" "$F" || { echo "FAIL: must specify ≤15 grep/Read call budget per review"; exit 1; }
+grep -qE "grep.*Read.*≤25|≤25.*grep|grep.*≤ 25" "$F" || { echo "FAIL: v0.9.0 must specify ≤25 grep/Read call budget per review (bumped from 15)"; exit 1; }
 
 # Idempotency — re-spawn awareness via attempt_number
 grep -qiE "re[- ]spawn|attempt_number > 1|attempt_number = 1" "$F" || { echo "FAIL: must specify re-spawn / attempt_number behavior"; exit 1; }
@@ -130,5 +131,38 @@ grep -qiE "no commit hashes.{0,40}top|commit hash.{0,40}go in 关键事实|file 
 # Both-layer-required — explicit "do not collapse to one or the other"
 grep -qiE "do not collapse|both .{0,40}load[- ]bearing|both layers are load" "$F" \
   || { echo "FAIL: v0.7.5 must explicitly say plain-language and diagnostic layers are both load-bearing (no collapsing)"; exit 1; }
+
+# === v0.9.0 additive assertions ===========================================
+# Three things land in v0.9.0:
+#   A) pre-close MUST run phase tests + touched e2e tests itself, NOT trust
+#      code-writer's "all green" self-report. False-green-claim → RETURN.
+#   C) grep/Read budget bumped 15 → 25 (asserted above).
+#   D) ## Edge cases enumeration is required in plans; reviewer pre-test
+#      rejects vague / unanchored bullets; reviewer pre-code rejects
+#      uncovered bullets.
+
+# pre-test: ## Edge cases enumeration check
+grep -qF "## Edge cases" "$F" \
+  || { echo "FAIL: v0.9.0 must check ## Edge cases enumeration in pre-test mode"; exit 1; }
+grep -qiE "concrete .{0,10}testable|testable|concrete failure mode|vague.{0,40}return|untestable" "$F" \
+  || { echo "FAIL: v0.9.0 pre-test must reject vague / untestable Edge cases bullets"; exit 1; }
+grep -qiE "anchored|anchor" "$F" \
+  || { echo "FAIL: v0.9.0 pre-test must require Edge cases bullets to be anchored (PRD ## Quality bar / ## Risks / named failure mode)"; exit 1; }
+
+# pre-code: every Edge cases bullet must have a corresponding test assertion
+grep -qiE "Coverage of .{0,5}## Edge cases|every .{0,30}Edge cases bullet|Edge cases.{0,30}coverage" "$F" \
+  || { echo "FAIL: v0.9.0 pre-code must require every Edge cases bullet to be covered by ≥1 test assertion"; exit 1; }
+
+# pre-close: reviewer runs phase tests + e2e tests itself (A — the false-green-claim defense)
+grep -qiE "do not trust|not trust .{0,15}code.writer|false[- ]green[- ]claim|run .{0,40}yourself" "$F" \
+  || { echo "FAIL: v0.9.0 pre-close must require reviewer to run phase + e2e tests itself, not trust code-writer's claim"; exit 1; }
+grep -qiE "false[- ]green[- ]claim" "$F" \
+  || { echo "FAIL: v0.9.0 pre-close must use the 'false-green-claim' verdict tag for reported-green-but-actually-red"; exit 1; }
+# Run-once policy must be preserved (no iterating / no debugging during the run)
+grep -qiE "Run.{0,20}ONCE|one run.{0,15}one verdict|do not iterate|do NOT iterate" "$F" \
+  || { echo "FAIL: v0.9.0 pre-close test-run policy must be 'run ONCE; do NOT iterate' (preserves the run-once invariant)"; exit 1; }
+# Budget table must surface the new run-line
+grep -qiE "phase.test.{0,10}runs|e2e.test runs|phase.test / e2e" "$F" \
+  || { echo "FAIL: v0.9.0 budget table must list the per-phase-test / per-e2e run allowance"; exit 1; }
 
 echo OK
