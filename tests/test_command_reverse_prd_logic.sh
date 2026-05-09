@@ -107,4 +107,10 @@ for input in project_root feature_folder scope target_module module_list infra_d
   grep -qF "$input" "$F" || { echo "FAIL: spawning prompt must include input '$input'"; exit 1; }
 done
 
+# v0.8.1: per-agent model override section.
+grep -qiE "## Per-agent model override|Per-agent model override \(v0\.8" "$F" \
+  || { echo "FAIL: v0.8.1 must declare a Per-agent model override section"; exit 1; }
+grep -qF "sm_agent_model" "$F" \
+  || { echo "FAIL: v0.8.1 must invoke sm_agent_model helper for model resolution"; exit 1; }
+
 echo OK

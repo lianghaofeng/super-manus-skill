@@ -152,4 +152,16 @@ grep -qF "Root cause" "$F" \
 grep -qiE "Zero RETURN|zero reviewer RETURN|skip.*entry|skipped when.*zero" "$F" \
   || { echo "FAIL: v0.7.4 must skip Reflection entry when the phase had zero reviewer RETURN events"; exit 1; }
 
+# v0.8.1: per-agent model override section. Spawning commands must document
+# the sm_agent_model lookup so the orchestrator can pass `model:` to the
+# Agent tool when the user has set an override in .super-manus/agents.yml.
+grep -qiE "## Per-agent model override|Per-agent model override \(v0\.8" "$F" \
+  || { echo "FAIL: v0.8.1 must declare a Per-agent model override section"; exit 1; }
+grep -qF "sm_agent_model" "$F" \
+  || { echo "FAIL: v0.8.1 must invoke sm_agent_model helper for model resolution"; exit 1; }
+grep -qF ".super-manus/agents.yml" "$F" \
+  || { echo "FAIL: v0.8.1 override must reference .super-manus/agents.yml as the config source"; exit 1; }
+grep -qiE "effort.*not.*overridable|not overridable|effort.*pinned|effort.*plugin-author" "$F" \
+  || { echo "FAIL: v0.8.1 must document that effort is NOT overridable (plugin-author-pinned)"; exit 1; }
+
 echo OK

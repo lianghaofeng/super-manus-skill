@@ -149,3 +149,53 @@ if log_ts is None:
 sys.exit(0 if commit_ts > log_ts else 1)
 PY
 }
+
+# v0.8.1: per-project model override for subagent spawns.
+#
+# Looks up `.super-manus/agents.yml` (project-global static user preference,
+# committed to the user's repo) and echoes the override model name for the
+# given agent, or empty string if no override is set. The orchestrator main
+# thread reads this output before spawning a subagent and, if non-empty,
+# passes `model: <value>` to the Agent tool — overriding the agent file's
+# frontmatter default.
+#
+# Schema is intentionally a flat YAML-ish key-value list to dodge external
+# parser deps:
+#
+#   # .super-manus/agents.yml
+#   impl-architect: opus
+#   impl-reviewer: opus
+#   reverse-prd-architect: sonnet     # user wants cheaper PRD synthesis
+#   impl-test-writer: opus
+#   impl-code-writer: sonnet          # user wants cheaper coding
+#   sync-planner: opus
+#
+# Lines starting with `#` are comments; blank lines ignored. Only `model:` is
+# overridable here — `effort:` is plugin-author-pinned in the agent file
+# frontmatter and intentionally not user-tweakable (Claude Code's Agent tool
+# does not expose `effort` at spawn time, so override would be a no-op).
+#
+# `.super-manus/` holds STATIC user preferences only. It must not be used for
+# dynamic runtime state (active update, session caches, etc.) — those still
+# resolve from filesystem mtime via `sm_active_update` and similar helpers.
+#
+# Returns: agent's override model name (opus|sonnet|haiku) on stdout if
+# configured, empty string otherwise. Always exits 0; missing file / missing
+# entry / commented-out entry are all "no override".
+sm_agent_model() {
+  local agent="${1:-}"
+  [ -n "$agent" ] || return 0
+  local cfg=".super-manus/agents.yml"
+  [ -f "$cfg" ] || return 0
+  # Match `<agent>: <model>` ignoring leading/trailing whitespace and trailing
+  # `#` comments. Reject malformed lines and unknown model values silently.
+  local raw
+  raw=$(grep -E "^[[:space:]]*${agent}[[:space:]]*:" "$cfg" 2>/dev/null \
+        | head -1 \
+        | sed -E "s/^[[:space:]]*${agent}[[:space:]]*:[[:space:]]*//; s/[[:space:]]*#.*$//; s/[[:space:]]+\$//" \
+        || true)
+  case "$raw" in
+    opus|sonnet|haiku) printf '%s' "$raw" ;;
+    *) ;;  # empty / unknown / commented-out → no override
+  esac
+}

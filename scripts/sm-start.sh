@@ -70,5 +70,21 @@ if [ ! -f "$base/.gitignore" ]; then
 EOF
 fi
 
+# v0.8.1: seed .super-manus/agents.yml — static user preference for per-agent
+# model override. .super-manus/ is intentionally separate from docs/super-manus/:
+# the latter holds business state (PRD, roadmap, impl history) that's reviewed
+# in PR diffs; the former holds tool config that's set once and rarely touched.
+# .super-manus/ MUST NOT be used for dynamic runtime state — active update
+# resolution still goes through sm_active_update's mtime scan.
+if [ ! -d ".super-manus" ]; then
+  mkdir -p .super-manus
+fi
+if [ ! -f ".super-manus/agents.yml" ]; then
+  src="$ROOT/templates/agents.yml"
+  if [ -f "$src" ]; then
+    cp "$src" ".super-manus/agents.yml"
+  fi
+fi
+
 # Print the resolved folder path for the caller (Claude reads this and confirms to user)
 echo "$(pwd)/$base"

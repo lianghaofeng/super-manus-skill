@@ -63,6 +63,19 @@ Decide: does the phase intent introduce a capability not declared in `## What us
 
 Before spawning any agent, attempt one workspace-symbol call against the module to set `lsp_available=true|false`. Pass the boolean to all three agents so they can apply the protocol's fallback path correctly.
 
+## Per-agent model override (v0.8.1)
+
+For EVERY subagent spawn in this command (impl-architect / impl-reviewer at 3 checkpoints / impl-test-writer / impl-code-writer), before invoking the Agent tool, resolve the override model:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
+override=$(sm_agent_model <agent-name>)
+```
+
+If `$override` is non-empty (one of `opus` / `sonnet` / `haiku`), pass `model: "$override"` as an argument to the Agent tool invocation — this overrides the agent file's frontmatter default. If empty (no entry, commented out, missing `.super-manus/agents.yml`), omit `model` and the agent's pinned `model: opus` applies.
+
+`effort:` is plugin-author-pinned in the agent frontmatter (`max` for thinkers, `high` for writers) and is NOT overridable here — Claude Code's Agent tool does not expose `effort` at spawn time.
+
 ## Step 1 — Spawn impl-architect
 
 If no drift, the orchestrator delegates per-phase impl-plan drafting to the `impl-architect` subagent (Agent tool, `subagent_type="impl-architect"`). The agent owns the persona ("senior implementation planner"), the four-section template population (`## Objective`, `## Approach`, `## Files touched`, `## Verification`), and the source-priority hierarchy. Do NOT inline that persona here — see [agents/impl-architect.md](../agents/impl-architect.md).

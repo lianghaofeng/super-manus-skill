@@ -119,4 +119,10 @@ PY
 sm_update "frontend" "second-update" >/dev/null
 grep -qF "owner: alice" "docs/super-manus/roadmap.md" || { echo "FAIL: user-set Note should be preserved after second sm-update, got:"; cat "docs/super-manus/roadmap.md"; exit 1; }
 
+# v0.8.1: per-agent model override section in sync.md.
+grep -qiE "## Per-agent model override|Per-agent model override \(v0\.8" "$F" \
+  || { echo "FAIL: v0.8.1 must declare a Per-agent model override section in commands/sync.md"; exit 1; }
+grep -qF "sm_agent_model" "$F" \
+  || { echo "FAIL: v0.8.1 must invoke sm_agent_model helper for model resolution"; exit 1; }
+
 echo OK

@@ -62,6 +62,21 @@ grep -qF ".session-" "$BASE/.gitignore" || { echo "FAIL: .gitignore should ignor
 # v0.4: must NOT write .super-manus/active (state file is gone)
 [ ! -f .super-manus/active ] || { echo "FAIL: v0.4 must NOT write .super-manus/active (state file is gone)"; exit 1; }
 
+# v0.8.1: .super-manus/agents.yml is a STATIC user-preference file for
+# per-agent model overrides. sm-start MUST seed it from templates/agents.yml.
+# Note: .super-manus/ DOES exist in v0.8.1 (re-introduced for static prefs only;
+# dynamic state still resolves via mtime scan). This is a deliberate scoping —
+# distinct from the v0.3-era .super-manus/active state file that v0.4 removed.
+[ -d ".super-manus" ] || { echo "FAIL: v0.8.1 sm-start must create .super-manus/ for static user prefs"; exit 1; }
+[ -f ".super-manus/agents.yml" ] || { echo "FAIL: v0.8.1 sm-start must seed .super-manus/agents.yml from templates/agents.yml"; exit 1; }
+# Default template must have ALL 6 agents commented out (no override out-of-the-box)
+grep -qE "^#impl-architect:" .super-manus/agents.yml || { echo "FAIL: default agents.yml must list impl-architect (commented)"; exit 1; }
+grep -qE "^#reverse-prd-architect:" .super-manus/agents.yml || { echo "FAIL: default agents.yml must list reverse-prd-architect (commented)"; exit 1; }
+# Active overrides (uncommented) MUST be zero in the seeded default — out-of-the-box
+# behavior is "use the agent's pinned default", not "override everything to opus".
+active_overrides=$(grep -cE "^[a-z][a-z0-9-]*:" .super-manus/agents.yml || true)
+[ "$active_overrides" = "0" ] || { echo "FAIL: seeded agents.yml must have ZERO active overrides (all commented), found $active_overrides"; exit 1; }
+
 # Echoed path should mention $BASE
 echo "$out" | grep -q "$BASE" || { echo "FAIL: success output should mention $BASE path, got: $out"; exit 1; }
 

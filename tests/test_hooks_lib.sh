@@ -179,4 +179,62 @@ got=$(sm_active_update)
 
 popd >/dev/null
 
+# v0.8.1: sm_agent_model — per-project model override for subagent spawns.
+# Reads .super-manus/agents.yml (static user preference) and echoes the
+# override model name (opus/sonnet/haiku) for the given agent, or empty if
+# no valid override is set.
+if ! declare -f sm_agent_model >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_agent_model in v0.8.1"; exit 1
+fi
+
+CFG_TMP=$(mktemp -d)
+pushd "$CFG_TMP" >/dev/null
+
+# Case 1: no .super-manus/ at all → empty
+got=$(sm_agent_model impl-architect)
+[ -z "$got" ] || { echo "FAIL: missing config dir should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 2: .super-manus/ exists but no agents.yml → empty
+mkdir -p .super-manus
+got=$(sm_agent_model impl-architect)
+[ -z "$got" ] || { echo "FAIL: missing agents.yml should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 3: agents.yml with valid overrides
+cat > .super-manus/agents.yml <<'YML'
+# user prefs
+impl-architect: opus
+impl-reviewer: sonnet
+impl-code-writer: sonnet  # cheaper coding
+#reverse-prd-architect: opus    (commented out, MUST NOT match)
+sync-planner: bogus
+YML
+got=$(sm_agent_model impl-architect)
+[ "$got" = "opus" ] || { echo "FAIL: impl-architect: opus, got: '$got'"; popd >/dev/null; exit 1; }
+got=$(sm_agent_model impl-reviewer)
+[ "$got" = "sonnet" ] || { echo "FAIL: impl-reviewer: sonnet, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 4: trailing comment must be stripped
+got=$(sm_agent_model impl-code-writer)
+[ "$got" = "sonnet" ] || { echo "FAIL: impl-code-writer trailing comment, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 5: commented-out line must NOT match
+got=$(sm_agent_model reverse-prd-architect)
+[ -z "$got" ] || { echo "FAIL: commented-out reverse-prd-architect should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 6: agent not listed → empty
+got=$(sm_agent_model impl-test-writer)
+[ -z "$got" ] || { echo "FAIL: unlisted agent should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 7: invalid model value (not opus|sonnet|haiku) → empty (silent reject —
+# user typo shouldn't propagate as a malformed Agent tool argument)
+got=$(sm_agent_model sync-planner)
+[ -z "$got" ] || { echo "FAIL: invalid model value should give empty (silent reject), got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 8: empty agent name → empty
+got=$(sm_agent_model "")
+[ -z "$got" ] || { echo "FAIL: empty agent name should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+popd >/dev/null
+rm -rf "$CFG_TMP"
+
 echo OK

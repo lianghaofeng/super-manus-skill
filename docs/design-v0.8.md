@@ -178,3 +178,65 @@ Untouched: hooks, all skills, all templates, all other agents, all other command
 None. v0.7-era PRD bundles continue to work — the architect's Cross-validation protocol explicitly handles the "no runtime_facts" case (rule 5: skip the protocol entirely). The new `(audit — <subtype>)` markers are additive on top of bare `(audit)`; existing tooling that grep's `\(audit\)` continues to match.
 
 `.claude-plugin/plugin.json` bumps `0.7.5 → 0.8.0`.
+
+## 8. v0.8.1 — `.super-manus/agents.yml` model override
+
+Pinning model + effort in plugin frontmatter (v0.8.0) is the right default but doesn't let a user say "I want reverse-prd-architect on sonnet for cost reasons on this side project." v0.8.1 adds a thin override layer — only for `model:`, intentionally not for `effort:`.
+
+### Storage
+
+`<project_root>/.super-manus/agents.yml` — committed, intended for static user preferences. The `.super-manus/` directory was last used in v0.3 as the home of the `.super-manus/active` dynamic-state file; v0.4 removed that file and proved that active-update resolution belongs to mtime scans of `docs/super-manus/impl/<module>/*/`. v0.8.1 reinstates `.super-manus/` for STATIC config only, with a hard invariant: no dynamic state may live there. The two directories carry intentionally different roles:
+
+| Path | Role | Reviewed in PR? | Mutated by hooks? |
+|---|---|---|---|
+| `docs/super-manus/` | Business state (PRD, roadmap, impl history) | Yes, every diff | Yes (Stop hook appends to progress.md, etc.) |
+| `.super-manus/` | Tool config (agents.yml, future statics) | Rarely | Never |
+
+Putting `agents.yml` under `docs/super-manus/` would clutter every PRD-review diff; `.super-manus/` stays out of the way.
+
+### Schema
+
+```yaml
+# .super-manus/agents.yml — static user preference, edit by hand
+impl-architect: opus
+impl-reviewer: opus
+reverse-prd-architect: sonnet     # cost-saving on PRD synthesis
+impl-test-writer: opus
+impl-code-writer: sonnet          # cost-saving on coding
+sync-planner: opus
+```
+
+Lines are flat `<agent>: <model>` pairs. Lines starting with `#` are comments. Trailing `# comment` is stripped. Valid model values are `opus | sonnet | haiku`; anything else is silently rejected (treated as no override) so a typo doesn't propagate to the Agent tool as a malformed argument.
+
+The seeded default has every line commented out — out-of-the-box, `/super-manus:start` doesn't change behavior, and users opt in by uncommenting.
+
+### Resolution flow
+
+```
+                          .super-manus/agents.yml
+                                  │
+                                  ▼
+  orchestrator command         sm_agent_model <agent>            agent file
+   (impl / impl-all      ──→  (hooks/lib.sh helper, ──→  (frontmatter:
+    reverse-prd / sync)        echoes model name or          model: opus,
+                               empty string)                  effort: max)
+                                  │
+                                  ▼
+                          if non-empty: pass model: <X> to Agent tool
+                          if empty:     omit, agent's frontmatter applies
+```
+
+Each spawning command (`commands/{impl,impl-all,reverse-prd,sync}.md`) gains a "Per-agent model override (v0.8.1)" section instructing the orchestrator to source `hooks/lib.sh`, call `sm_agent_model <agent>`, and pass the result (if non-empty) as the Agent tool's `model:` parameter.
+
+### What v0.8.1 does NOT add
+
+- **`effort:` override**: Claude Code's Agent tool exposes only `model` at spawn time. The plugin author's `effort:` choice in agent frontmatter is the floor; users who genuinely need a different effort drop a copy of `agents/<name>.md` at project-level `.claude/agents/<name>.md` (Claude Code prefers project scope over plugin scope).
+- **Per-update / per-phase override**: a single `.super-manus/agents.yml` applies project-wide; we don't differentiate "use sonnet for module X but opus for module Y." Splitting that finer-grained is a v0.9 question if the demand shows up.
+- **Auto-detection of best model per task**: human-curated only.
+
+### Tests
+
+- `tests/test_hooks_lib.sh` — 8 cases covering missing config, missing file, valid override, trailing comment, commented-out line, unlisted agent, invalid value (silent reject), empty agent name.
+- `tests/test_command_start_logic.sh` — `sm-start.sh` seeds `.super-manus/agents.yml` from the template; seeded file has zero active overrides.
+- `tests/test_template_agents_yml.sh` — template lists all 6 agents (commented), explains effort: limitation, lists valid model values.
+- `tests/test_command_{impl,impl_all,reverse_prd,sync}_logic.sh` — each command markdown declares the override section + references `sm_agent_model` + `.super-manus/agents.yml`.

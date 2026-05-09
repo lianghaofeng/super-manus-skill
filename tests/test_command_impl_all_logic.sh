@@ -94,4 +94,13 @@ grep -qF "## Reflections" "$F" \
 grep -qF "Heuristic" "$F" \
   || { echo "FAIL: v0.7.4 loop must mention the Heuristic line (load-bearing)"; exit 1; }
 
+# v0.8.1: per-agent model override section. impl-all spawns the same 4 agents
+# repeatedly across phases — override resolution must be documented per spawn.
+grep -qiE "## Per-agent model override|Per-agent model override \(v0\.8" "$F" \
+  || { echo "FAIL: v0.8.1 must declare a Per-agent model override section"; exit 1; }
+grep -qF "sm_agent_model" "$F" \
+  || { echo "FAIL: v0.8.1 must invoke sm_agent_model helper for model resolution"; exit 1; }
+grep -qF ".super-manus/agents.yml" "$F" \
+  || { echo "FAIL: v0.8.1 must reference .super-manus/agents.yml as the config source (or link to /super-manus:impl which documents it)"; exit 1; }
+
 echo OK

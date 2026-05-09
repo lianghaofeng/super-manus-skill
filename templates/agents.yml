@@ -1,0 +1,34 @@
+# super-manus per-agent model overrides
+#
+# Maps agent name → model to use when /super-manus:* commands spawn it.
+# Valid values: opus | sonnet | haiku
+#
+# Lines starting with `#` are ignored. Empty / commented entries fall back to
+# the model declared in the agent's frontmatter (currently `model: opus` for
+# all six agents — see plugin's agents/<name>.md).
+#
+# WHAT THIS FILE IS:    static user preference, committed to your repo.
+# WHAT THIS FILE ISN'T: dynamic runtime state. .super-manus/ never holds
+#                       active-update pointers, session caches, or anything
+#                       that would drift out of sync with the filesystem.
+#
+# `effort:` is NOT overridable here — Claude Code's Agent tool does not expose
+# `effort` at spawn time, so override would be a no-op. The plugin-author-pinned
+# values (`max` for thinkers / `high` for writers) live in agents/<name>.md.
+# To change effort for one project, drop a copy of agents/<name>.md at
+# .claude/agents/<name>.md in the project root — Claude Code prefers
+# project-scope agent files over plugin-scope.
+#
+# Uncomment + edit a line to override that agent. Default (everything commented)
+# means "use the plugin's pinned model: opus for every agent".
+
+# Thinkers — these benefit most from opus + max effort, downgrade with care
+#impl-architect: opus
+#impl-reviewer: opus
+#reverse-prd-architect: opus
+
+# Writers — opus + high by default; sonnet is a reasonable cost-saving trade
+# if you accept slightly higher reviewer-retry rate
+#impl-test-writer: opus
+#impl-code-writer: opus
+#sync-planner: opus

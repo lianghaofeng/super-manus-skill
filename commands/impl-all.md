@@ -49,6 +49,17 @@ Set `UPDATE_DIR=docs/super-manus/impl/<module>/<update-name>` and `MODULE=<modul
 
 One workspace-symbol call against the module to set `lsp_available=true|false`. Pass the boolean to all three agents on every phase.
 
+## Per-agent model override (v0.8.1)
+
+For EVERY subagent spawn inside the loop below (impl-architect / impl-reviewer × 3 checkpoints / impl-test-writer / impl-code-writer per phase), before invoking the Agent tool, resolve the override model:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
+override=$(sm_agent_model <agent-name>)
+```
+
+If `$override` is non-empty (`opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool. If empty, omit and the agent's pinned default applies. `effort:` is not overridable. Override config lives at `.super-manus/agents.yml` (created by `/super-manus:start`). Same rules as `/super-manus:impl` — see that command for full details.
+
 ## The loop
 
 ```
