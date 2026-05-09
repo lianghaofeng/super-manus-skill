@@ -155,7 +155,7 @@ The frontmatter `effort:` values are **defaults**, not floors. A user who export
 
 **Model priority** (high → low):
 
-1. Per-spawn `model:` parameter to Agent tool — super-manus uses this when `.super-manus/agents.yml` declares an override (v0.8.1+)
+1. Per-spawn `model:` parameter to Agent tool — super-manus uses this when `.super-manus/agents.yml` declares an override (v0.8.2)
 2. CLI `--agents '<json>'` inline definitions — orthogonal to plugin config
 3. Frontmatter `model:` field
 4. `CLAUDE_CODE_SUBAGENT_MODEL` env var — applies ONLY to subagents whose frontmatter says `model: inherit` (v0.8.2 makes 3 writers eligible for this)

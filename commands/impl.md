@@ -63,7 +63,7 @@ Decide: does the phase intent introduce a capability not declared in `## What us
 
 Before spawning any agent, attempt one workspace-symbol call against the module to set `lsp_available=true|false`. Pass the boolean to all three agents so they can apply the protocol's fallback path correctly.
 
-## Per-agent model override (v0.8.1+)
+## Per-agent model override (v0.8.2)
 
 For EVERY subagent spawn in this command (impl-architect / impl-reviewer at 3 checkpoints / impl-test-writer / impl-code-writer), before invoking the Agent tool, resolve the override model:
 

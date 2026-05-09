@@ -49,7 +49,7 @@ Set `UPDATE_DIR=docs/super-manus/impl/<module>/<update-name>` and `MODULE=<modul
 
 One workspace-symbol call against the module to set `lsp_available=true|false`. Pass the boolean to all three agents on every phase.
 
-## Per-agent model override (v0.8.1+)
+## Per-agent model override (v0.8.2)
 
 For EVERY subagent spawn inside the loop below (impl-architect / impl-reviewer × 3 checkpoints / impl-test-writer / impl-code-writer per phase), before invoking the Agent tool, resolve the override model:
 

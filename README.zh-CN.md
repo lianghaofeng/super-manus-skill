@@ -136,12 +136,19 @@ git revert <commit>
 # 项目有代码，但还没 PRD。
 /super-manus:start
 /super-manus:reverse-prd
-# orchestrator 跑 runtime-first 模块发现（compose / Makefile /
-# apps / scripts），然后 spawn reverse-prd-architect（首席架构师 +
-# 资深 PM 双 persona），它写 prd/_index.md（含必需的 ASCII 架构图）+
-# 各模块 stub。
+# Stage 1 —— runtime-first 模块发现（compose / Makefile / apps / scripts）。
+# Stage 2 —— 被动 runtime 探针（v0.8.0）—— ps、监听端口、docker ps、
+# curl /openapi.json、git 活跃度。如果 compose 服务停着，会通过
+# AskUserQuestion 问要不要启动。
+# Stage 3 —— spawn reverse-prd-architect（首席架构师 + 资深 PM 双
+# persona）；架构师把静态阅读跟 runtime_facts 交叉校验后，写
+# prd/_index.md（含必需的 ASCII 架构图）+ 各模块 stub。
 
-# 2. 审 (audit) 标记 —— 架构师拿不准的地方，你补全或纠正。
+# 2. 审 (audit) 标记 —— 架构师拿不准的地方。v0.8.0 三类新子标记标
+# 出具体的分歧类型：
+#   - (audit — runtime-unverified)        静态有，运行时没确认
+#   - (audit — runtime-only)              OpenAPI 列了路由但静态找不到源
+#   - (audit — source-runtime-conflict)   静态和运行时直接矛盾
 # 然后按模块：
 /super-manus:sync <module>
 /super-manus:impl-all
@@ -342,7 +349,33 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.7.5 —— 当前
+### v0.8.2 —— 当前
+
+两层修正一起发。**Layer B**：3 个 writer agent（`impl-test-writer` / `impl-code-writer` / `sync-planner`）的 frontmatter 从 `model: opus` 改成 `model: inherit`。v0.8.0 把所有 6 个 agent 都钉死成 `opus`，副作用是悄无声息地堵了 Claude Code 原生的 `CLAUDE_CODE_SUBAGENT_MODEL` 环境变量通道（这个 env var **只对 frontmatter 是 `inherit` 的 subagent 生效**，显式 `model: opus` 完全无视它），同时让 Sonnet 4.6 主线程的用户被默默全程跑 opus、白多花钱。改成 `inherit` 之后，writer 跟随主会话模型——Opus 主线程 → opus writer（Opus 用户体感无变化），Sonnet 主线程 → sonnet writer（自动省钱）。3 个 thinker agent（`impl-architect` / `impl-reviewer` / `reverse-prd-architect`）保持 `model: opus` 作为质量底线——这三个一旦悄悄降级到 sonnet，v0.7 review pipeline 的价值就被抹平了。
+
+**Layer A**：文档纠错。v0.8.0 的文档说 `effort:` 不可 override，**那是错的**。`CLAUDE_CODE_EFFORT_LEVEL` 环境变量是优先级最高的 effort 来源（盖过 frontmatter，盖过其他配置），这是 Claude Code 官方文档的解析顺序。v0.8.2 把 `docs/design-v0.8.md §4 / §8 / §9`、`templates/agents.yml`、4 个 spawning command markdown 里关于 model / effort 优先级的描述全部改对了，附完整优先级表。详见 [docs/design-v0.8.md](docs/design-v0.8.md) §9。相对 v0.8.1 纯加性——零 API 变化、零迁移；唯一测试契约变更是 writer 测试断言从 `^model: opus$` 翻成 `^model: inherit$`。
+
+### v0.8.1
+
+通过 `.super-manus/agents.yml` 实现项目级 model override。`hooks/lib.sh` 新增 `sm_agent_model <agent>` helper，读一个扁平的 `<agent>: <model>` 配置文件（值 `opus | sonnet | haiku`）；4 个会 spawn agent 的命令（`/super-manus:impl`、`/super-manus:impl-all`、`/super-manus:reverse-prd`、`/super-manus:sync`）在调用 Agent 工具之前先查这个文件，非空就把 `model:` 传进去。`/super-manus:start` 从 `templates/agents.yml` 拷一份默认空配置（所有 agent 都注释掉），用户按需开启。
+
+`.super-manus/` 目录被**重新启用**，但**只放静态用户偏好**——v0.4 拆掉的是 `.super-manus/active`（动态状态）那条不变量，今天依然成立：active update resolution 仍然走 `sm_active_update` 的 mtime 扫描。这个拆分是有意为之——`docs/super-manus/` 是业务状态（PRD / roadmap / impl 历史），review PR diff 时会过；`.super-manus/` 是工具配置，配一次几乎不动。两个都 commit。
+
+`effort:` 故意不通过 `agents.yml` 路由——Claude Code 原生的 `CLAUDE_CODE_EFFORT_LEVEL` 环境变量已经覆盖了这条 override，且优先级更高。详见 [docs/design-v0.8.md](docs/design-v0.8.md) §8。相对 v0.8.0 纯加性。
+
+### v0.8.0
+
+`/super-manus:reverse-prd` 加了被动 runtime 探针 + Cross-validation 协议，专治长寿项目的"死代码扰乱 PRD"问题。纯静态阅读会把废弃的 `apps/` 目录当成活模块、把没人监听的端口连成边、漏掉运行时动态注册的路由——v0.8.0 把这些短板补上。
+
+新增 `scripts/probe-runtime.sh`——只读探针，捕获正在跑的进程（`ps`）、监听端口（`lsof` / `ss`）、docker 容器 + compose 服务、OpenAPI 契约（只对 compose 声明的端口 `curl /openapi.json`）、git 活跃度（最近 6 个月的删除 / 冷文件 / 热文件）。永远 exit 0；从不调用任何 mutating 命令；总耗时 ≤30s，每个外部调用都有超时（macOS 缺 GNU `timeout` 时回退 `perl alarm`）。
+
+orchestrator 在 Stage 1（模块发现）之后、agent spawn 之前跑探针，把报告作为第 9 个 input `runtime_facts` 传给架构师。如果 compose 文件存在但服务没起来，orchestrator 通过 `AskUserQuestion` 询问是否 `docker compose up -d`（60s 超时）；探针脚本本身始终只读——只有 orchestrator 在用户明确同意的情况下才能发起 mutating 命令。
+
+`reverse-prd-architect` 新增 `## Cross-validation with runtime_facts` 协议，5 条规则（模块活性 / 死代码嫌疑 / OpenAPI capability 三向比对 / 边的可信度 / 探针未跑兜底），3 个新 `(audit)` 子标记（`runtime-unverified` / `runtime-only` / `source-runtime-conflict`），加上更聪明的工具预算公式 `10 + 5×N + 10`（上限 60）替换 v0.7 的扁平 ≤10/≤30。同时 6 个 agent 的 frontmatter 加上**显式的 model + effort 路由**——全部 `model: opus`，thinker `effort: max`、writer `effort: high`（v0.8.2 把 writer 改成 `model: inherit`）。
+
+详见 [docs/design-v0.8.md](docs/design-v0.8.md) §1–§4。v0.7 时代的 PRD bundle 继续工作——Cross-validation 第 5 条规则（探针未跑兜底）显式处理"没有 runtime_facts"的情况；新加的 `(audit — <subtype>)` 标记是裸 `(audit)` 之上的加性扩展，旧工具 grep `\(audit\)` 仍然命中。
+
+### v0.7.5
 
 `ESCALATE_TO_USER` 的 verdict 改成**双层语态**。2026-05 的真实 dogfood escalation（P4 picker 延迟）暴露了 v0.7.0 ESCALATE 输出是 engineer-to-engineer 风格——堆术语（"real-link bench RED"、commit hash 内联、plan/PRD 段号顶在前面）——用户读完得**自己再翻译一遍**才看得懂哪里卡住、能选什么。修法不是"把事实丢掉"（精确数字是 load-bearing 的——没有"比预期慢 27 倍"这条，用户没法分辨是软件配错还是硬件极限），而是**双层语态共存**。
 

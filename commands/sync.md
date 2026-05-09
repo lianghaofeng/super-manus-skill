@@ -68,7 +68,7 @@ Make one workspace-symbols call (or any cheap LSP probe). Capture the result as 
 
 Spawn the **`sync-planner`** agent (Agent tool, `subagent_type="sync-planner"`). The persona ("senior tech lead"), source-priority hierarchy, and phase-decomposition rules live in [agents/sync-planner.md](../agents/sync-planner.md) — do NOT duplicate them here. The orchestrator only owns the inputs.
 
-### Per-agent model override (v0.8.1+)
+### Per-agent model override (v0.8.2)
 
 Before the spawn, resolve the override model:
 

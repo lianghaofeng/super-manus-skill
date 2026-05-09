@@ -136,14 +136,22 @@ git revert <commit>
 # Project has code but no PRD.
 /super-manus:start
 /super-manus:reverse-prd
-# orchestrator does runtime-first module discovery (compose /
-# Makefile / apps / scripts), then spawns reverse-prd-architect
-# (chief architect + senior PM persona) which writes
-# prd/_index.md (with mandatory ASCII architecture diagram)
-# + per-module stubs.
+# Stage 1 — runtime-first module discovery (compose / Makefile /
+# apps / scripts).
+# Stage 2 — passive runtime probe (v0.8.0) — ps, listening ports,
+# docker ps, curl /openapi.json, git activity. If compose services
+# are stopped, asks via AskUserQuestion whether to start them.
+# Stage 3 — spawns reverse-prd-architect (chief architect + senior
+# PM persona); architect cross-validates static reading against
+# runtime_facts and writes prd/_index.md (with mandatory ASCII
+# architecture diagram) + per-module stubs.
 
-# 2. Audit (audit) markers — wherever the architect hedged, you
-# fill in or correct. Then per module:
+# 2. Audit (audit) markers — wherever the architect hedged. Three
+# new v0.8.0 subtypes flag specific kinds of disagreement:
+#   - (audit — runtime-unverified)        static says yes, no process running
+#   - (audit — runtime-only)              OpenAPI route with no static source
+#   - (audit — source-runtime-conflict)   static and runtime disagree
+# Then per module:
 /super-manus:sync <module>
 /super-manus:impl-all
 ```
@@ -343,7 +351,33 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.7.5 — current
+### v0.8.2 — current
+
+Two corrections layered together. **Layer B**: writer agents (`impl-test-writer` / `impl-code-writer` / `sync-planner`) switch frontmatter `model: opus` → `model: inherit`. v0.8.0 had pinned everything to `opus`, which silently disabled Claude Code's `CLAUDE_CODE_SUBAGENT_MODEL` env var (it only routes subagents whose frontmatter is `inherit`) and silently overcharged users on Sonnet 4.6 main threads. With `inherit`, writers follow the main session's model — Opus main thread → opus writers (unchanged for current Opus users), Sonnet main thread → sonnet writers (auto cost saving). Thinker agents (`impl-architect` / `impl-reviewer` / `reverse-prd-architect`) stay pinned to `model: opus` as the quality floor — silent downgrade on a Sonnet main thread would erase the value of v0.7's review pipeline.
+
+**Layer A**: doc correction. v0.8.0's docs claimed `effort:` was unoverridable; that was wrong. `CLAUDE_CODE_EFFORT_LEVEL` env var is the highest-priority effort source per Claude Code's resolution order, overriding frontmatter. v0.8.2 rewrites the override-path docs across `docs/design-v0.8.md` §4 / §8 / §9, `templates/agents.yml`, and the four spawning command markdowns, with full priority tables for both `model:` and `effort:`. See [docs/design-v0.8.md](docs/design-v0.8.md) §9. Pure additive vs v0.8.1 — no API changes, no migration; only test contract change is the writer-tier model assertion flipping from `opus` to `inherit`.
+
+### v0.8.1
+
+Per-project model override via `.super-manus/agents.yml`. Adds an `sm_agent_model <agent>` helper to `hooks/lib.sh` that reads a flat `<agent>: <model>` config (values `opus | sonnet | haiku`); each spawning command (`/super-manus:impl`, `/super-manus:impl-all`, `/super-manus:reverse-prd`, `/super-manus:sync`) reads it before invoking the Agent tool and passes `model:` if non-empty. `/super-manus:start` seeds an empty (all-commented) `agents.yml` from `templates/agents.yml`.
+
+The `.super-manus/` directory is **reinstated** for STATIC user preferences only; the v0.4-era invariant against `.super-manus/active` (dynamic state) still holds — active update resolution still goes through `sm_active_update`'s mtime scan. The split is deliberate: `docs/super-manus/` is business state (PRD, roadmap, impl history) reviewed in PR diffs; `.super-manus/` is tool config set once and rarely touched. Both committed.
+
+`effort:` is intentionally NOT routed through `agents.yml` — Claude Code's native `CLAUDE_CODE_EFFORT_LEVEL` env var already covers that override path with higher priority. See [docs/design-v0.8.md](docs/design-v0.8.md) §8. Pure additive vs v0.8.0.
+
+### v0.8.0
+
+`/super-manus:reverse-prd` adds a passive runtime probe stage and Cross-validation protocol that closes the dead-code accuracy gap on long-lived projects. Pure-static reading treats defunct `apps/` dirs as live modules, draws edges nothing listens on, and misses dynamically-registered routes — v0.8.0 closes the gap.
+
+New `scripts/probe-runtime.sh` — read-only probe that captures running processes (`ps`), listening ports (`lsof` / `ss`), docker containers + compose services, OpenAPI contracts (`curl /openapi.json` against compose-declared ports only), and git activity (deleted / cold / hot files in last 6 months). Always exits 0; never invokes mutating commands; total wall-clock budget ≤30s with per-call timeouts via `perl alarm` fallback for macOS.
+
+The orchestrator runs the probe between Stage 1 (module discovery) and the architect spawn, passing the report as `runtime_facts` (9th input). If compose services are stopped, the orchestrator asks via `AskUserQuestion` whether to start them with `docker compose up -d` (60s timeout); the probe script itself stays read-only — only the orchestrator can issue the mutating command, only with explicit user consent.
+
+`reverse-prd-architect` gains a `## Cross-validation with runtime_facts` protocol with 5 rules (module liveness / dead-code suspicion / OpenAPI 3-way capability cross-check / edge confidence / probe-skipped guard), three new `(audit)` subtypes (`runtime-unverified` / `runtime-only` / `source-runtime-conflict`), and a smarter tool-budget formula `10 + 5×N + 10` (cap 60) replacing the v0.7 flat ≤10/≤30 cap. Plus per-agent **model + effort routing** in frontmatter — all 6 agents pinned to `model: opus`, thinkers `effort: max`, writers `effort: high` (writers later switch to `model: inherit` in v0.8.2).
+
+See [docs/design-v0.8.md](docs/design-v0.8.md) §1–§4. v0.7-era PRD bundles continue to work — Cross-validation rule 5 (probe-skipped guard) explicitly handles the "no runtime_facts" case. The new `(audit — <subtype>)` markers are additive on top of bare `(audit)`; existing tooling that greps `\(audit\)` continues to match.
+
+### v0.7.5
 
 Dual-layer voice for `ESCALATE_TO_USER` verdicts. A May 2026 dogfood escalation (P4 picker latency) showed the v0.7.0 ESCALATE block was structured for engineer-to-engineer consumption — heavy on jargon ("real-link bench RED", inline commit hashes, plan/PRD section refs front-and-center) — and the user reading it had to re-derive what was actually stuck before they could pick an option. The fix is not "drop the facts" (those are load-bearing — without "27x slower than expected" the user cannot tell software-config from hardware-fundamental) but **layer two voices**.
 
