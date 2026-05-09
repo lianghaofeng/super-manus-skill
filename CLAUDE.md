@@ -50,7 +50,7 @@ Invariants:
 - Project-global state lives at `docs/super-manus/prd/`, `docs/super-manus/roadmap.md`, `docs/super-manus/prd_drift.md`, and `docs/super-manus/e2e/`. Per-update state lives at `docs/super-manus/impl/<module>/<YYYY-MM-DD>-<update>/`; phase tests live at `docs/super-manus/impl/<module>/<update>/tests/phase_p<n>_*.<ext>`.
 - PRD files are **target state** (current snapshot, no changelog markers). `git log -p prd/<module>.md` is the audit trail.
 - `impl/<module>/<update>/` is the **time series**; old updates are immutable historical record.
-- One project = one PRD. **`.super-manus/` (project-root, hidden) holds STATIC user preferences only**, currently just `agents.yml`. It MUST NOT hold dynamic runtime state: the v0.3-era `.super-manus/active` pointer file is gone and must not be revived; no session cache, no resolved-paths file either. Hooks resolve the active update via `sm_active_update` (mtime scan of `docs/super-manus/impl/<module>/*/`); never invent a second active-state file. The split between `.super-manus/` and `docs/super-manus/` is deliberate: the former is tool config set once; the latter is business state reviewed in PR diffs. Both are committed.
+- One project = one PRD. **`.super-manus/` (project-root, hidden) holds STATIC user preferences only**, currently just `agents.yml`. It MUST NOT hold dynamic runtime state — `.super-manus/active` is gone, no session cache, no resolved-paths file. Hooks resolve the active update via `sm_active_update` (mtime scan of `docs/super-manus/impl/<module>/*/`); never invent a second active-state file. The split between `.super-manus/` and `docs/super-manus/` is deliberate: the former is tool config set once; the latter is business state reviewed in PR diffs. Both are committed.
 - Drift between PRD and implementation is **always** logged to `prd_drift.md`; the agent must not silently update PRD.
 - **Phase tests** (`tests/phase_p<n>_*.<ext>` or `*.phase.ts`) are NOT auto-discovered by default test runners — `/super-manus:impl` runs them via explicit path. Naming chosen specifically to dodge `pytest test_*.py` / `jest *.test.ts` globs.
 - **e2e tests** (`e2e/<module>/test_<capability>.<ext>`, `e2e/_system/test_<scenario>.<ext>`) ARE auto-discovered. They are the permanent regression suite; CI runs them on every commit.
@@ -76,7 +76,6 @@ Invariants:
 
 ## Where to look
 
-- **Current design**: `docs/design-v0.8.md` — full spec for the runtime probe, Cross-validation protocol, model/effort routing, and `.super-manus/agents.yml` override mechanism. Read before changing any of those.
-- **Prior design**: `docs/design-v0.7.md` — origin story for the 4-agent reviewer pipeline + Reflexion memory. The behavior is current; this doc explains why it exists.
-- Older designs at `docs/design-v0.{1,2,4,5,6}.md` — superseded. Don't read unless you need to understand the historical reason for a current invariant.
-- Per-task implementation plans live at `docs/plans/`.
+- `docs/design-v0.8.md` — current design. Read before changing the runtime probe, Cross-validation protocol, model/effort routing, or `agents.yml` override mechanism.
+- `docs/design-v0.*.md` (other) — earlier design rationale. Consult when you need to understand *why* a current invariant exists; not required reading for normal contributions.
+- `docs/plans/` — per-task implementation plans.
