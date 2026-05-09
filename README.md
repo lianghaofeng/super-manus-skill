@@ -2,7 +2,19 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
-A Claude Code plugin for **PRD-led, drift-aware development**. State lives on disk and survives `/clear` and `/compact`. Each milestone runs through a 4-agent TDD pipeline (architect → test-writer → code-writer, with a read-only reviewer at three checkpoints); the implementing agent has no permission to edit its own tests, and reviewer verdicts drive a re-spawn loop until the phase converges. A blocking drift gate refuses to mark work "done" while the per-module PRD and the actual code disagree.
+**PRD-driven feature development for Claude Code — engineered so the AI can't fake its way to "done."**
+
+The discipline a senior engineering team builds into its own workflow — automated for Claude Code:
+
+1. **Write a PRD once, then iterate by editing PRD bullets and shipping milestones — every step persisted on disk.** Plans, decisions, findings, and drift entries survive `/clear`, `/compact`, and session restarts. One project = one PRD as target state; per-module milestone folders are the time series. The orchestrator does not depend on chat history to recover where you left off.
+
+2. **Static + dynamic analysis reconstructs the PRD from an existing codebase.** `/super-manus:reverse-prd` runs runtime-first module discovery (compose / Makefile / source structure) plus a passive runtime probe (live processes, listening ports, OpenAPI contracts, git deletion + coldness signals). Long-dormant code is flagged `(audit — runtime-unverified)` rather than carried forward as a live module; runtime-only routes that pure static reading cannot see are recovered through `curl /openapi.json` cross-check.
+
+3. **Drift between PRD and code is logged on every iteration — never silently resolved.** Any capability code adds beyond PRD, or any PRD claim code does not deliver, becomes an append-only entry in `prd_drift.md`. The "done" gate refuses to flip until each pending row is resolved by your decision: code retreats, or PRD advances. The agent does not move PRD on its own.
+
+4. **Architect, test-writer, and code-writer are context-isolated agents, audited by a separate read-only reviewer.** The code-writer cannot modify its own tests — enforced by tool permissions, by persona, and by an orchestrator-side hash baseline. The reviewer audits plan → tests → code at three checkpoints (`pre-test`, `pre-code`, `pre-close`); verdicts are `APPROVE`, `RETURN_TO_<writer>`, or `ESCALATE_TO_USER`, with a per-checkpoint retry budget. Phase tests are committed in red before the code-writer is spawned.
+
+**v0.8 (current)** — the passive runtime probe in `/super-manus:reverse-prd` (highlight #2 above). Per-agent model + effort routing: opus pinned for the three thinker agents (planner / reviewer / PRD architect), `inherit` for the three writers so users on Sonnet main threads do not pay opus rates for test and code generation.
 
 Self-sufficient — ships with TDD / verification / debugging skills. No other workflow plugin required.
 
