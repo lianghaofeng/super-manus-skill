@@ -2,9 +2,24 @@
 
 > 🌐 **语言**: [English](README.md) · **简体中文**
 
-**Claude Code 的 PRD 驱动开发流水线 —— 让它没法把活蒙混到 "done"。**
+**LLM Wiki + PRD 驱动开发的工程化闭环。**
 
-资深工程团队给自己工作流建的那套纪律 —— 自动化到 Claude Code 上：
+super-manus 把两个模式合起来：[LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 负责知识积累，PRD 驱动开发负责执行纪律。Agent 把代码编译成意图的知识库（PRD），知识库驱动下一阶段，phase close 把决策归档回知识库。一个闭环，两半都在，不依赖聊天上下文。
+
+```mermaid
+flowchart TD
+    src["源码 (raw source)"]
+    kb["可执行的知识<br/>prd/ (spec)<br/>findings.md · 设计决策 · append-only · 跨 update 不丢"]
+    act["sync · 拆 phases<br/>impl · 架构 → 测试 → 代码 → 审计"]
+    close["phase close"]
+
+    src -->|"reverse-prd · ingest：代码 → 结构化 PRD"| kb
+    kb --> act
+    act --> close
+    close -.->|"写回 findings.md · 下轮循环知识更厚"| kb
+```
+
+这个闭环不是理念，是 4 根工程支柱钉死的：
 
 1. **写一次 PRD，靠改 PRD bullet 持续迭代发版 —— 每一步都落盘。** 计划、决定、finding、drift 记录跨 `/clear`、`/compact`、重开会话存活。一个项目一个 PRD（target state），每个模块的里程碑文件夹是时间序列。orchestrator 不依赖聊天上下文判断当前进度。
 
@@ -13,10 +28,6 @@
 3. **每次迭代都把 PRD 和代码的漂移记下来 —— 不会悄悄抹平。** 代码有而 PRD 没承诺的 capability、PRD 承诺而代码没做的承诺，都会作为追加行写入 `prd_drift.md`。"done" gate 在每条 pending 行被你决议（代码退回 / PRD 前进）之前不会翻牌。Agent 不会自行修改 PRD。
 
 4. **架构师、测试 writer、代码 writer 是上下文隔离的独立 agent，由一个只读 reviewer 审上面三个。** 代码 writer 不能修改自己的测试 —— 工具权限、persona、orchestrator 侧 hash 校验三层各自独立。reviewer 在 3 个 checkpoint（`pre-test`、`pre-code`、`pre-close`）审 plan → tests → code，verdict 是 `APPROVE`、`RETURN_TO_<writer>` 或 `ESCALATE_TO_USER`，每个 checkpoint 有重试预算。phase 测试在 red 状态先 commit，代码 writer 之后才被 spawn。
-
-**v0.8（当前版本）** —— `/super-manus:reverse-prd` 的被动 runtime 探针对应上面亮点 #2。每个 agent 的 model + effort 路由：thinker 三人组（planner / reviewer / PRD architect）锁 opus，writer 三人用 `inherit`，主会话跑 Sonnet 的用户不再为 opus 级别的测试 / 代码生成付费。
-
-自给自足 —— 自带 TDD / verification / debugging 纪律 skill，不需要别的 workflow 插件。
 
 ## 安装
 
@@ -361,7 +372,15 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 `.claude-plugin/plugin.json` 是版本号的唯一真相源。每个版本下面链了对应的 design 文档。
 
-### v0.8.3 —— 当前
+### v0.8.4 —— 当前
+
+README 围绕 **LLM Wiki + PRD 驱动开发** 框架重新定位。结构映射（代码 → `reverse-prd` → `prd/` + `findings.md` → `sync`/`impl` → close → 归档）在 v0.8.3 就已经完整——v0.8.4 把这个闭环显式化，加了 `## 它是什么` 一节配 Mermaid 循环图，hero 改成两个模式的融合定位。
+
+**评估并放弃**：单独加一个 `docs/super-manus/wiki/` 目录。LLM Wiki 的所有原语——pages（`prd/<module>.md`）、index（`roadmap.md`）、log（`progress.md ## Session log`）、append-only 知识（每个 update 的 `findings.md` 保留在 `impl/` 时间序列里）——已经被现有文件覆盖。新加目录会让同一份状态有两个真相，多源问题。详见 [docs/design-v0.8.4.md](docs/design-v0.8.4.md)。
+
+零代码 / schema / agent / hook / 模板 / 测试改动。纯文档 + 定位。
+
+### v0.8.3
 
 `prd/_index.md ## Data flow overview` 和 `prd/<module>.md ## How it connects` 的子图从 ASCII box-drawing 字符切到 **Mermaid** `flowchart` 块。ASCII 是 v0.7 时代的选择，在 2026 年的 GitHub / GitLab / VS Code / Obsidian 里 Mermaid 都能 inline 渲染——架构图在 PR review 时直接以图的形式可视，而不再是定宽文本。三种 node 形状区分角色：`<id>[<name>]` 模块（矩形）、`<id>[(<image>)]` 存储/队列类 infra（圆柱）、`<id>([<actor>])` 外部 actor（体育场形）；边的 label 携带协议（`parent_api -->|HTTP /api/orders| order_api`）。MODULE-DIAGRAM 1:1 不变量没变——所有 module 类型节点的 label 仍必须跟 `## Modules` 表的行一一对应。
 

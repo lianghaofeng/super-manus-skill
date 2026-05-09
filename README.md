@@ -2,9 +2,24 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
-**PRD-driven feature development for Claude Code — engineered so the AI can't fake its way to "done."**
+**LLM Wiki + PRD-driven development, in one loop.**
 
-The discipline a senior engineering team builds into its own workflow — automated for Claude Code:
+super-manus fuses two patterns: [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) for knowledge accumulation, and PRD-driven development for execution discipline. The agent compiles your code into a wiki of intent (PRD); the wiki drives the next phase; phase close archives the decisions back. One loop, no chat-history dependency.
+
+```mermaid
+flowchart TD
+    src["Source code (raw)"]
+    kb["Executable knowledge<br/>prd/ (spec)<br/>findings.md · decisions · append-only · persisted across updates"]
+    act["sync · plan phases<br/>impl · architect → tests → code → review"]
+    close["phase close"]
+
+    src -->|"reverse-prd · ingest: code → structured PRD"| kb
+    kb --> act
+    act --> close
+    close -.->|"writes back to findings.md · next loop, thicker knowledge"| kb
+```
+
+This loop isn't a philosophy — it's pinned down by 4 engineering pillars:
 
 1. **Write a PRD once, then iterate by editing PRD bullets and shipping milestones — every step persisted on disk.** Plans, decisions, findings, and drift entries survive `/clear`, `/compact`, and session restarts. One project = one PRD as target state; per-module milestone folders are the time series. The orchestrator does not depend on chat history to recover where you left off.
 
@@ -13,10 +28,6 @@ The discipline a senior engineering team builds into its own workflow — automa
 3. **Drift between PRD and code is logged on every iteration — never silently resolved.** Any capability code adds beyond PRD, or any PRD claim code does not deliver, becomes an append-only entry in `prd_drift.md`. The "done" gate refuses to flip until each pending row is resolved by your decision: code retreats, or PRD advances. The agent does not move PRD on its own.
 
 4. **Architect, test-writer, and code-writer are context-isolated agents, audited by a separate read-only reviewer.** The code-writer cannot modify its own tests — enforced by tool permissions, by persona, and by an orchestrator-side hash baseline. The reviewer audits plan → tests → code at three checkpoints (`pre-test`, `pre-code`, `pre-close`); verdicts are `APPROVE`, `RETURN_TO_<writer>`, or `ESCALATE_TO_USER`, with a per-checkpoint retry budget. Phase tests are committed in red before the code-writer is spawned.
-
-**v0.8 (current)** — the passive runtime probe in `/super-manus:reverse-prd` (highlight #2 above). Per-agent model + effort routing: opus pinned for the three thinker agents (planner / reviewer / PRD architect), `inherit` for the three writers so users on Sonnet main threads do not pay opus rates for test and code generation.
-
-Self-sufficient — ships with TDD / verification / debugging skills. No other workflow plugin required.
 
 ## Install
 
@@ -363,7 +374,15 @@ Out of scope on purpose:
 
 The plugin manifest at `.claude-plugin/plugin.json` is the canonical version source. Each version below links to its design doc.
 
-### v0.8.3 — current
+### v0.8.4 — current
+
+README repositioned around the **LLM Wiki + PRD-driven development** framing. The structural mapping (codebase → `reverse-prd` → `prd/` + `findings.md` → `sync`/`impl` → close → archive) was already complete in v0.8.3 — v0.8.4 makes the loop explicit, adds a `## What it is` section with a Mermaid cycle diagram, and rewrites the hero around the two-pattern fusion.
+
+**Considered and rejected**: a separate `docs/super-manus/wiki/` directory. The LLM Wiki primitives — pages (`prd/<module>.md`), index (`roadmap.md`), log (`progress.md ## Session log`), append-only knowledge (per-update `findings.md` files preserved across the `impl/` time series) — are already covered by existing files. Adding a new directory would duplicate state and create multi-source-of-truth risk. See [docs/design-v0.8.4.md](docs/design-v0.8.4.md).
+
+No code, schema, agent, hook, template, or test changes. Pure documentation + positioning.
+
+### v0.8.3
 
 `prd/_index.md ## Data flow overview` and `prd/<module>.md ## How it connects` sub-diagrams switch from ASCII box-drawing to **Mermaid** `flowchart` blocks. ASCII art was the v0.7-era choice; in 2026 GitHub/GitLab/VS Code/Obsidian all render Mermaid inline, so PR review of architecture diagrams becomes visual instead of fixed-width text. Three node shapes encode role: `<id>[<name>]` for modules (rectangle), `<id>[(<image>)]` for storage/queue infra (cylinder), `<id>([<actor>])` for external actors (stadium); edge labels carry protocol (`parent_api -->|HTTP /api/orders| order_api`). MODULE-DIAGRAM 1:1 invariant unchanged — every module-typed node label still must match a row in `## Modules`.
 
