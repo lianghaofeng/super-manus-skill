@@ -115,6 +115,34 @@ NOT used for module discovery. LSP and source-file reading are reserved for fill
 
 Stage 1 is declarative-only. ~10–20 reads total: orchestration manifests, root Makefile / package.json / pyproject.toml, per-app `package.json` / `pyproject.toml`. Do NOT read source files in this stage.
 
+## Stage 2 — Runtime probe (whole-project + per-module modes)
+
+This stage gathers passive runtime evidence so the architect can cross-validate the static module list against what's actually running. The probe is read-only; it never invokes mutating commands. Added in v0.8.0 to address PRD inaccuracy on long-lived projects with dead code (statically-visible modules whose entry file is no longer launched).
+
+### Run the probe
+
+Invoke `${CLAUDE_PLUGIN_ROOT}/scripts/probe-runtime.sh --project-root <project_root> [--ports <comma-separated ports>]` via Bash. Capture stdout into a variable `runtime_facts` (or write to a tempfile and read back — either works as long as the full text reaches the agent's spawning prompt).
+
+The `--ports` argument is optional — pass the union of port numbers extracted from compose `ports:` declarations in Stage 1.1, comma-separated (e.g. `8000,8001,5173`). The script intersects this with actually-listening ports before probing OpenAPI contracts, so passing extra ports is harmless. If Stage 1.1 found no compose file, omit `--ports` entirely.
+
+### Interpret + Docker startup gate
+
+Inspect the resulting `runtime_facts` text:
+
+1. If the `--- Compose services ---` block lists a compose file but shows zero services in `running` state, **AND** the `--- Docker containers ---` block is empty (`(none)`) — services are stopped:
+
+   Use `AskUserQuestion`:
+   - **Question**: "Found `<compose file path>` but no services are running. Reverse-prd is more accurate when services are live (it can curl `/openapi.json`, see real ports). Start them with `docker compose up -d` now?"
+   - **Options**:
+     - "Start services (~30–60s wait)" — orchestrator runs `docker compose -f <file> up -d`, then polls `docker compose -f <file> ps` every ~5s up to **60s** waiting for all services to reach `running` or `healthy` state. On success, **re-run probe-runtime.sh** and overwrite `runtime_facts`. On 60s timeout, keep the partial probe and append a one-line `(audit — startup timeout)` note to runtime_facts before passing it to the architect.
+     - "Skip dynamic probing" — proceed with the current `runtime_facts` (which already documents services as not running).
+
+2. Otherwise (services already running, or no compose file, or apps run host-native): proceed without prompting.
+
+### Pass to the architect
+
+Append `runtime_facts` to the spawning prompt as the 9th input (after `lsp_available`). The architect's `## Cross-validation with runtime_facts` protocol governs how the agent uses it.
+
 ## Hand off content generation to the architect subagent
 
 Stage 1 produced (a) the module list, (b) the infra_deps list, (c) the entry-point map per module — for whole-project mode. For per-module mode the orchestrator skipped Stage 1 and the module list is the single row `<module>`. The main agent does NOT write `_index.md` or `<module>.md` itself. Instead, spawn the **`reverse-prd-architect`** agent (Agent tool, `subagent_type="reverse-prd-architect"`). The architect+PM persona, ASCII diagram rules, source-priority hierarchy, `(audit)` policy, granularity default, and Drift check protocol references all live in [agents/reverse-prd-architect.md](../agents/reverse-prd-architect.md). Do NOT duplicate them here.
@@ -133,6 +161,7 @@ Compute these from Stage 1 results (whole-project) or directly from arguments (p
 - `infra_deps` — bullet list from Stage 1.1: `<image> — used as <role hint>`. Per-module mode reuses what's already declared in the existing `prd/<module>.md ## How it connects` block under Third-party / Downstream — re-derive from compose only if that section is empty.
 - `monorepo_signals` — which workspace manifests were detected (pnpm/uv/cargo/go), or `"none"`
 - `lsp_available` — `true` or `false` (probe by attempting one workspace-symbol call before spawning)
+- `runtime_facts` (v0.8.0) — full multi-section stdout from `scripts/probe-runtime.sh` produced in Stage 2 above. Pass the entire text block; the architect's parser depends on the `=== RUNTIME PROBE ...` and `--- <section> ---` headers being intact.
 
 ### Spawning prompt skeleton
 
@@ -148,8 +177,10 @@ The orchestrator's prompt to the agent should look roughly like:
 > - infra_deps: `<bullet list>`
 > - monorepo_signals: `<value>`
 > - lsp_available: `<true|false>`
+> - runtime_facts: |
+>     <full multi-line stdout from scripts/probe-runtime.sh — preserve headers verbatim>
 >
-> Produce the PRD bundle per your agent definition (per-module mode: write only `prd/<target_module>.md`, do NOT touch `_index.md` or other module files). Return the summary line when done.
+> Produce the PRD bundle per your agent definition (per-module mode: write only `prd/<target_module>.md`, do NOT touch `_index.md` or other module files). Apply the Cross-validation with runtime_facts protocol. Return the summary line when done.
 
 
 ### After the subagent returns

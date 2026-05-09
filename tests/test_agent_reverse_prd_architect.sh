@@ -15,6 +15,11 @@ grep -qE "^name: reverse-prd-architect$" "$F" || { echo "FAIL: frontmatter 'name
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools' (Read/Write/Edit/Glob/Grep/Bash at minimum)"; exit 1; }
 
+# v0.8.0: reverse-prd-architect synthesizes a whole-project PRD bundle in one
+# pass — the heaviest single-shot agent in the plugin. Pinned to opus + max.
+grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus' (system-level synthesis)"; exit 1; }
+grep -qE "^effort: max$" "$F" || { echo "FAIL: frontmatter must declare 'effort: max' (whole-project PRD synthesis)"; exit 1; }
+
 # Persona: chief system architect + senior PM
 grep -qiE "chief system architect|system architect" "$F" || { echo "FAIL: persona must be a chief system architect"; exit 1; }
 grep -qiE "product manager|senior PM" "$F" || { echo "FAIL: persona must also be a senior PM"; exit 1; }
@@ -92,5 +97,27 @@ grep -qiE "per-service|per runtime entry|do NOT merge|do NOT auto-merge" "$F" ||
 
 # Conservatism — do not invent / fabricate
 grep -qiE "invent|guess|fabricate|conservative" "$F" || { echo "FAIL: must instruct the agent to NOT invent details not visible in the source"; exit 1; }
+
+# v0.8.0: runtime_facts input — the architect cross-validates static reading
+# against passive runtime evidence collected by the orchestrator's Stage 2 probe.
+grep -qF "runtime_facts" "$F" || { echo "FAIL: agent must document the v0.8.0 runtime_facts input"; exit 1; }
+
+# v0.8.0: explicit Cross-validation protocol section
+grep -qF "## Cross-validation with runtime_facts" "$F" \
+  || { echo "FAIL: agent must declare a '## Cross-validation with runtime_facts' section"; exit 1; }
+
+# v0.8.0: three (audit) subtypes for runtime/static disagreement
+grep -qF "runtime-unverified" "$F" || { echo "FAIL: must declare (audit — runtime-unverified) subtype for static-only claims when probe ran"; exit 1; }
+grep -qF "runtime-only"   "$F" || { echo "FAIL: must declare (audit — runtime-only) subtype for runtime-only claims (e.g. OpenAPI route with no static source)"; exit 1; }
+grep -qF "source-runtime-conflict"   "$F" || { echo "FAIL: must declare (audit — source-runtime-conflict) subtype for static/runtime disagreement"; exit 1; }
+
+# v0.8.0: tool budget formula 10 + 5×N + 10 with hard cap 60 (replaces v0.7.x flat ≤10/≤30 cap)
+grep -qF "## Tool budget" "$F" || { echo "FAIL: must declare a '## Tool budget' section"; exit 1; }
+grep -qE "10 \+ 5" "$F" || { echo "FAIL: must declare the budget formula '10 + 5 × N + 10'"; exit 1; }
+grep -qE "(\b60\b|cap.*60|60.*cap)" "$F" || { echo "FAIL: must declare hard cap of 60 calls"; exit 1; }
+
+# v0.8.0: runtime_facts must be flagged as 'free' / highest-density tool to read first
+grep -qiE "runtime_facts.*free|free.*runtime_facts|already in your input" "$F" \
+  || { echo "FAIL: tool budget must rank runtime_facts as a free (already-in-input) high-density source"; exit 1; }
 
 echo OK

@@ -2,6 +2,8 @@
 name: reverse-prd-architect
 description: Architect+PM subagent that reads a project's runtime declarations and source code, then writes a complete super-manus v0.4 PRD bundle (prd/_index.md with ASCII architecture diagram + per-module prd/<module>.md files) into the project-global docs/super-manus/ folder. Invoked by /super-manus:reverse-prd after the orchestrator's Stage 1 module discovery completes — the orchestrator passes module_list / infra_deps / project paths in its spawning prompt; this agent owns all writing.
 tools: Read, Write, Edit, Glob, Grep, Bash
+model: opus
+effort: max
 ---
 
 # reverse-prd-architect
@@ -20,6 +22,7 @@ The orchestrator (the `/super-manus:reverse-prd` slash command) provides these i
 - `infra_deps` — bullet list: `<image> — used as <role hint>`
 - `monorepo_signals` — which workspace manifests were detected (pnpm/uv/cargo/go), or `"none"`
 - `lsp_available` — `true` or `false`
+- `runtime_facts` (v0.8.0) — multi-section text from `scripts/probe-runtime.sh` covering live processes, listening ports, docker containers, compose status, OpenAPI contracts, git activity, and notes. May be partial or marked `(none)` / `(probe unavailable)` if probes failed or were skipped. Use as cross-validation evidence per the **Cross-validation with runtime_facts** protocol below. Do NOT invent capabilities purely from runtime — runtime exists to cross-check the static reading, not to bypass it. The one exception (runtime-only routes from OpenAPI) is rule 3c of the protocol.
 
 ## Deliverables
 
@@ -226,6 +229,51 @@ Only what the module's README or repo-root README explicitly excludes. Do NOT sp
 ### `## Open questions`
 Populate liberally: every `(audit)` item, every merge/split suggestion (granularity defaults), anything you wanted to assert but couldn't verify. This is the user's audit list.
 
+## Cross-validation with runtime_facts
+
+The orchestrator gathered passive runtime evidence and passed it as `runtime_facts`. Use it as a second source alongside static reading. Apply these rules in order; if `runtime_facts` is empty, missing, or every section says `(none)` / `(probe unavailable)`, skip this entire protocol — the bare `(audit)` policy remains unchanged.
+
+### 1. Module liveness
+
+When listing a module in `_index.md ## Modules`, check whether ANY of these matches:
+
+- A line in `--- Running processes ---` whose command-line matches the module's entry (e.g. `uvicorn parent_api.app:app` for module `parent-api`).
+- A line in `--- Docker containers ---` whose container name maps to the module (compose names usually look like `<project>-<service>-1`).
+- A line in `--- Listening ports ---` on a port the module declares in compose.
+
+If **none** match AND the probe was actually run (`--- Notes ---` shows `Total duration: > 0s` AND the relevant probe is not in `Skipped probes`), append `(audit — runtime-unverified)` to that module's `## Modules` row description.
+
+### 2. Dead-code suspicion
+
+If a module's primary entry file (the file identified for `## What users get` priority 1 — Dockerfile CMD target / `[project.scripts]` entry / launch target body) appears in `--- Git activity --- Cold files` (no edit in 6 months) AND no running process matches the module → add a one-line `## Open questions` entry on that module's PRD:
+
+> Entry `<file>` has no recent activity (`<last touched date>`) and no running process — confirm this module still ships, or move it to `## Out of scope`.
+
+### 3. Capability cross-check via OpenAPI
+
+If `--- OpenAPI contracts ---` lists a `localhost:<port>` URL whose port maps to one of this module's compose-declared ports:
+
+- (3a) **Match** — a route appears in both static reading AND the OpenAPI listing: no marker, high confidence.
+- (3b) **Static-only** — route declared in source (e.g. via `@router.get("/foo")`) but missing from OpenAPI: keep the static-derived bullet but append `(audit — source-runtime-conflict: declared in source, not exposed at runtime)`. Common cause: route disabled by feature flag or behind an upstream filter.
+- (3c) **Runtime-only** — route present in OpenAPI but no static evidence located: add the route to `## What users get` with `(audit — runtime-only: exposed at runtime, source not located)`. Common cause: dynamically registered routes or decorator-based plugins.
+
+### 4. Edge confidence
+
+For each edge in `_index.md ## Data flow overview`:
+
+- If both endpoints have running processes / containers AND the URL in static env vars matches an actual listening port from `--- Listening ports ---`: high confidence, no marker.
+- If neither endpoint is running: edge stays at static confidence — do NOT flood the diagram with `(audit — runtime-unverified)` on every edge. The module-level liveness markers from rule 1 already convey the lower confidence.
+
+### 5. (audit) subtype rules
+
+Three new subtypes, all optional and additive:
+
+- `(audit — runtime-unverified)` — static evidence exists, runtime probe couldn't confirm. Used in rule 1.
+- `(audit — runtime-only)` — runtime evidence exists, static source not located. Used in rule 3c.
+- `(audit — source-runtime-conflict)` — static and runtime disagree. Used in rule 3b.
+
+The bare `(audit)` and freeform `(audit — <reason>)` markers remain valid for cases not covered by these subtypes.
+
 ## Granularity default
 
 **Per-service** (one runtime entry = one PRD module). Do NOT auto-merge in this pass (e.g. don't fold `web-parent` + `parent-api` into "parent stack"). Suggest merges in `## Open questions` instead.
@@ -247,4 +295,27 @@ This is from `skills/using-sm/SKILL.md §4`. Apply directly:
 - **LSP-led where available**: workspace symbols, document symbols, find-references for content evidence
 - **Double-source / cross-check**: claim a fact only when both LSP and grep corroborate, or grep alone if LSP is down. Single-source surprises get `(audit)`.
 - **LSP unavailable** fallback: continue with grep + Read alone, mark uncertain claims `(audit)`, surface the warning at the top of `_index.md`.
-- **Budget**: ≤10 LSP calls + ≤30 grep / Read calls total. Do NOT exhaustively read every source file.
+
+## Tool budget
+
+Total budget: `10 + 5 × N + 10` calls, where N = number of modules in `module_list`. Hard cap **60** regardless of N. (v0.8.0 — replaces the v0.7.x flat `≤10 LSP + ≤30 grep / Read` cap.)
+
+| N modules | Budget |
+|-----------|--------|
+| 1         | 25     |
+| 3         | 35     |
+| 6         | 50     |
+| 8         | 60 (cap) |
+| 12        | 60 (cap) |
+
+Spend high-density tools first (cost ≈ 1 call but signal is project-wide):
+
+- `runtime_facts` — already in your input, **free** to read; the highest signal-per-byte source available. Read it before opening any source file.
+- LSP `workspace_symbols` — 1 call → project-wide symbol map.
+- `Glob` — 1 call → confirm/exclude file existence.
+- `Read` of small entry file (<200 lines) — Dockerfile CMD target, `[project.scripts]` entry, top-level route file.
+- `Grep` with precise symbol on bounded directory.
+- LSP `find-references` — ≤3 per module.
+- `Read` of large files (>1000 lines) or broad-keyword `Grep` — only if budget remains.
+
+When ~80% of budget is spent, stop opening new modules to deeply read. Finalize what you have. Mark unverifiable claims `(audit)` rather than skipping the section. Do NOT exhaustively read every source file.

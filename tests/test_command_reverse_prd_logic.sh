@@ -82,4 +82,29 @@ done
 grep -qiE "1:1 invariant|module.file 1:1|count.*equals the module count" "$F" || { echo "FAIL: orchestrator must verify file count = module count (file-level 1:1 invariant)"; exit 1; }
 grep -qiE "Modules.*table|## Modules" "$F" || { echo "FAIL: orchestrator must cross-check ## Modules table rows against actual prd/<name>.md files"; exit 1; }
 
+# v0.8.0: Stage 2 — Runtime probe (passive, runs between Stage 1 module discovery
+# and the architect spawn). Gathers what's actually running so the architect can
+# distinguish live modules from dead-code residue.
+grep -qiE "Stage 2|## Stage 2 — Runtime probe|Runtime probe" "$F" \
+  || { echo "FAIL: must document Stage 2 — Runtime probe between Stage 1 and architect spawn"; exit 1; }
+grep -qF "scripts/probe-runtime.sh" "$F" \
+  || { echo "FAIL: Stage 2 must invoke scripts/probe-runtime.sh (the v0.8.0 passive probe)"; exit 1; }
+grep -qF "runtime_facts" "$F" \
+  || { echo "FAIL: must capture probe output as runtime_facts and pass it to the architect"; exit 1; }
+
+# v0.8.0: docker compose up gating MUST go through AskUserQuestion — never silent.
+# The probe itself stays read-only; only the orchestrator can issue a mutating
+# `docker compose up -d`, and only with explicit user consent.
+grep -qiE "AskUserQuestion" "$F" \
+  || { echo "FAIL: docker startup gating must use AskUserQuestion (cannot silently invoke docker compose up)"; exit 1; }
+grep -qiE "(compose.*up.*-d|docker compose -f.*up|Start services)" "$F" \
+  || { echo "FAIL: must spell out the 'docker compose up -d' option offered to the user"; exit 1; }
+grep -qiE "(60s|60-second|60 seconds|60 ?s wait|up to 60)" "$F" \
+  || { echo "FAIL: docker startup must declare a 60-second timeout cap when waiting for services"; exit 1; }
+
+# v0.8.0: agent gets a 9th input named 'runtime_facts'
+for input in project_root feature_folder scope target_module module_list infra_deps monorepo_signals lsp_available runtime_facts; do
+  grep -qF "$input" "$F" || { echo "FAIL: spawning prompt must include input '$input'"; exit 1; }
+done
+
 echo OK
