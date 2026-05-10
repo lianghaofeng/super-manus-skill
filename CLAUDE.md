@@ -30,8 +30,8 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
 │   └── agents.yml                           ← per-agent model override; seeded all-commented
 └── docs/super-manus/                        ← business state (committed, reviewed in PR diffs)
     ├── prd/                                 ← project-global, ONE source of truth
-    │   ├── _index.md                        ← 8 PM-flavored H2 sections, ≤700 words
-    │   └── <module>.md                      ← 9 PM-flavored H2 sections, ≤2000 words
+    │   ├── _index.md                        ← 8 PM-flavored H2 sections, target ~700 words of prose (soft cap; fenced code blocks and tables excluded)
+    │   └── <module>.md                      ← 9 PM-flavored H2 sections, target ~2000 words of prose (soft cap; fenced code blocks and tables excluded)
     ├── e2e/                                 ← permanent regression suite, mirrors prd/
     │   ├── _system/test_<scenario>.<ext>    ← cross-module scenarios from prd/_index.md ## Demo
     │   └── <module>/test_<capability>.<ext> ← per-module capabilities from prd/<module>.md ## What users get

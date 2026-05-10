@@ -1,4 +1,4 @@
-<!-- prd/<module>.md: this module's TARGET STATE, written from a product (PM) perspective with engineering evidence appended. NO code, NO file paths, NO line numbers — those live in impl/<module>/<update>/tasks/p<n>_impl.md. No changelog markers (no strikethrough, no "(was: ...)", no dated revision marks): PRD is a current-state snapshot, history lives in git log + findings.md. Total ≤2000 words. Headings are stable — hooks, scripts, agents, and tests parse them by exact match. -->
+<!-- prd/<module>.md: this module's TARGET STATE, written from a product (PM) perspective with engineering evidence appended. NO code, NO file paths, NO line numbers — those live in impl/<module>/<update>/tasks/p<n>_impl.md. No changelog markers (no strikethrough, no "(was: ...)", no dated revision marks): PRD is a current-state snapshot, history lives in git log + findings.md. Target ~2000 words of prose — soft scannability cap, not a hard limit. Fenced code blocks and markdown tables don't count toward this; don't degrade content to satisfy `wc -w`. Headings are stable — hooks, scripts, agents, and tests parse them by exact match. -->
 # <module name>
 
 ## Why this exists

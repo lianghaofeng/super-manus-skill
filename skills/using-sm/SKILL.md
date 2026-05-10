@@ -16,8 +16,8 @@ User commands live under `commands/`; see each file's frontmatter for descriptio
 <project-root>/
 └── docs/super-manus/
     ├── prd/                                     ← project-global, ONE source of truth
-    │   ├── _index.md                            ← 8 PM-flavored H2 sections (Problem / Audience / Success metrics / Demo / Must / Not doing / Modules / Data flow overview); ≤700 words
-    │   └── <module>.md                          ← 9 PM-flavored H2 sections (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions); ≤2000 words
+    │   ├── _index.md                            ← 8 PM-flavored H2 sections (Problem / Audience / Success metrics / Demo / Must / Not doing / Modules / Data flow overview); target ~700 words of prose (soft cap; code blocks and tables excluded)
+    │   └── <module>.md                          ← 9 PM-flavored H2 sections (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions); target ~2000 words of prose (soft cap; code blocks and tables excluded)
     ├── e2e/                                     ← v0.5 NEW: permanent regression suite, mirrors prd/
     │   ├── _system/                             ← cross-module scenarios from prd/_index.md ## Demo
     │   │   └── test_<scenario>.<ext>            ← auto-discovered by default test runner; runs in CI
@@ -53,12 +53,12 @@ The naming distinction is load-bearing — orchestrator and CI configs depend on
 ## 2. What goes in which file
 
 **`docs/super-manus/prd/_index.md`** — project-level overview + module manifest (`## Problem` / `## Audience` / `## Success metrics` / `## Demo` / `## Must` / `## Not doing` / `## Modules` / `## Data flow overview`).
-- Total length ≤ 700 words. The `## Modules` table (`| Module | File | Purpose |`) is the source of truth for which modules exist.
+- Target ~700 words of prose — soft scannability cap, not a hard limit. Fenced code blocks (e.g. ```mermaid) and markdown tables (including the `## Modules` table) don't count toward this; don't sacrifice clarity to satisfy `wc -w`. The `## Modules` table (`| Module | File | Purpose |`) is the source of truth for which modules exist.
 - `## Audience` names primary + secondary users with their trigger moments. `## Success metrics` is the top 3 user/business KPIs (target + measurement method) — NOT infra metrics like "uptime > 99%".
 - **Not for**: per-module schema, endpoints, UX details, per-module risks. Those live in `prd/<module>.md`.
 
 **`docs/super-manus/prd/<module>.md`** — per-module target state (`## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`).
-- Total length ≤ 2000 words. `## What users get` lists 3–5 capabilities in PM voice with technical evidence appended (`Backed by: <schema | endpoint | screen | CLI>`) — at the level of "this is what the module IS", not "how this phase MIGRATES to it". Schema sketches (table + field lists), endpoint paths, screen flows go here.
+- Target ~2000 words of prose — soft scannability cap, not a hard limit. Fenced code blocks and markdown tables don't count toward this; don't sacrifice clarity to satisfy `wc -w`. `## What users get` lists 3–5 capabilities in PM voice with technical evidence appended (`Backed by: <schema | endpoint | screen | CLI>`) — at the level of "this is what the module IS", not "how this phase MIGRATES to it". Schema sketches (table + field lists), endpoint paths, screen flows go here.
 - `## Why this exists` is 2 sentences of PM framing (user pain + business value), NOT "this module wraps X". `## Users` names the persona + trigger moment (internal modules name their upstream callers). `## Success` is 3–5 measurable user-facing outcomes — NOT "tests pass" / "uptime > 99%". `## How it connects` opens with an Exposes/Consumes semantic preamble (PM-voice capability names crossing the module boundary), then carries upstream/downstream/third-party in plain language plus a precise edge list. `## Quality bar` is user-visible NFRs (perf, scale, compliance) only — internal infra ("uses Postgres") belongs under `## How it connects`. `## Risks` covers Product / Technical / Org+dependency in 2–4 bullets total.
 - **No changelog markers**: no `~~strikethrough~~`, no `(was: ...)`, no dated revision marks, no "moved from <section>" breadcrumbs. PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
 - **Not for**: code snippets, file paths, line numbers, function names — those are tasks/p<n>_impl.md territory. Schema sketches at the level of "table X has fields a, b, c" are fine; raw migration code is not.

@@ -92,7 +92,8 @@ After any edit, run `/super-manus:sync <module>` to scaffold the next milestone.
 # Writes prd/_index.md + per-module stubs at not-started.
 
 # 2. You audit prd/api.md and flesh out ## What users get with
-# the actual capabilities. PM voice, ~2000 words max.
+# the actual capabilities. PM voice, target ~2000 words of prose
+# (soft cap; code blocks and tables excluded).
 
 # 3. Cut the first milestone for the api module
 /super-manus:sync api
@@ -196,8 +197,8 @@ The on-disk layout super-manus creates inside a project that uses it:
 <project-root>/
 └── docs/super-manus/
     ├── prd/                                    # project-global, ONE source of truth
-    │   ├── _index.md                           # project overview + module manifest + data flow (≤700 words)
-    │   └── <module>.md                         # per-module target state (≤2000 words)
+    │   ├── _index.md                           # project overview + module manifest + data flow (target ~700 words of prose; soft cap, code blocks and tables don't count)
+    │   └── <module>.md                         # per-module target state (target ~2000 words of prose; soft cap, code blocks and tables don't count)
     ├── e2e/                                    # permanent regression suite, mirrors prd/ (lazy — created by impl-test-writer on first capability)
     │   ├── _system/
     │   │   └── test_<scenario>.<ext>           # cross-module ## Demo scenarios; auto-discovered, runs in CI
@@ -274,7 +275,7 @@ It will refuse and redirect in four cases:
 | Edit crosses >1 section of `prd/<module>.md` | `/super-manus:brainstorm` (full rewrite path) |
 | Deviation is purely tech-design (e.g. "we used Redis not Postgres") | Don't move PRD — log it as a Decision in the active update's `findings.md` only |
 | PRD already matches reality (no actual conflict) | Stop, don't invent an edit |
-| Edit would push `prd/<module>.md` past 2000 words | `/super-manus:brainstorm` — module outgrew a single PRD |
+| Edit would push the prose in `prd/<module>.md` clearly past ~2000 words (code blocks and tables don't count) | `/super-manus:brainstorm` — module outgrew a single PRD |
 
 The tech-design refusal is the most common one in practice. PRD is product semantics — schema sketches at "table X has fields a, b, c" level are fine, but library names, file paths, line numbers, and code identifiers are not. If a "drift" is really "we picked a different DB", that's an `## Approach` decision in `tasks/p<n>_impl.md`, not a PRD movement.
 

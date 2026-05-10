@@ -1,4 +1,4 @@
-<!-- prd/_index.md: feature-level PRD. PM-led system overview with audience, success metrics, and a runtime architecture diagram. Per-module surface (capability lists, schemas, dependency edges) lives in prd/<module>.md. Total ≤700 words. Headings are stable — hooks, scripts, agents, and tests parse them by exact match. -->
+<!-- prd/_index.md: feature-level PRD. PM-led system overview with audience, success metrics, and a runtime architecture diagram. Per-module surface (capability lists, schemas, dependency edges) lives in prd/<module>.md. Target ~700 words of prose — soft scannability cap, not a hard limit. Fenced code blocks (e.g. ```mermaid) and markdown tables don't count toward this; don't degrade content to satisfy `wc -w`. Headings are stable — hooks, scripts, agents, and tests parse them by exact match. -->
 # <feature title>
 
 ## Problem

@@ -194,8 +194,8 @@ super-manus 在使用它的项目里建出的磁盘布局：
 <project-root>/
 └── docs/super-manus/
     ├── prd/                                    # 项目级，单一真相源
-    │   ├── _index.md                           # 项目总览 + 模块清单 + 数据流（≤700 词）
-    │   └── <module>.md                         # 每模块目标态（≤2000 词）
+    │   ├── _index.md                           # 项目总览 + 模块清单 + 数据流（目标 ~700 词散文；软上限，代码块与表格不计入）
+    │   └── <module>.md                         # 每模块目标态（目标 ~2000 词散文；软上限，代码块与表格不计入）
     ├── e2e/                                    # 常驻回归套，按 prd/ 镜像（懒创建 —— impl-test-writer 第一次写 e2e 时建）
     │   ├── _system/
     │   │   └── test_<scenario>.<ext>           # 来自 prd/_index.md ## Demo 的跨模块场景；自动发现，CI 跑

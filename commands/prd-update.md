@@ -64,7 +64,7 @@ If LSP is unavailable, fall back to grep + Read alone per the protocol; flag the
 - **No changelog markers**: do NOT leave `~~strikethrough~~`, "(was: ...)", "updated 2026-05-06", "// changed from X", "moved from <section>" — none of it. The PRD is a current-state snapshot; history lives in `findings.md` and `git log`.
 - **Preserve structure**: do not reorder sections, rename headings, or change bullet style. Sections stay: `## Why this exists` / `## Users` / `## Success` / `## What users get` / `## How it connects` / `## Quality bar` / `## Risks` / `## Out of scope` / `## Open questions`.
 - **One-liners stay one-liners**: no nested bullets, no parenthetical asides longer than 6 words.
-- **Total length ≤ 2000 words for `prd/<module>.md`**. If your edit pushes past that, the change is too big — tell the user this is a `/super-manus:brainstorm` job, not a `prd-update` job, and stop.
+- **Target ~2000 words of prose for `prd/<module>.md`** (soft cap; fenced code blocks and markdown tables don't count). If your edit clearly pushes the prose well past that, the change is too big — tell the user this is a `/super-manus:brainstorm` job, not a `prd-update` job, and stop. Don't degrade content just to satisfy `wc -w`.
 - **Product semantics only**: no DB schema *strings*, no library names, no file paths, no line numbers, no code identifiers. Schema sketches at the level of "table X has fields a, b, c" are fine; raw migration code is not. **If the deviation is purely tech-design** (e.g. "we used Redis instead of Postgres for the queue"), the PRD probably shouldn't move at all — the conflict belongs in the active update's `tasks/p<n>_impl.md ## Approach`. Push back: "This looks like a tech-design change, not a product change. PRD shouldn't move. Want me to log it in the update's `findings.md` and stop?"
 
 ## Writing the edit
@@ -106,4 +106,4 @@ Behavior is mode-dependent.
 - The user wants to rewrite multiple sections → suggest `/super-manus:brainstorm` (replace path).
 - The deviation is a tech-design change, not a product change → suggest logging in the active update's `findings.md ## Decisions` only and leaving PRD untouched.
 - The PRD already matches reality (no actual conflict found) → say so and stop; don't invent an edit.
-- The edit would push `prd/<module>.md` past 2000 words → refuse, suggest `/super-manus:brainstorm`.
+- The edit would push the prose in `prd/<module>.md` clearly past ~2000 words (fenced code blocks and tables don't count) → refuse, suggest `/super-manus:brainstorm`.

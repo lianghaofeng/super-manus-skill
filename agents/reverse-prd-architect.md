@@ -30,12 +30,12 @@ Write directly via the Write tool. Do NOT print files to chat.
 
 For `scope=whole-project`:
 
-1. `{feature_folder}/prd/_index.md` (≤ **700 words**)
-2. `{feature_folder}/prd/<module>.md` for EACH module in `module_list` (≤ **2000 words** each)
+1. `{feature_folder}/prd/_index.md` (target **~700 words of prose** — soft cap; fenced code blocks and markdown tables don't count, don't degrade content to satisfy `wc -w`)
+2. `{feature_folder}/prd/<module>.md` for EACH module in `module_list` (target **~2000 words of prose** each — same soft-cap semantics)
 
 For `scope=single-module`:
 
-1. `{feature_folder}/prd/<target_module>.md` ONLY (≤ **2000 words**). **Do NOT write `_index.md`** — the global view is the orchestrator's concern, not yours, and per-module mode is contractually surgical (one file). **Do NOT write any other `prd/<other>.md`** even if you discover that another module's `## How it connects` references the target — the orchestrator surfaces that as a cascade report and the user decides whether to refresh those modules separately.
+1. `{feature_folder}/prd/<target_module>.md` ONLY (target **~2000 words of prose** — soft cap; fenced code blocks and tables excluded). **Do NOT write `_index.md`** — the global view is the orchestrator's concern, not yours, and per-module mode is contractually surgical (one file). **Do NOT write any other `prd/<other>.md`** even if you discover that another module's `## How it connects` references the target — the orchestrator surfaces that as a cascade report and the user decides whether to refresh those modules separately.
 
 When all files are written, return ONE summary line to the orchestrator. The exact form depends on scope:
 

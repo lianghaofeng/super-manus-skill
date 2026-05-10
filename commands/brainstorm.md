@@ -27,8 +27,8 @@ After the 6 (or fewer if the user converged early), optionally probe ONCE for cr
 
 - **Do NOT** ask about database schemas, API endpoints, libraries, frameworks, performance budgets, or implementation architecture. Those belong in per-module `prd/<module>.md ## What users get` (which the user fills after this command, or refines via `/super-manus:prd-update`) and the active update's `tasks/p<n>_impl.md ## Approach` per phase.
 - **Do not propose architecture** in your follow-ups. Stay in product semantics.
-- Keep the final `prd/_index.md` under **700 words** total.
-- Keep each per-module `prd/<module>.md` stub under **2000 words** total. The stub can be terse — the user will flesh it out later.
+- Target **~700 words of prose** for the final `prd/_index.md` — soft scannability cap, not a hard limit. Fenced code blocks (e.g. ```mermaid) and markdown tables don't count toward this; don't sacrifice clarity to satisfy `wc -w`.
+- Target **~2000 words of prose** for each per-module `prd/<module>.md` stub — same soft-cap semantics. The stub can be terse; the user will flesh it out later.
 - One question per turn. Don't bundle.
 
 ## Writing the PRD folder
