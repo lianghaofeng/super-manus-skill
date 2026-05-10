@@ -199,3 +199,75 @@ sm_agent_model() {
     *) ;;  # empty / unknown / commented-out → no override
   esac
 }
+
+# v0.9.4 (R4): parse a phase plan's `## Files touched` section into a
+# newline-separated list of bare file paths. Used by /super-manus:impl Step 5
+# pre-spawn working-tree check and post-return commit whitelist check.
+#
+# Bullet syntax accepted (one path per bullet):
+#   - src/foo.py — short description
+#   - `src/foo.py` (new)
+#   * src/foo.py
+#
+# Backticks around the path are stripped. Em-dash / en-dash / parenthesis
+# annotations after the path are dropped. Sub-bullets and indented continuation
+# lines are ignored. Section boundary is the next `## ` H2.
+#
+# Returns empty on missing file / missing section. Always exits 0.
+sm_parse_files_touched() {
+  local plan_file="${1:-}"
+  [ -n "$plan_file" ] && [ -f "$plan_file" ] || return 0
+  python3 - "$plan_file" <<'PY'
+import re, sys
+try:
+    text = open(sys.argv[1]).read()
+except Exception:
+    sys.exit(0)
+in_section = False
+for line in text.splitlines():
+    if line.startswith("## "):
+        in_section = (line.strip() == "## Files touched")
+        continue
+    if not in_section:
+        continue
+    m = re.match(r"^[-*]\s+(.+?)$", line)  # top-level bullet only, no leading indent
+    if not m:
+        continue
+    rest = m.group(1).strip().strip("`")
+    m2 = re.match(r"^([^\s—–(`]+)", rest)
+    if m2:
+        path = m2.group(1).rstrip("`")
+        if path:
+            print(path)
+PY
+}
+
+# v0.9.4 (R4): check whether a file path matches any entry in a newline-separated
+# whitelist. Exact match OR per-segment glob match (fnmatch, `*` does NOT cross
+# `/` — `lib/*.py` matches `lib/jwt.py` but NOT `lib/nested/x.py`). Recursive
+# globs (`**`) are silently treated as literal `*` per segment; the design
+# disallows recursive expansion for safety.
+#
+# Returns 0 (true) on match, 1 (false) otherwise. Empty file or empty whitelist
+# returns 1.
+sm_whitelist_match() {
+  local file="${1:-}"
+  local whitelist="${2:-}"
+  [ -n "$file" ] || return 1
+  [ -n "$whitelist" ] || return 1
+  printf '%s' "$whitelist" | FILE="$file" python3 -c '
+import os, sys, fnmatch
+file = os.environ["FILE"]
+file_parts = file.split("/")
+for pattern in sys.stdin.read().splitlines():
+    pattern = pattern.strip()
+    if not pattern:
+        continue
+    pattern_parts = pattern.split("/")
+    if len(pattern_parts) != len(file_parts):
+        continue
+    if all(fnmatch.fnmatchcase(fp, pp) for fp, pp in zip(file_parts, pattern_parts)):
+        sys.exit(0)
+sys.exit(1)
+'
+}

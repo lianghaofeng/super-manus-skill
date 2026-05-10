@@ -296,7 +296,7 @@ Track per-checkpoint counter `counter[#2]`. Initialize to 0.
   5. If Step 2 APPROVES, fall through to Step 3 (test-writer), then re-invoke this Step 4 review with `attempt_number = counter[#2] + 1`.
 - **ESCALATE_TO_USER** (or counter exhausted) → stop the phase as in Step 2's ESCALATE handling. Phase Status stays `in_progress`.
 
-## Step 5 — Hash baseline + spawn impl-code-writer
+## Step 5 — Hash baseline + pre-spawn working-tree check + spawn impl-code-writer
 
 After review #2 APPROVES, the orchestrator FIRST establishes the hash baseline on the test files that just passed review:
 
@@ -312,7 +312,50 @@ done
 
 Keep the hash file in `$UPDATE_DIR` so cascade re-spawn (e.g., RETURN_TO_TEST_WRITER from review #3) can reload it after the new test commit. **The hash baseline always reflects the latest reviewer-approved test commit.** When test-writer is re-spawned and re-commits, this Step 5 reruns and the baseline is refreshed.
 
-Then spawn the `impl-code-writer` subagent (Agent tool, `subagent_type="super-manus:impl-code-writer"`). The agent owns the persona ("senior implementation engineer"), the iteration loop, and the hard rule that NO test files may be edited. Do NOT inline that persona here — see [agents/impl-code-writer.md](../agents/impl-code-writer.md).
+### Pre-spawn working-tree check (v0.9.4 R4 — commit hygiene)
+
+Before spawning the code-writer, snapshot the working tree and verify there are no dirty files that overlap with this phase's scope. A dirty tree at spawn time can leak unrelated WIP into the phase commit. The check uses two helpers in [hooks/lib.sh](../hooks/lib.sh):
+
+- `sm_parse_files_touched` — parses `## Files touched` into a newline-separated whitelist of paths (top-level bullets only; supports backticked paths and `— description` / `(annotation)` suffixes).
+- `sm_whitelist_match` — exact-path or shell-glob match of one file against the whitelist.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
+PRE_CODEWRITER_HEAD=$(git rev-parse HEAD)
+WHITELIST=$(sm_parse_files_touched "$UPDATE_DIR/tasks/p<n>_impl.md")
+
+# Snapshot current dirty files (modified or untracked)
+DIRTY=$(git status --porcelain | awk '{print $2}')
+OFFENDERS=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  # In-scope dirty (overlaps with phase) — risks contamination
+  sm_whitelist_match "$f" "$WHITELIST" && OFFENDERS="${OFFENDERS}${f}"$'\n'
+  # Critical: dirty test/e2e files break the hash baseline
+  case "$f" in
+    "$UPDATE_DIR/tests/"*|"docs/super-manus/e2e/"*)
+      OFFENDERS="${OFFENDERS}${f}"$'\n' ;;
+  esac
+done <<< "$DIRTY"
+```
+
+If `OFFENDERS` is non-empty, surface to the user via `AskUserQuestion` BEFORE spawning the code-writer:
+
+> Working tree has dirty files that overlap with phase `<n>`'s scope (or live under `tests/`/`e2e/`):
+>
+> [list of offender paths]
+>
+> Spawning the code-writer with this state risks contaminating the phase commit. Choose:
+> - (a) Commit your WIP first (recommended) — I will stop; you commit/stash, then re-run `/super-manus:impl`.
+> - (b) Continue anyway (you accept the contamination risk and will manually clean up).
+
+Default to (a). Do NOT auto-stash. Do NOT auto-reset. The user owns the working tree.
+
+If `OFFENDERS` is empty (or user chose (b)), continue to spawn below.
+
+### Spawn impl-code-writer
+
+Spawn the `impl-code-writer` subagent (Agent tool, `subagent_type="super-manus:impl-code-writer"`). The agent owns the persona ("senior implementation engineer"), the iteration loop, and the hard rule that NO test files may be edited. Do NOT inline that persona here — see [agents/impl-code-writer.md](../agents/impl-code-writer.md).
 
 ### Inputs to pass in the spawning prompt
 
@@ -348,7 +391,52 @@ Pass these in the Agent tool's `prompt` field:
 >
 > Write source code to make all phase tests + touched e2e tests pass per your agent definition. Do NOT touch any file under `tests/` or `docs/super-manus/e2e/`. Commit ONLY source files. Return the summary line when done.
 
-The agent iterates source-code → run tests → repeat until all green, then commits source files only and returns. The agent may also return early in **stuck state** ("tests un-passable") — surface that state to review #3 in Step 6 below.
+The agent iterates source-code → run tests → repeat until all green, then commits source files only and returns. The agent may also return early in **stuck state** ("tests un-passable") — surface that state to review #3 in Step 6 below. If the agent returns with `escalation: OUT_OF_SCOPE_DIRTY` (v0.9.4 R4 — the agent detected the same dirty-tree condition the pre-spawn check would catch on a manual user (b) selection), STOP this phase: append the escalation to `findings.md ## Errors`, surface the agent's summary verbatim, and instruct the user to commit/stash and re-run.
+
+### Post-return commit whitelist check (v0.9.4 R4 — commit hygiene)
+
+After the code-writer returns, run a mechanical check that every file the code-writer staged or committed falls within `## Files touched`. This is the orchestrator-side enforcement of the persona rule.
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
+WHITELIST=$(sm_parse_files_touched "$UPDATE_DIR/tasks/p<n>_impl.md")
+
+# All files touched in code-writer commits, plus any still-staged
+NEW_FILES=$(git log --name-only --pretty=format: "${PRE_CODEWRITER_HEAD}..HEAD" | sort -u)
+STAGED=$(git diff --cached --name-only)
+ALL_TOUCHED=$(printf '%s\n%s\n' "$NEW_FILES" "$STAGED" | sort -u | grep -v '^$' || true)
+
+VIOLATIONS=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  # Implicit deny on tests/ and e2e/ is enforced by Step 7's hash check — skip here to avoid double-reporting.
+  case "$f" in
+    "$UPDATE_DIR/tests/"*|"docs/super-manus/e2e/"*) continue ;;
+  esac
+  sm_whitelist_match "$f" "$WHITELIST" || VIOLATIONS="${VIOLATIONS}${f}"$'\n'
+done <<< "$ALL_TOUCHED"
+```
+
+If `VIOLATIONS` is non-empty, append one row to `findings.md ## Errors`:
+
+```
+| <YYYY-MM-DD> | phase p<n> code-writer commit whitelist violation | committed files outside `## Files touched`: <comma-separated paths>; user resolution pending |
+```
+
+Then surface to the user via `AskUserQuestion`:
+
+> Code-writer committed files outside `## Files touched` for phase `<n>`:
+>
+> [list of violating paths]
+>
+> Choose:
+> - (a) Reset code-writer's commits + re-spawn — I will `git reset --hard ${PRE_CODEWRITER_HEAD}`, then re-spawn the code-writer with `previous_attempt_feedback` flagging the violation.
+> - (b) Accept (architect drift) — keep the commits as-is and surface to the user that `## Files touched` should be updated manually before the next phase. Do NOT auto-edit the plan.
+> - (c) Abort phase — leave commits in place; phase Status stays `in_progress`; user resolves manually.
+
+Default to (a). Do NOT auto-reset without consent (the hash baseline already reflects the test commit, so a reset would also revert the test-writer's work if done blindly — the orchestrator must use `git reset --hard ${PRE_CODEWRITER_HEAD}` precisely, NOT `HEAD~N`). After a reset, the hash baseline file `.test_hashes_p<n>.txt` stays valid (tests are at the same SHA they were when baselined).
+
+If `VIOLATIONS` is empty, continue to Step 6.
 
 ## Step 6 — Spawn impl-reviewer (mode=pre-close) [v0.7]
 

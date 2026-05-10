@@ -94,6 +94,23 @@ If still failing after the checklist, append `findings.md ## Errors` and escalat
 
 Commit ONLY source files. Do NOT include test files in your commits (the orchestrator will detect this via the hash check and abort).
 
+### Commit hygiene — staging is whitelist-only (v0.9.4 R4)
+
+The working tree may contain files the user is editing in parallel (READMEs, docs, unrelated WIPs). Sweeping those into your phase commit is a real bug — it has happened. Before every commit you must:
+
+1. Run `git status --porcelain` and read it. See exactly what is dirty.
+2. Stage **only** files explicitly listed in `${update_dir}/tasks/p<phase_number>_impl.md ## Files touched`. The phase plan's `## Files touched` is the whitelist. Anything outside it is out of scope.
+3. Use `git add <specific-path>` per file. NEVER `git add .`, NEVER `git add -A`, NEVER `git add <dir>/`, NEVER any wildcard. File-level adds with a dirty tree silently include other dirty files in that file — that is the bug we're preventing.
+4. If `git status --porcelain` shows files **outside `## Files touched`** that are dirty (modified or untracked), STOP. Do NOT stash, do NOT unstage, do NOT commit, do NOT touch them. Return early to the orchestrator with the summary line:
+
+   > escalation: OUT_OF_SCOPE_DIRTY — working tree has dirty files outside `## Files touched` (paths: <comma-separated>); user must commit or stash WIP before this phase can proceed.
+
+   The orchestrator surfaces this to the user via `AskUserQuestion` and decides; it is NOT your call to clean the tree.
+
+The orchestrator additionally runs a **mechanical post-commit whitelist check** on every file your commits touch: anything outside `## Files touched` (other than implicit-deny `tests/` + `e2e/`) triggers a violation prompt to the user. Persona discipline + orchestrator check are two layers of the same defense; both must hold.
+
+### Commit message
+
 Suggested commit message:
 
 ```
@@ -113,6 +130,10 @@ Where N is the count of files matching `phase_tests_glob` and M is the count of 
 If you escalated mid-iteration, return instead:
 
 > escalation: <one-line reason>; see findings.md ## Errors. Cannot proceed.
+
+If the working tree was dirty with files outside `## Files touched` and you stopped before committing (v0.9.4 R4 commit hygiene):
+
+> escalation: OUT_OF_SCOPE_DIRTY — working tree has dirty files outside `## Files touched` (paths: <comma-separated>); user must commit or stash WIP before this phase can proceed.
 
 ## What you do NOT do
 

@@ -60,4 +60,20 @@ grep -qiE "all .*tests pass|all N phase tests|all .* phase tests.*e2e tests pass
 # persona's write-barrier discipline isn't merely advisory.
 grep -qiE "hash|SHA-256|sha256" "$F" || { echo "FAIL: must mention orchestrator's hash check (the mechanical enforcement of the write barrier)"; exit 1; }
 
+# === v0.9.4 R4: commit hygiene + staging whitelist ========================
+# Code-writer must run `git status --porcelain` before commit, stage only files
+# from `## Files touched`, and return OUT_OF_SCOPE_DIRTY if the tree contains
+# dirty files outside scope. `git add .` / `git add -A` are explicitly banned.
+
+grep -qF "git status --porcelain" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must require 'git status --porcelain' before commit"; exit 1; }
+grep -qF "OUT_OF_SCOPE_DIRTY" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must document the OUT_OF_SCOPE_DIRTY return contract"; exit 1; }
+grep -qE 'git add \.|git add -A' "$F" \
+  || { echo "FAIL: v0.9.4 R4 must explicitly ban broad git-add commands (git add . / git add -A)"; exit 1; }
+grep -qF "## Files touched" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must reference '## Files touched' as the staging whitelist"; exit 1; }
+grep -qiE "git add <specific-path>|git add <file>|per file" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must require per-file 'git add <specific-path>' staging"; exit 1; }
+
 echo OK

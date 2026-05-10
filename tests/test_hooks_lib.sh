@@ -237,4 +237,114 @@ got=$(sm_agent_model "")
 popd >/dev/null
 rm -rf "$CFG_TMP"
 
+# v0.9.4 (R4): sm_parse_files_touched — parses `## Files touched` from a phase
+# plan into a newline-separated list of bare file paths.
+if ! declare -f sm_parse_files_touched >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_parse_files_touched in v0.9.4 (R4)"; exit 1
+fi
+
+R4_TMP=$(mktemp -d)
+trap 'rm -rf "$R4_TMP" "$TMP_PROJ"' EXIT
+
+# Case 1: missing file → empty
+got=$(sm_parse_files_touched "/nonexistent/$$.md" || true)
+[ -z "$got" ] || { echo "FAIL: missing plan file should give empty, got: '$got'"; exit 1; }
+
+# Case 2: plan with mixed bullet styles
+cat > "$R4_TMP/plan1.md" <<'EOF'
+# Phase 1
+
+## Objective
+
+Some objective.
+
+## Files touched
+
+- src/auth/middleware.py — adds JWT validator
+- `src/auth/handlers.py` (modified)
+* src/auth/types.py
+- `lib/jwt.py`
+
+## Verification
+
+- run pytest
+EOF
+got=$(sm_parse_files_touched "$R4_TMP/plan1.md")
+expected="src/auth/middleware.py
+src/auth/handlers.py
+src/auth/types.py
+lib/jwt.py"
+[ "$got" = "$expected" ] || { echo "FAIL: mixed bullets parse mismatch; got:"; echo "$got"; echo "expected:"; echo "$expected"; exit 1; }
+
+# Case 3: section boundary respected — Files touched bullets stop at next H2
+cat > "$R4_TMP/plan2.md" <<'EOF'
+## Files touched
+
+- src/a.py
+- src/b.py
+
+## Verification
+
+- something
+- not_a_file.path
+EOF
+got=$(sm_parse_files_touched "$R4_TMP/plan2.md")
+expected="src/a.py
+src/b.py"
+[ "$got" = "$expected" ] || { echo "FAIL: section boundary not respected; got:"; echo "$got"; exit 1; }
+
+# Case 4: indented sub-bullets ignored (only top-level top-of-line bullets count)
+cat > "$R4_TMP/plan3.md" <<'EOF'
+## Files touched
+
+- src/main.py
+  - sub-note one (NOT a path)
+  - sub-note two
+- src/util.py
+EOF
+got=$(sm_parse_files_touched "$R4_TMP/plan3.md")
+expected="src/main.py
+src/util.py"
+[ "$got" = "$expected" ] || { echo "FAIL: sub-bullets not ignored; got:"; echo "$got"; exit 1; }
+
+# Case 5: no Files touched section → empty
+cat > "$R4_TMP/plan4.md" <<'EOF'
+## Objective
+
+Stuff.
+
+## Approach
+
+Things.
+EOF
+got=$(sm_parse_files_touched "$R4_TMP/plan4.md" || true)
+[ -z "$got" ] || { echo "FAIL: missing Files touched section should give empty, got: '$got'"; exit 1; }
+
+# v0.9.4 (R4): sm_whitelist_match — exact path or shell-glob match.
+if ! declare -f sm_whitelist_match >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_whitelist_match in v0.9.4 (R4)"; exit 1
+fi
+
+WL=$'src/auth/middleware.py\nsrc/auth/handlers.py\nlib/*.py'
+
+# Exact match
+sm_whitelist_match "src/auth/middleware.py" "$WL" || { echo "FAIL: exact path should match"; exit 1; }
+sm_whitelist_match "src/auth/handlers.py" "$WL" || { echo "FAIL: second exact path should match"; exit 1; }
+
+# Glob match
+sm_whitelist_match "lib/jwt.py" "$WL" || { echo "FAIL: lib/*.py glob should match lib/jwt.py"; exit 1; }
+sm_whitelist_match "lib/foo.py" "$WL" || { echo "FAIL: lib/*.py glob should match lib/foo.py"; exit 1; }
+
+# No match
+sm_whitelist_match "README.md" "$WL" && { echo "FAIL: README.md should NOT match"; exit 1; } || true
+sm_whitelist_match "src/auth/other.py" "$WL" && { echo "FAIL: src/auth/other.py should NOT match"; exit 1; } || true
+sm_whitelist_match "lib/nested/x.py" "$WL" && { echo "FAIL: lib/*.py should NOT match nested lib/nested/x.py"; exit 1; } || true
+
+# Empty inputs
+sm_whitelist_match "" "$WL" && { echo "FAIL: empty file should NOT match"; exit 1; } || true
+sm_whitelist_match "src/foo.py" "" && { echo "FAIL: empty whitelist should NOT match"; exit 1; } || true
+
+rm -rf "$R4_TMP"
+trap - EXIT
+
 echo OK

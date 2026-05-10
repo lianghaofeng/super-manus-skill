@@ -166,4 +166,26 @@ grep -qF "CLAUDE_CODE_EFFORT_LEVEL" "$F" \
 grep -qiE "effort.*highest|highest.*effort|env var.*highest|highest.*priority" "$F" \
   || { echo "FAIL: v0.8.2 must clarify env var has highest priority (overrides frontmatter)"; exit 1; }
 
+# === v0.9.4 R4: code-writer commit hygiene + whitelist mechanical check ====
+# Orchestrator must (a) snapshot the working tree before spawning code-writer,
+# parse `## Files touched` into a whitelist, and prompt the user when dirty
+# files overlap with phase scope; (b) after the code-writer returns, mechanical-
+# match every committed/staged path against the whitelist and prompt on
+# violation. Both prompts go through AskUserQuestion — no silent auto-reset.
+
+grep -qF "sm_parse_files_touched" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must reference sm_parse_files_touched helper for whitelist parsing"; exit 1; }
+grep -qF "sm_whitelist_match" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must reference sm_whitelist_match helper for whitelist matching"; exit 1; }
+grep -qiE "pre-spawn working[- ]tree check|working[- ]tree check" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must define a pre-spawn working-tree check before code-writer spawn"; exit 1; }
+grep -qiE "post-return.*whitelist|commit whitelist check|whitelist check.*code-writer|code-writer.*whitelist" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must define a post-return commit whitelist check on code-writer commits"; exit 1; }
+grep -qF "AskUserQuestion" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must surface violations via AskUserQuestion (no silent auto-reset)"; exit 1; }
+grep -qF "OUT_OF_SCOPE_DIRTY" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must handle the OUT_OF_SCOPE_DIRTY early-return from code-writer"; exit 1; }
+grep -qF "PRE_CODEWRITER_HEAD" "$F" \
+  || { echo "FAIL: v0.9.4 R4 must snapshot pre-code-writer HEAD for precise reset on violation"; exit 1; }
+
 echo OK
