@@ -232,4 +232,29 @@ grep -qiE "Pass 2 ONLY|ONLY Pass 2|Pass 2 \\(Step 1c\\)|Pass 1 is invariant|Pass
 grep -qF ".pass1_files_touched_p<n>.yml" "$F" \
   || { echo "FAIL: v0.9.4 R5 phase close must delete .pass1_files_touched_p<n>.yml temp artifact"; exit 1; }
 
+# === v0.9.4 R6: cross-update reflection collection + metadata format =====
+# Orchestrator now uses sm_collect_reflections to glob+filter reflections from
+# every findings.md in the module. Phase-close synthesis writes the new heading
+# `### <update-slug>/p<n>: <name>` and the <!-- meta: --> metadata block.
+
+# Helper invocation
+grep -qF "sm_collect_reflections" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must invoke sm_collect_reflections helper"; exit 1; }
+
+# New heading format
+grep -qE "<update-slug>/p<n>" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must reference new heading '### <update-slug>/p<n>: <name>'"; exit 1; }
+
+# Metadata block written by orchestrator at phase close
+grep -qF "<!-- meta:" "$F" \
+  || { echo "FAIL: v0.9.4 R6 phase-close synthesis must write the <!-- meta: ... --> block"; exit 1; }
+for field in files_touched keywords trigger retries created; do
+  grep -qE "${field}:" "$F" \
+    || { echo "FAIL: v0.9.4 R6 metadata block must include '${field}:' field"; exit 1; }
+done
+
+# Cross-update scope (was update-scoped pre-v0.9.4)
+grep -qiE "cross-update|every findings.md|glob.*findings|cross update" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must describe cross-update reflection injection"; exit 1; }
+
 echo OK

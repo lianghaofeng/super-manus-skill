@@ -242,6 +242,108 @@ for line in text.splitlines():
 PY
 }
 
+# v0.9.4 (R6): collect cross-update reflections from every findings.md under
+# docs/super-manus/impl/<module>/*/findings.md, filter by keyword match (against
+# phase_name tokens) and optional files_touched overlap, sort by file mtime DESC
+# (newer wins) + retries DESC (high-retry = stronger lesson), return top K=5
+# entries formatted as ### headings with their bodies. The output is injected
+# into the architect spawn as <prior_lessons> fact block.
+#
+# Heading provenance: every returned entry is prefixed with <update-slug>/ so
+# the architect sees which update each lesson came from. Legacy entries (pre-
+# v0.9.4 headings like `### Phase 3: ...`) get the same prefix treatment.
+#
+# Args:
+#   $1 — module name
+#   $2 — phase_name (tokenized lowercase, alnum split, deduped)
+#   $3 — optional newline-separated files_touched list (Pass 2 filter signal)
+sm_collect_reflections() {
+  local module="${1:-}"
+  local phase_name="${2:-}"
+  local files_list="${3:-}"
+  [ -n "$module" ] && [ -n "$phase_name" ] || return 0
+  MODULE="$module" PHASE_NAME="$phase_name" FILES_LIST="$files_list" python3 - <<'PY'
+import os, re, sys, glob
+
+module = os.environ["MODULE"]
+phase_name = os.environ["PHASE_NAME"]
+files_list = [f for f in os.environ["FILES_LIST"].splitlines() if f.strip()]
+
+phase_tokens = set(re.findall(r"[a-z0-9]+", phase_name.lower()))
+files_set = set(files_list)
+
+pattern = f"docs/super-manus/impl/{module}/*/findings.md"
+findings_files = glob.glob(pattern)
+
+entries = []
+for fpath in findings_files:
+    update_slug = os.path.basename(os.path.dirname(fpath))
+    try:
+        text = open(fpath).read()
+    except Exception:
+        continue
+    section_match = re.search(r"(?ms)^## Reflections\s*$(.*?)(?=^## |\Z)", text)
+    if not section_match:
+        continue
+    section = section_match.group(1)
+    try:
+        mtime = os.path.getmtime(fpath)
+    except OSError:
+        mtime = 0.0
+    entry_re = re.compile(
+        r"^### (.+?)\s*$\n"
+        r"(?:<!-- meta:\s*\n(.*?)\n-->\s*\n)?"
+        r"(.*?)"
+        r"(?=^### |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    for em in entry_re.finditer(section):
+        heading = em.group(1).strip()
+        meta_text = em.group(2) or ""
+        body = (em.group(3) or "").strip()
+        if not body and not heading:
+            continue
+        meta = {}
+        for line in meta_text.splitlines():
+            mm = re.match(r"\s*(\w+):\s*(.*)$", line)
+            if mm:
+                meta[mm.group(1)] = mm.group(2).strip()
+        kw_str = meta.get("keywords", "")
+        kw_tokens = set(re.findall(r"[a-z0-9]+", kw_str.lower())) if kw_str else set()
+        ft_str = meta.get("files_touched", "")
+        ft_paths = set(re.findall(r"[^\s,\[\]]+", ft_str)) if ft_str else set()
+        try:
+            retries = int(meta.get("retries", "0") or "0")
+        except ValueError:
+            retries = 0
+        heading_tokens = set(re.findall(r"[a-z0-9]+", heading.lower()))
+        kw_pool = kw_tokens | heading_tokens
+        keyword_hit = bool(kw_pool & phase_tokens)
+        file_hit = bool(ft_paths & files_set) if files_set else False
+        if not (keyword_hit or file_hit):
+            continue
+        if heading.startswith(f"{update_slug}/"):
+            display_heading = heading
+        else:
+            display_heading = f"{update_slug}/{heading}"
+        entries.append({
+            "mtime": mtime,
+            "retries": retries,
+            "heading": display_heading,
+            "body": body,
+        })
+
+entries.sort(key=lambda e: (-e["mtime"], -e["retries"]))
+
+K = 5
+for e in entries[:K]:
+    print(f"### {e['heading']}")
+    if e["body"]:
+        print(e["body"])
+    print()
+PY
+}
+
 # v0.9.4 (R5): build the `<existing_code_facts>` block injected into Pass 2 of
 # the two-pass impl-architect spawn. Given a newline-separated list of file
 # paths, dump for each: `git log -5 --oneline -- <f>` and `head -N <f>` (N

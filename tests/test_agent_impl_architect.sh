@@ -194,4 +194,25 @@ grep -qF "previous_architect_draft" "$F" \
 grep -qiE "Branch on .{0,5}pass|pass mode|pass=1.{0,40}pass=2|If .{0,5}pass=1" "$F" \
   || { echo "FAIL: v0.9.4 R5 procedure must branch on pass input (step 0 or equivalent)"; exit 1; }
 
+# === v0.9.4 R6: cross-update reflection injection =========================
+# prior_reflections is now cross-UPDATE (was cross-phase within one update).
+# Headings use the new `<update-slug>/p<n>: <name>` form; persona must teach
+# the architect to recognize provenance and handle legacy headings.
+
+# New heading format documented in Inputs / procedure
+grep -qE "<update-slug>/p<n>" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must document new heading format '### <update-slug>/p<n>: <name>'"; exit 1; }
+
+# Legacy heading still supported (parser handles both)
+grep -qiE "legacy .{0,30}Phase <m>|legacy.{0,30}heading|pre-v0\.9\.4" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must mention legacy '### Phase <m>:' headings are still parsed"; exit 1; }
+
+# Cross-update nature called out
+grep -qiE "cross-update|cross update|across update|every findings|other update" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must describe prior_reflections as cross-update (not just cross-phase)"; exit 1; }
+
+# Provenance handling — same-update vs cross-update applicability
+grep -qiE "provenance|same-update|cross-update.*translation|different module|may need translation" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must teach the architect to read update-slug provenance"; exit 1; }
+
 echo OK

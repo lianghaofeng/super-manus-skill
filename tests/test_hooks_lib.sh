@@ -424,4 +424,196 @@ popd >/dev/null
 rm -rf "$R5_TMP"
 trap - EXIT
 
+# v0.9.4 (R6): sm_collect_reflections — globs findings.md across all updates
+# under a module, parses ### entries with their <!-- meta: --> blocks, filters
+# by keyword (phase_name tokens) + optional files_touched overlap, sorts by
+# mtime DESC + retries DESC, returns top K=5 entries with <update-slug>/
+# provenance prefix in heading.
+if ! declare -f sm_collect_reflections >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_collect_reflections in v0.9.4 (R6)"; exit 1
+fi
+
+R6_TMP=$(mktemp -d)
+trap 'rm -rf "$R6_TMP"' EXIT
+pushd "$R6_TMP" >/dev/null
+
+mkdir -p "docs/super-manus/impl/probe/2026-05-01-foo"
+mkdir -p "docs/super-manus/impl/probe/2026-05-08-bar"
+mkdir -p "docs/super-manus/impl/teach/2026-05-09-baz"
+
+# Case 1: missing module → empty
+got=$(sm_collect_reflections "nope" "anything" || true)
+[ -z "$got" ] || { echo "FAIL: nonexistent module should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 2: findings exists but no Reflections section → empty
+cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
+# Findings: foo
+
+## Decisions
+
+## Errors
+
+## Data points / research
+
+## Reflections
+
+(no reflections yet)
+EOF
+got=$(sm_collect_reflections "probe" "validate jwt" || true)
+[ -z "$got" ] || { echo "FAIL: empty Reflections should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 3: matching reflection via keyword (heading token fallback, no meta)
+cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
+# Findings: foo
+
+## Reflections
+
+### Phase 3: validate jwt signature
+- Misstep: forgot to grep before claiming add
+- Root cause: state-blind under pressure
+- Heuristic: always grep for existing functions before drafting Approach
+EOF
+# Touch to be older than bar
+touch -t 202504010800 "docs/super-manus/impl/probe/2026-05-01-foo/findings.md"
+
+got=$(sm_collect_reflections "probe" "validate jwt cookies")
+echo "$got" | grep -qF "2026-05-01-foo/Phase 3" \
+  || { echo "FAIL: should match by keyword and prepend update-slug to legacy heading:"; echo "$got"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "Heuristic: always grep" \
+  || { echo "FAIL: body should be included in output"; popd >/dev/null; exit 1; }
+
+# Case 4: matching reflection via meta keywords + files_touched
+cat > "docs/super-manus/impl/probe/2026-05-08-bar/findings.md" <<'EOF'
+# Findings: bar
+
+## Reflections
+
+### 2026-05-08-bar/p2: refactor handlers
+<!-- meta:
+  files_touched: [src/auth/handlers.py, src/auth/types.py]
+  keywords: [handlers, refactor, auth]
+  trigger: reviewer-RETURN
+  retries: 1
+  created: 2026-05-08
+-->
+- Misstep: split signin without keeping back-compat alias
+- Root cause: insufficient review of call sites
+- Heuristic: grep -r for callers before renaming public functions
+EOF
+
+# Match via keyword "handlers" (from meta)
+got=$(sm_collect_reflections "probe" "rewrite handlers")
+echo "$got" | grep -qF "2026-05-08-bar/p2" \
+  || { echo "FAIL: should match via meta keywords; got:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Match via files_touched overlap (no keyword overlap)
+got=$(sm_collect_reflections "probe" "unrelated phase name" "src/auth/handlers.py")
+echo "$got" | grep -qF "2026-05-08-bar/p2" \
+  || { echo "FAIL: should match via files_touched overlap when keywords miss; got:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Case 5: cross-update — both updates' entries match, newer (bar) sorts first
+got=$(sm_collect_reflections "probe" "validate handlers jwt refactor")
+first_heading=$(echo "$got" | grep -E "^### " | head -1)
+echo "$first_heading" | grep -qF "2026-05-08-bar" \
+  || { echo "FAIL: newer update (bar) should sort first; first heading: '$first_heading'"; popd >/dev/null; exit 1; }
+
+# Case 6: scope by module — teach module reflection MUST NOT appear in probe query
+cat > "docs/super-manus/impl/teach/2026-05-09-baz/findings.md" <<'EOF'
+# Findings: baz
+
+## Reflections
+
+### 2026-05-09-baz/p1: jwt handlers
+<!-- meta:
+  files_touched: [src/teach/jwt.py]
+  keywords: [jwt, handlers]
+  trigger: reviewer-RETURN
+  retries: 0
+  created: 2026-05-09
+-->
+- Misstep: x
+- Root cause: y
+- Heuristic: z
+EOF
+got=$(sm_collect_reflections "probe" "jwt handlers")
+echo "$got" | grep -qF "teach" && { echo "FAIL: teach-module reflection leaked into probe query"; popd >/dev/null; exit 1; } || true
+echo "$got" | grep -qF "probe" \
+  || true  # probe headings don't necessarily contain literal "probe"
+
+# Case 7: top-K=5 cap (add 6+ matching entries, expect ≤5 in output)
+cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
+# Findings: foo
+
+## Reflections
+
+### Phase 1: tokenize input
+<!-- meta:
+  files_touched: [src/a.py]
+  keywords: [tokenize]
+  trigger: reviewer-RETURN
+  retries: 1
+  created: 2026-04-01
+-->
+- Misstep: m1
+- Root cause: r1
+- Heuristic: h1
+
+### Phase 2: tokenize cache
+<!-- meta:
+  keywords: [tokenize, cache]
+  trigger: reviewer-RETURN
+  retries: 1
+-->
+- Misstep: m2
+- Root cause: r2
+- Heuristic: h2
+
+### Phase 3: tokenize edge
+<!-- meta:
+  keywords: [tokenize, edge]
+  trigger: reviewer-RETURN
+  retries: 1
+-->
+- Misstep: m3
+- Root cause: r3
+- Heuristic: h3
+
+### Phase 4: tokenize null
+<!-- meta:
+  keywords: [tokenize, null]
+  trigger: reviewer-RETURN
+  retries: 1
+-->
+- Misstep: m4
+- Root cause: r4
+- Heuristic: h4
+
+### Phase 5: tokenize unicode
+<!-- meta:
+  keywords: [tokenize, unicode]
+  trigger: reviewer-RETURN
+  retries: 1
+-->
+- Misstep: m5
+- Root cause: r5
+- Heuristic: h5
+
+### Phase 6: tokenize whitespace
+<!-- meta:
+  keywords: [tokenize, whitespace]
+  trigger: reviewer-RETURN
+  retries: 1
+-->
+- Misstep: m6
+- Root cause: r6
+- Heuristic: h6
+EOF
+got=$(sm_collect_reflections "probe" "tokenize handlers")
+count=$(echo "$got" | grep -cE "^### " || echo 0)
+[ "$count" -le 5 ] || { echo "FAIL: top-K cap should limit to ≤5 entries, got $count"; popd >/dev/null; exit 1; }
+
+popd >/dev/null
+rm -rf "$R6_TMP"
+trap - EXIT
+
 echo OK

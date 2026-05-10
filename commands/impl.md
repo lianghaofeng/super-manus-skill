@@ -105,7 +105,7 @@ Spawn `impl-architect` with `pass=1`. Standard inputs PLUS the `pass` flag:
 - `findings_path` — `$UPDATE_DIR/findings.md`
 - `progress_path` — `$UPDATE_DIR/progress.md`
 - `lsp_available` — `true` or `false`
-- `prior_reflections` — verbatim contents of `$UPDATE_DIR/findings.md ## Reflections` if non-empty (heuristics from prior phases of THIS update); absent / empty if no prior reflections exist. Read the section once before the first spawn of this phase; reuse the same value on any re-spawn within this phase.
+- `prior_reflections` — cross-update reflection collection (v0.9.4 R6). Computed via `sm_collect_reflections "$MODULE" "<phase_name>" "<files_list>"` from [hooks/lib.sh](../hooks/lib.sh). Globs every `docs/super-manus/impl/$MODULE/*/findings.md`, parses each `### <update-slug>/p<n>: <name>` entry (and legacy `### Phase <n>:` entries) plus its optional `<!-- meta: -->` block, filters by keyword (phase_name tokens) and files_touched overlap, sorts by file mtime DESC + retries DESC, returns top K=5. Falls back to "(none)" if no entries match. On Pass 1, pass empty `<files_list>` (only keyword filter active). On Pass 2, pass `$PASS1_PATHS` (both filters active; files match is stronger signal). Re-compute on each spawn within a phase — newly-closed phases of this update may have appended new entries.
 - `pass` — `1` (v0.9.4 R5)
 
 Spawning prompt skeleton (Pass 1):
@@ -598,10 +598,17 @@ When ALL `## Verification` commands pass:
 
 1. **Synthesize phase reflection (Reflexion-style cross-phase memory).** Read `$UPDATE_DIR/findings.md ## Errors` and count rows whose When-or-What cell mentions this phase (e.g., `phase p<n>` or `review #1/#2/#3 attempt <N>` rows the orchestrator wrote during this phase's RETURN handling). Two cases:
    - **Zero RETURN rows for this phase** — the phase was clean on first try. Skip this step entirely; do NOT write an empty entry.
-   - **One or more RETURN rows for this phase** — synthesize a single H3 entry and append it to `$UPDATE_DIR/findings.md ## Reflections` (orchestrator main thread does this inline; no agent spawn). Exact shape:
+   - **One or more RETURN rows for this phase** — synthesize a single H3 entry and append it to `$UPDATE_DIR/findings.md ## Reflections` (orchestrator main thread does this inline; no agent spawn). Exact shape (v0.9.4 R6 — gained metadata block + cross-update-aware heading):
 
      ```markdown
-     ### Phase <n>: <phase_name>
+     ### <update-slug>/p<n>: <phase_name>
+     <!-- meta:
+       files_touched: [<comma-separated paths from ## Files touched>]
+       keywords: [<lowercase alnum tokens from phase_name>]
+       trigger: reviewer-RETURN
+       retries: <N>
+       created: <YYYY-MM-DD>
+     -->
      - Misstep: <one sentence — what attempt 1 got wrong; the surface event from ## Errors row 1>
      - Root cause: <one sentence — why the writer made that choice; inferred from reviewer's `issues` text>
      - Heuristic: <one sentence — rule for next phase to avoid this; this is the load-bearing line>
@@ -612,6 +619,16 @@ When ALL `## Verification` commands pass:
      - If the Heuristic line reads as a recap of what happened rather than a rule for next time, rewrite it.
      - Three bullets, no more. No code, no file paths, no function names, no test commands — same hygiene as `findings.md ## Decisions`.
      - Append (not prepend) so phase order matches reading order.
+
+     Metadata block (v0.9.4 R6) computation:
+     - `<update-slug>` = `$(basename "$UPDATE_DIR")` (e.g., `2026-05-11-runtime-probe`).
+     - `files_touched` = `sm_parse_files_touched "$UPDATE_DIR/tasks/p<n>_impl.md"` formatted as `[a, b, c]`.
+     - `keywords` = lowercase alnum tokens from `phase_name`, deduped, formatted as `[tok1, tok2, ...]`.
+     - `trigger` = always `reviewer-RETURN` for orchestrator-written entries. (User-curated entries via `/super-manus:log --reflection` use `user-curated`.)
+     - `retries` = the count of RETURN rows just counted.
+     - `created` = today's date in `YYYY-MM-DD`.
+
+     The metadata block is what `sm_collect_reflections` filters on at the next architect spawn (this update's or any future update's). Without it, the entry still appears (heading-token fallback), but `files_touched` matching is unavailable.
 2. Edit `task_plan.md ## Phases` to flip the phase row's Status from `in_progress` to `closed`.
 3. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"` to regenerate `progress.md ## Outstanding`.
 4. Delete the temporary `$UPDATE_DIR/.test_hashes_p<n>.txt` file (it served its purpose).
