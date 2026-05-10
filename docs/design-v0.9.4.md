@@ -295,4 +295,17 @@ Old reflections use `### Phase <n>: <name>`. On parse:
 
 ## Status
 
-NOT yet ratified. Each R-item needs explicit user "ship it" before implementation. Recommended sequence: R4 → R5 → R6, separate milestones, separate phase plans, separate releases.
+Ratified and shipped in v0.9.4 (2026-05-11). All three R-items landed as separate commits, R4 → R5 → R6, with `plugin.json` bumped 0.9.3 → 0.9.4 on the release commit.
+
+Implementation summary:
+
+- **R4** — `agents/impl-code-writer.md` gained the `## Commit hygiene` sub-section; `commands/impl.md` Step 5 split into hash baseline → pre-spawn working-tree check → spawn → post-return whitelist check; helpers `sm_parse_files_touched` + `sm_whitelist_match` in `hooks/lib.sh`. AskUserQuestion-gated on violations, no silent auto-reset.
+- **R5** — `agents/impl-architect.md` gained the `## Pass discipline (two-pass spawn)` section + procedure step 0 branches on `pass`; `commands/impl.md` Step 1 split into 1a/1b/1c (Pass 1 spawn → compute facts → Pass 2 spawn); helper `sm_compute_existing_code_facts` in `hooks/lib.sh`. RETURN_TO_ARCHITECT re-spawns Pass 2 ONLY with `previous_architect_draft` fact block alongside the existing `previous_attempt_feedback`. `.pass1_files_touched_p<n>.yml` is the Pass 1 artifact (cleaned up at phase close).
+- **R6** — `templates/findings.md` heading changed from `### Phase <n>: <name>` to `### <update-slug>/p<n>: <name>` + per-entry `<!-- meta: ... -->` block; `commands/impl.md` Step 9 phase-close synthesis writes the new format; `commands/impl.md` Step 1 `prior_reflections` input is now computed via `sm_collect_reflections` (cross-update glob/filter); helper in `hooks/lib.sh`. Architect persona teaches provenance reading (`<update-slug>/` prefix) and legacy heading compatibility.
+
+Test surface: 44 tests pass on the v0.9.4 commit. Added functional tests for all three helpers + grep-assertion tests on every persona/orchestrator change.
+
+Open Questions still open (deferred to v0.9.5+):
+- R4 OQ1 — robust glob expansion at whitelist build time (current impl uses per-segment fnmatch which is good enough for the file-level whitelist).
+- R5 OQ1 — token-cost telemetry on double-architect-spawn; gate to "if Pass 1's files_touched is unchanged from prior phase's `## Files touched`, skip Pass 1" remains future work.
+- R6 OQ1 — staleness decoration (`(stale, audit)` on entries older than 6 months); deferred until real-world data shows the noise is annoying.
