@@ -242,6 +242,41 @@ for line in text.splitlines():
 PY
 }
 
+# v0.9.4 (R5): build the `<existing_code_facts>` block injected into Pass 2 of
+# the two-pass impl-architect spawn. Given a newline-separated list of file
+# paths, dump for each: `git log -5 --oneline -- <f>` and `head -N <f>` (N
+# adapts: 100 for ≤5 files, 50 for >5 files — caps total volume). Files that
+# don't exist yet are flagged "(NEW file)" so the architect knows "add" is
+# correct rather than "replace".
+#
+# The block is non-negotiable factual context for the architect: every
+# ## Approach claim touching a listed file must be consistent with this dump.
+# That's R5's whole point — close the state-blind gap by replacing advisory
+# "grep before claiming add" text with orchestrator-pre-computed facts.
+#
+# Echoes the assembled fact block to stdout. Empty input → empty output.
+sm_compute_existing_code_facts() {
+  local files="${1:-}"
+  [ -n "$files" ] || return 0
+  local file_count head_lines f
+  file_count=$(printf '%s\n' "$files" | grep -c . 2>/dev/null || echo 0)
+  head_lines=100
+  [ "$file_count" -gt 5 ] && head_lines=50
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    printf '### %s\n' "$f"
+    if [ -f "$f" ]; then
+      printf 'Recent commits:\n'
+      git log -5 --oneline -- "$f" 2>/dev/null || printf '(no git history)\n'
+      printf '\nCurrent head (first %d lines):\n' "$head_lines"
+      head -n "$head_lines" "$f" 2>/dev/null || printf '(read failed)\n'
+    else
+      printf '(file does not exist yet — this is a NEW file)\n'
+    fi
+    printf -- '---\n'
+  done <<< "$files"
+}
+
 # v0.9.4 (R4): check whether a file path matches any entry in a newline-separated
 # whitelist. Exact match OR per-segment glob match (fnmatch, `*` does NOT cross
 # `/` — `lib/*.py` matches `lib/jwt.py` but NOT `lib/nested/x.py`). Recursive

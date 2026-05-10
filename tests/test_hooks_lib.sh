@@ -347,4 +347,81 @@ sm_whitelist_match "src/foo.py" "" && { echo "FAIL: empty whitelist should NOT m
 rm -rf "$R4_TMP"
 trap - EXIT
 
+# v0.9.4 (R5): sm_compute_existing_code_facts — given newline-separated file
+# paths, dump `### path` / `git log -5 --oneline` / `head -N` per file. Files
+# that don't exist are flagged `(NEW file)`. Used by /super-manus:impl Step 1b
+# between Pass 1 and Pass 2 of the two-pass architect spawn.
+if ! declare -f sm_compute_existing_code_facts >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_compute_existing_code_facts in v0.9.4 (R5)"; exit 1
+fi
+
+R5_TMP=$(mktemp -d)
+trap 'rm -rf "$R5_TMP"' EXIT
+pushd "$R5_TMP" >/dev/null
+git init -q
+git config user.email test@example.com
+git config user.name test
+git config commit.gpgsign false
+
+# Case 1: empty input → empty output
+got=$(sm_compute_existing_code_facts "" || true)
+[ -z "$got" ] || { echo "FAIL: empty input should give empty output, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 2: a real file with git history
+mkdir -p src
+cat > src/foo.py <<'EOF'
+def foo():
+    return 1
+
+
+def bar():
+    return 2
+EOF
+git add src/foo.py
+git commit -q -m "add foo.py"
+
+got=$(sm_compute_existing_code_facts "src/foo.py")
+echo "$got" | grep -qF "### src/foo.py" || { echo "FAIL: missing ### src/foo.py header in:"; echo "$got"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "Recent commits:" || { echo "FAIL: missing 'Recent commits:' line"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "add foo.py" || { echo "FAIL: missing commit message in git log dump"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "def foo():" || { echo "FAIL: missing 'def foo():' from head dump"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qFx -- "---" || { echo "FAIL: missing '---' separator"; popd >/dev/null; exit 1; }
+
+# Case 3: a file that doesn't exist → (NEW file) marker
+got=$(sm_compute_existing_code_facts "src/new_file.py")
+echo "$got" | grep -qF "(file does not exist yet — this is a NEW file)" \
+  || { echo "FAIL: missing NEW file marker for non-existent path:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Case 4: multiple files (mix of existing and new), >5 files triggers head-50 cap
+for i in 1 2 3 4 5 6; do
+  echo "line $i" > "src/f${i}.py"
+done
+git add src/f*.py
+git commit -q -m "add 6 files"
+
+multi="src/f1.py
+src/f2.py
+src/f3.py
+src/f4.py
+src/f5.py
+src/f6.py"
+got=$(sm_compute_existing_code_facts "$multi")
+# At >5 files, head_lines must be 50 (per helper docstring)
+echo "$got" | grep -qF "first 50 lines" \
+  || { echo "FAIL: >5 files should trigger head -50 cap, got header missing 'first 50 lines'"; popd >/dev/null; exit 1; }
+# Each file appears
+for i in 1 2 3 4 5 6; do
+  echo "$got" | grep -qF "### src/f${i}.py" || { echo "FAIL: missing entry for src/f${i}.py"; popd >/dev/null; exit 1; }
+done
+
+# Case 5: ≤5 files → head-100 cap
+small="src/foo.py"
+got=$(sm_compute_existing_code_facts "$small")
+echo "$got" | grep -qF "first 100 lines" \
+  || { echo "FAIL: ≤5 files should use head -100 cap, got header missing 'first 100 lines'"; popd >/dev/null; exit 1; }
+
+popd >/dev/null
+rm -rf "$R5_TMP"
+trap - EXIT
+
 echo OK

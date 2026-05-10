@@ -146,4 +146,52 @@ grep -qiE "scaffolding.{0,15}challenge|challenged.{0,30}scaffolding|scaffolding.
 grep -qiE "concede|replace .{0,30}scaffolding|reject with evidence|kept scaffolding exception" "$F" \
   || { echo "FAIL: v0.9.0 scaffolding-challenge protocol must specify concede vs reject-with-evidence (not silent ignore)"; exit 1; }
 
+# === v0.9.4 R5: two-pass spawn + existing_code_facts injection ============
+# Architect runs in two modes (pass=1 emits files_touched YAML only; pass=2
+# drafts the full plan with orchestrator-computed existing_code_facts as
+# non-negotiable factual context). On re-spawn, previous_architect_draft is
+# injected as a fact block (replaces "trust the agent to Read its prior draft").
+
+# Pass discipline section heading exists
+grep -qiE "^## Pass discipline|Pass discipline.*two-pass" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must declare a ## Pass discipline (two-pass spawn) section"; exit 1; }
+
+# Both pass modes documented
+grep -qE "pass=1|Pass 1" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must document Pass 1 (pass=1) mode"; exit 1; }
+grep -qE "pass=2|Pass 2" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must document Pass 2 (pass=2) mode"; exit 1; }
+
+# Pass 1 deliverable: YAML at .pass1_files_touched_p<n>.yml
+grep -qF ".pass1_files_touched_p" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must write Pass 1 YAML to .pass1_files_touched_p<n>.yml"; exit 1; }
+grep -qE "files_touched:" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must specify YAML schema starts with 'files_touched:'"; exit 1; }
+
+# Pass 1 forbids drafting other sections
+grep -qiE "do NOT draft.*Approach|JUST scoping|Pass 1 is JUST" "$F" \
+  || { echo "FAIL: v0.9.4 R5 Pass 1 must explicitly forbid drafting ## Approach/Edge/Verification"; exit 1; }
+
+# Pass 2 inputs: pass1_files_touched + existing_code_facts
+grep -qF "pass1_files_touched" "$F" \
+  || { echo "FAIL: v0.9.4 R5 Pass 2 must receive pass1_files_touched as input"; exit 1; }
+grep -qF "existing_code_facts" "$F" \
+  || { echo "FAIL: v0.9.4 R5 Pass 2 must receive existing_code_facts as input"; exit 1; }
+
+# existing_code_facts is non-negotiable factual context
+grep -qiE "non-negotiable|ground truth|factual context" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must declare existing_code_facts as non-negotiable factual context"; exit 1; }
+
+# Add vs replace example — the core state-blind bug R5 prevents
+grep -qiE "add.*foo|replace.*foo|add vs replace|add.{0,5}vs.{0,5}replace" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must give the add-vs-replace example (the state-blind bug R5 prevents)"; exit 1; }
+
+# previous_architect_draft input on re-spawn
+grep -qF "previous_architect_draft" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must document previous_architect_draft input (re-spawn fact injection)"; exit 1; }
+
+# Procedure step 0 branches on pass
+grep -qiE "Branch on .{0,5}pass|pass mode|pass=1.{0,40}pass=2|If .{0,5}pass=1" "$F" \
+  || { echo "FAIL: v0.9.4 R5 procedure must branch on pass input (step 0 or equivalent)"; exit 1; }
+
 echo OK

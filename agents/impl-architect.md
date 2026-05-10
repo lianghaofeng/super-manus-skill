@@ -29,6 +29,48 @@ The orchestrator (the `/super-manus:impl` slash command) provides these in its i
 - `progress_path` — `$update_dir/progress.md`
 - `lsp_available` — `true` or `false`
 - `prior_reflections` — verbatim contents of `$update_dir/findings.md ## Reflections` if non-empty (heuristics from prior phases of THIS update); `(none)` if empty. Each entry is `### Phase <m>: <name>` with three bullets (Misstep / Root cause / **Heuristic**). Only the **Heuristic** line is prescriptive — the rule to honor in this phase's `## Approach` and `## Files touched`.
+- `pass` (v0.9.4 R5) — `1` or `2`. Two-pass spawn. Pass 1: emit ONLY a YAML files_touched candidate (no plan file). Pass 2: draft the full five-section plan with orchestrator-computed `existing_code_facts` as fact block. See `## Pass discipline (two-pass spawn)` below.
+- `existing_code_facts` (v0.9.4 R5, Pass 2 only) — verbatim fact block computed by the orchestrator via `sm_compute_existing_code_facts` over Pass 1's files_touched list. Each file gets `git log -5 --oneline` + `head -N` (or "NEW file" marker if absent). **Non-negotiable factual context**: every `## Approach` claim that touches a listed file MUST be consistent with this dump. The block exists specifically to prevent state-blind "add vs replace" mistakes — if a function already appears in the head dump, your plan must say "replace/extend", not "add".
+- `previous_architect_draft` (v0.9.4 R5, Pass 2 re-spawn only) — verbatim contents of `tasks/p<phase_number>_impl.md` from the rejected prior attempt. The orchestrator injects this as a fact block so you don't have to re-Read the file yourself (prior re-spawns showed Read getting skipped under pressure). Read what you wrote before; revise the sections `previous_attempt_feedback` flagged; do NOT silently re-emit identical content.
+
+## Pass discipline (two-pass spawn) (v0.9.4 R5)
+
+You run in one of two modes per spawn, switched by the `pass` input:
+
+### Pass 1 (`pass=1`) — files_touched candidate
+
+Your ONLY deliverable: a YAML file at `${update_dir}/.pass1_files_touched_p<phase_number>.yml` listing the files this phase will touch. Schema:
+
+```yaml
+files_touched:
+  - src/auth/middleware.py
+  - src/auth/handlers.py
+  - src/auth/jwt.py  # (new)
+  - ${update_dir}/tests/phase_p<phase_number>_validate_jwt.py  # (new)
+```
+
+Discipline for Pass 1:
+- Use Read, Grep, Glob, Bash, and LSP (if available) to inspect the module's source. Same source-priority chain as the full plan (PRD `## What users get` / `## How it connects` → LSP `document symbols` on entry files → grep for cross-module imports).
+- Be conservative — only list files you're confident about. Unsure files go in `## Files touched` of the Pass 2 plan as `(audit)`, NOT in Pass 1's YAML.
+- ALWAYS include the phase test file under `${update_dir}/tests/` per the phase-test naming convention.
+- Mark NEW files (those that don't exist yet) with a `# (new)` inline comment so the orchestrator's `<existing_code_facts>` computation knows to show "NEW file" rather than `head -100` of a non-existent path.
+- Do NOT write to `${update_dir}/tasks/p<phase_number>_impl.md` in Pass 1. Do NOT draft `## Approach`, `## Edge cases`, or `## Verification`. Pass 1 is JUST scoping.
+
+Return ONE summary line:
+
+> pass 1 complete; <N> files listed for phase '<phase_name>'
+
+The orchestrator parses the YAML, computes `<existing_code_facts>`, then re-spawns you with `pass=2`.
+
+### Pass 2 (`pass=2`) — full five-section plan
+
+Your spawning prompt now contains `pass1_files_touched` (verbatim Pass 1 YAML) and `existing_code_facts` (the orchestrator's fact block — `git log` + `head` for each Pass 1 file). Pass 2 is the existing planner contract:
+
+- Draft the full five-section plan at `${update_dir}/tasks/p<phase_number>_impl.md` per the `## Five H2 sections — exact heading names` spec below.
+- **Honor `<existing_code_facts>` as ground truth.** Every `## Approach` claim that touches a file in `pass1_files_touched` MUST be consistent with the dump. If the head dump shows `def foo()` already exists, write "replace `foo()`" not "add `foo()`". If the dump says `(NEW file)`, "add" / "create" is correct for that file.
+- You MAY revise `## Files touched` in Pass 2 (e.g., Pass 1 missed a file, reviewer feedback on re-spawn). Keep the revision a small delta; do NOT rewrite from scratch unless the original scope was fundamentally wrong.
+
+Pass 2 summary line is the existing form: `drafted p<n>_impl.md for phase '<name>'; <X> files touched, <E> edge cases, <Y> (audit) markers`.
 
 ## Deliverable
 
@@ -44,11 +86,18 @@ When done, return ONE summary line to the orchestrator:
 
 (For legacy 4-section migration: `migrated legacy plan; added <E> edge cases`.)
 
+**Pass-aware reminder (v0.9.4 R5)**: the above Deliverable describes Pass 2 behavior. In Pass 1, the deliverable is the YAML file (see `## Pass discipline` above) — NOT the five-section plan.
+
 ### Write barrier — non-negotiable
 
 The `Write` and `Edit` tools may ONLY target paths under `${update_dir}/` (a path inside the user's project). The plugin templates at `${CLAUDE_PLUGIN_ROOT}/templates/*` are READ-ONLY — never invoke `Write` or `Edit` against any path under `${CLAUDE_PLUGIN_ROOT}/`. If you need template content, `Read` it (or pipe it through `sed` via Bash) and direct the output to `${update_dir}/`. Editing the template in place is a sensitive-file violation and will trigger a permission prompt the user has to deny.
 
 ### Procedure (in this order)
+
+0. **Branch on `pass` (v0.9.4 R5).** Read the `pass` input.
+   - If `pass=1`: execute Pass 1 per `## Pass discipline` above. Inspect source, decide files_touched, write YAML to `${update_dir}/.pass1_files_touched_p<phase_number>.yml`, return the Pass 1 summary line, STOP. Do NOT execute the steps below — Pass 1 does not touch `tasks/p<phase_number>_impl.md`.
+   - If `pass=2`: continue to step 1 below. The Pass 2 spawning prompt contains `pass1_files_touched` and `existing_code_facts` — treat the facts block as non-negotiable ground truth when drafting `## Approach`.
+   - If `pass` is missing or absent: treat as `pass=2` for backward compat with pre-v0.9.4 spawning prompts (orchestrator should always set it explicitly in v0.9.4+).
 
 1. **Idempotency check.** Read `${update_dir}/tasks/p<phase_number>_impl.md`. If it exists AND has substantive content in **all five** H2 sections (`## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification` — each non-empty and not just template `<placeholder>` text), do NOT overwrite. Return `phase plan already drafted; resume from existing` and stop.
 
@@ -263,7 +312,7 @@ If your spawning prompt includes a `previous_attempt_feedback` block, you have b
 What to do:
 
 1. **Read the feedback first.** Parse each issue and the suggested action. Do not start writing until you understand which sections of your prior plan need changes.
-2. **Read your prior plan.** It still exists at `${update_dir}/tasks/p<n>_impl.md` — your idempotency guard from earlier no longer applies on a re-spawn. You are expected to overwrite the relevant sections with the feedback addressed.
+2. **Use the `previous_architect_draft` fact block (v0.9.4 R5).** Your spawning prompt now contains `previous_architect_draft` — the verbatim contents of your prior `tasks/p<n>_impl.md`. This is injected as fact context so you don't have to re-Read the file (prior re-spawns showed Read getting skipped under pressure to deliver a revised plan). Compare the prior draft against `previous_attempt_feedback`; identify exactly which sections changed. You may still Read the file if you need to, but the fact block is canonical. Your idempotency guard from earlier no longer applies — you are expected to overwrite the relevant sections.
 3. **Address each issue specifically.** If the reviewer says "plan §3 claims `cn-k12` has field `id` but `head -1` shows no `id` field — verify against real data and revise", run `head -1` yourself, then revise `## Approach` (and `## Files touched` if needed) to match.
 4. **Disagree explicitly when warranted.** If you believe an issue is wrong (e.g., reviewer mis-read your `## Approach`), say so in your summary line: "addressed issues 1, 2; disagreed with issue 3 — see plan §3.2 for clarification". Do NOT silently ignore — silent ignore wastes the loop and risks ESCALATE_TO_USER on the next round.
 5. **No issue is partially addressed.** Either fully address it or explicitly disagree. Half-fixed issues will trigger another RETURN.

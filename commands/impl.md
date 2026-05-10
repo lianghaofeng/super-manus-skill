@@ -83,15 +83,17 @@ If `$override` is non-empty (one of `opus` / `sonnet` / `haiku`), pass `model: "
 
 To globally cap effort across all super-manus agents, export `CLAUDE_CODE_EFFORT_LEVEL` in your shell. To override effort for one specific agent in one project without touching others, drop a copy of `agents/<name>.md` at `.claude/agents/<name>.md` (Claude Code prefers project-scope > plugin-scope).
 
-## Step 1 — Spawn impl-architect
+## Step 1 — Spawn impl-architect (two-pass, v0.9.4 R5)
 
 If no drift, the orchestrator delegates per-phase impl-plan drafting to the `impl-architect` subagent (Agent tool, `subagent_type="super-manus:impl-architect"`). The agent owns the persona ("senior implementation planner"), the five-section template population (v0.9.0: `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification`), and the source-priority hierarchy. Do NOT inline that persona here — see [agents/impl-architect.md](../agents/impl-architect.md).
 
+**v0.9.4 R5: two-pass spawn.** The architect runs in two distinct modes. Pass 1 (`pass=1`) outputs ONLY a YAML `files_touched` candidate to `${UPDATE_DIR}/.pass1_files_touched_p<n>.yml`. The orchestrator then computes `<existing_code_facts>` (recent git log + current head of each file) and re-spawns architect with `pass=2`, injecting the facts as non-negotiable factual context. This closes the state-blind "add vs replace" gap that v0.9.3 dogfooding surfaced (architect re-drafting "add foo()" four times in a row while `foo()` already existed in source).
+
 Why a subagent: phase-plan drafting needs LSP + grep budget on the module's entry files plus a focused PM/engineering voice. Embedding it in the main thread bloats orchestrator context and fragments the persona.
 
-### Inputs to pass in the spawning prompt
+### Step 1a — Pass 1 spawn (files_touched candidate)
 
-Compute these from the resolved target and pass them in the Agent tool's `prompt` field:
+Spawn `impl-architect` with `pass=1`. Standard inputs PLUS the `pass` flag:
 
 - `project_root` — current working directory absolute path
 - `module` — `$MODULE`
@@ -104,11 +106,13 @@ Compute these from the resolved target and pass them in the Agent tool's `prompt
 - `progress_path` — `$UPDATE_DIR/progress.md`
 - `lsp_available` — `true` or `false`
 - `prior_reflections` — verbatim contents of `$UPDATE_DIR/findings.md ## Reflections` if non-empty (heuristics from prior phases of THIS update); absent / empty if no prior reflections exist. Read the section once before the first spawn of this phase; reuse the same value on any re-spawn within this phase.
+- `pass` — `1` (v0.9.4 R5)
 
-### Spawning prompt skeleton
+Spawning prompt skeleton (Pass 1):
 
-> Inputs from /super-manus:impl orchestrator:
+> Inputs from /super-manus:impl orchestrator (Pass 1 — files_touched candidate, v0.9.4 R5):
 >
+> - pass: 1
 > - project_root: `<absolute path>`
 > - module: `<module>`
 > - update_dir: `<absolute path>`
@@ -121,11 +125,58 @@ Compute these from the resolved target and pass them in the Agent tool's `prompt
 > - lsp_available: `<true|false>`
 > - prior_reflections: `<verbatim ## Reflections section text, or "(none)" if empty>`
 >
-> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor in this phase's `## Approach` and `## Files touched`. Return the summary line when done.
+> Run Pass 1 per your agent definition. Inspect source, decide the files this phase will touch, and write the YAML to `${update_dir}/.pass1_files_touched_p<n>.yml`. Do NOT draft the phase plan in Pass 1. Return the Pass 1 summary line.
+
+After Pass 1 returns:
+
+```bash
+PASS1_FILE="$UPDATE_DIR/.pass1_files_touched_p<n>.yml"
+[ -f "$PASS1_FILE" ] || { echo "FAIL: Pass 1 did not produce $PASS1_FILE"; exit 1; }
+# Parse bare paths (skip blank lines, strip `# (new)` comments, strip leading `  - `)
+PASS1_PATHS=$(grep -E '^\s*-\s' "$PASS1_FILE" \
+  | sed -E 's/^\s*-\s+//; s/\s+#.*$//' \
+  | grep -v '^$')
+```
+
+If `PASS1_PATHS` is empty, surface to the user: "impl-architect Pass 1 produced no files_touched; cannot proceed." STOP.
+
+### Step 1b — Compute existing_code_facts
+
+Use `sm_compute_existing_code_facts` (defined in [hooks/lib.sh](../hooks/lib.sh)) to build the fact block over `PASS1_PATHS`:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
+EXISTING_CODE_FACTS=$(sm_compute_existing_code_facts "$PASS1_PATHS")
+```
+
+Each file in the block gets a `### <path>` header, `git log -5 --oneline -- <path>` output, and `head -N` (N=100 for ≤5 files, N=50 for >5 files). Files that don't exist are flagged `(NEW file)` — the architect uses this signal to decide "add" vs "replace".
+
+### Step 1c — Pass 2 spawn (full phase plan)
+
+Re-spawn `impl-architect` with `pass=2` AND the Pass 1 outputs as fact blocks:
+
+Standard inputs (same as Pass 1) PLUS:
+
+- `pass` — `2`
+- `pass1_files_touched` — verbatim contents of `${UPDATE_DIR}/.pass1_files_touched_p<n>.yml`
+- `existing_code_facts` — verbatim `$EXISTING_CODE_FACTS`
+
+Spawning prompt skeleton (Pass 2):
+
+> Inputs from /super-manus:impl orchestrator (Pass 2 — full phase plan, v0.9.4 R5):
+>
+> - pass: 2
+> - [standard inputs, same as Pass 1]
+> - pass1_files_touched: |
+>     <verbatim YAML from .pass1_files_touched_p<n>.yml>
+> - existing_code_facts: |
+>     <verbatim fact block from sm_compute_existing_code_facts>
+>
+> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. The `existing_code_facts` block is non-negotiable factual context — every `## Approach` claim touching a listed file MUST be consistent with the dump (if `foo()` appears in the head dump, write "replace `foo()`", not "add `foo()`"). If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor. Return the summary line when done.
 
 The agent writes `$UPDATE_DIR/tasks/p<n>_impl.md` directly via the Write/Edit tools, seeding from `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` if the file does not yet exist (the template carries the five stable headings `## Objective` / `## Approach` / `## Edge cases` / `## Files touched` / `## Verification` — `## Edge cases` was added in v0.9.0 to lift "test coverage" from "did test-writer remember?" to an architect-committed checklist). It does NOT print the file to chat and it does NOT write code. If the file already has substantive content in all five sections, it is idempotent — it returns "phase plan already drafted; resume from existing" and the orchestrator continues. If the file exists with the legacy 4-section shape (no `## Edge cases`), the architect inserts the section in place and returns "migrated legacy plan; added Edge cases section".
 
-### After the architect returns
+### After Pass 2 returns
 
 The orchestrator MUST:
 
@@ -135,6 +186,16 @@ The orchestrator MUST:
 4. **Migration handling (v0.9.0).** If the architect's summary line begins with `migrated legacy plan; added Edge cases section`, surface an extra one-line warning to the user **before proceeding to Step 2 (impl-reviewer pre-test)**: `"⚠ legacy 4-section plan migrated to 5-section shape; please review the newly-inserted ## Edge cases section in tasks/p<n>_impl.md before tests are written — it was drafted by the architect without your prior approval of those edges."` Do NOT skip pre-test review on a migrated plan; the reviewer's enumeration check is exactly what we want to catch a hastily-inserted section.
 
 Engineering detail (DB schema, API endpoints, code snippets, file diffs) lives in this phase plan — NOT in the per-module PRD. The PRD answered "this module IS what"; this phase plan answers "this phase DOES what".
+
+### Re-spawn protocol on RETURN_TO_ARCHITECT (v0.9.4 R5)
+
+When any reviewer checkpoint (#1 / #2 / #3) returns `RETURN_TO_ARCHITECT`, the orchestrator re-spawns ONLY Pass 2 — Pass 1's files_touched is invariant within a phase (the architect picked them once; the reviewer's complaint is about how, not what). The re-spawn prompt includes:
+
+- All Pass 2 inputs above (same `pass1_files_touched`, freshly-recomputed `existing_code_facts` to reflect any new commits since prior attempt).
+- `previous_attempt_feedback` — the reviewer's `issues` + `suggested_actions` verbatim (existing v0.7 behavior).
+- `previous_architect_draft` (NEW v0.9.4 R5) — verbatim contents of the current `${UPDATE_DIR}/tasks/p<n>_impl.md` (the rejected prior draft). Inject as a fact block in the spawning prompt so the architect doesn't have to re-Read the file (prior re-spawns showed Read getting skipped under pressure).
+
+If reviewer says Pass 1's `files_touched` itself is wrong (rare — a true scoping bug rather than a planning bug), the orchestrator escalates via `AskUserQuestion`: "Reviewer flagged Pass 1 scoping — re-run Pass 1? (a) yes, re-spawn from scratch; (b) escalate to user." Default (b). Pass 1 re-run is heavyweight and rarely the right answer.
 
 ## Step 2 — Spawn impl-reviewer (mode=pre-test) [v0.7]
 
@@ -177,7 +238,7 @@ Track per-checkpoint counter `counter[#1]` (resets per phase, NOT per attempt). 
      ```
      | <YYYY-MM-DD> | review #1 attempt <N> RETURN_TO_ARCHITECT | <issues summary>; suggested: <suggested_actions summary> |
      ```
-  2. Re-spawn `impl-architect` (Step 1) with same inputs PLUS a `previous_attempt_feedback` block in the prompt containing the reviewer's `issues` and `suggested_actions` verbatim.
+  2. Re-spawn `impl-architect` Pass 2 (Step 1c) ONLY — Pass 1 is invariant within a phase per "Re-spawn protocol on RETURN_TO_ARCHITECT (v0.9.4 R5)" in Step 1. Pass 2 re-spawn inputs add a `previous_attempt_feedback` block (reviewer's `issues` + `suggested_actions` verbatim) AND a `previous_architect_draft` fact block (verbatim contents of `${UPDATE_DIR}/tasks/p<n>_impl.md` from the rejected attempt). Re-compute `existing_code_facts` afresh in case new commits landed since the prior attempt.
   3. After architect re-emits the plan, re-invoke this Step 2 review with `attempt_number = counter[#1] + 1`.
 - **ESCALATE_TO_USER** (or counter exhausted) → stop the phase. Append the escalation history to `findings.md ## Errors`. Surface to user verbatim:
 
@@ -290,7 +351,7 @@ Track per-checkpoint counter `counter[#2]`. Initialize to 0.
   3. After test-writer re-commits, re-invoke this Step 4 review with `attempt_number = counter[#2] + 1`.
 - **RETURN_TO_ARCHITECT** → increment `counter[#2]`. If `counter[#2] > 2`, ESCALATE. Otherwise:
   1. Append verdict to `findings.md ## Errors`.
-  2. Re-spawn `impl-architect` (Step 1) with `previous_attempt_feedback`. (Counter at #1 does NOT increment — this is checkpoint #2's RETURN, even if it cascades upstream.)
+  2. Re-spawn `impl-architect` Pass 2 (Step 1c) ONLY with `previous_attempt_feedback` AND `previous_architect_draft` (v0.9.4 R5). (Counter at #1 does NOT increment — this is checkpoint #2's RETURN, even if it cascades upstream.)
   3. After architect re-emits, re-spawn `impl-test-writer` (Step 3) — fresh attempt, counter[#1] AND #2 both apply to their own checkpoints.
   4. Re-invoke Step 2 review (with `counter[#1]` reset to 0 since plan is fresh — but reuse history from prior attempts in findings.md).
   5. If Step 2 APPROVES, fall through to Step 3 (test-writer), then re-invoke this Step 4 review with `attempt_number = counter[#2] + 1`.
@@ -488,7 +549,7 @@ Track per-checkpoint counter `counter[#3]`. Initialize to 0.
   5. After code-writer returns, re-invoke this Step 6 review with `attempt_number = counter[#3] + 1`.
 - **RETURN_TO_ARCHITECT** → increment `counter[#3]`. If `counter[#3] > 2`, ESCALATE. Otherwise:
   1. Append verdict to `findings.md ## Errors`.
-  2. Re-spawn `impl-architect` (Step 1) with `previous_attempt_feedback`. (Counters #1 and #2 reset to 0 — plan + tests are fresh.)
+  2. Re-spawn `impl-architect` Pass 2 (Step 1c) ONLY with `previous_attempt_feedback` AND `previous_architect_draft` (v0.9.4 R5). (Counters #1 and #2 reset to 0 — plan + tests are fresh.)
   3. Cascade through Steps 2 → 3 → 4 → 5 → return here for re-invocation with `attempt_number = counter[#3] + 1`.
 - **ESCALATE_TO_USER** (or counter exhausted) → stop the phase. Append the escalation history to `findings.md ## Errors`. Phase Status stays `in_progress`. Surface to user verbatim per Step 2's ESCALATE template.
 
@@ -554,6 +615,7 @@ When ALL `## Verification` commands pass:
 2. Edit `task_plan.md ## Phases` to flip the phase row's Status from `in_progress` to `closed`.
 3. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"` to regenerate `progress.md ## Outstanding`.
 4. Delete the temporary `$UPDATE_DIR/.test_hashes_p<n>.txt` file (it served its purpose).
+5. Delete the temporary `$UPDATE_DIR/.pass1_files_touched_p<n>.yml` file (v0.9.4 R5 — Pass 1 artifact served its purpose).
 
 The post-commit hook automatically appends commit lines to `$UPDATE_DIR/progress.md ## Completed commits`. Do **not** hand-edit `progress.md` — it is hook-managed.
 

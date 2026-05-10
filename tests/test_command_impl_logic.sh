@@ -188,4 +188,48 @@ grep -qF "OUT_OF_SCOPE_DIRTY" "$F" \
 grep -qF "PRE_CODEWRITER_HEAD" "$F" \
   || { echo "FAIL: v0.9.4 R4 must snapshot pre-code-writer HEAD for precise reset on violation"; exit 1; }
 
+# === v0.9.4 R5: two-pass architect spawn + existing_code_facts injection ===
+# Orchestrator must split Step 1 into 1a (Pass 1 spawn) → 1b (compute facts)
+# → 1c (Pass 2 spawn). On RETURN_TO_ARCHITECT from any reviewer checkpoint,
+# re-spawn ONLY Pass 2 with previous_attempt_feedback AND previous_architect_draft.
+
+grep -qiE "Step 1a|Pass 1 spawn|two-pass" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must split Step 1 into Pass 1 (1a)"; exit 1; }
+grep -qiE "Step 1b|Compute existing|compute.*facts" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must have Step 1b for compute existing_code_facts between passes"; exit 1; }
+grep -qiE "Step 1c|Pass 2 spawn" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must have Step 1c for Pass 2 spawn"; exit 1; }
+
+# pass input flag (1 vs 2)
+grep -qE "pass: 1|pass.{0,3}=.{0,3}1" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must document pass=1 input flag"; exit 1; }
+grep -qE "pass: 2|pass.{0,3}=.{0,3}2" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must document pass=2 input flag"; exit 1; }
+
+# Helper for computing fact block
+grep -qF "sm_compute_existing_code_facts" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must invoke sm_compute_existing_code_facts helper"; exit 1; }
+
+# Pass 1 YAML artifact path
+grep -qF ".pass1_files_touched_p" "$F" \
+  || { echo "FAIL: v0.9.4 R5 must reference .pass1_files_touched_p<n>.yml artifact"; exit 1; }
+
+# Pass 2 spawn carries pass1_files_touched + existing_code_facts
+grep -qF "pass1_files_touched" "$F" \
+  || { echo "FAIL: v0.9.4 R5 Pass 2 spawn must carry pass1_files_touched input"; exit 1; }
+grep -qF "existing_code_facts" "$F" \
+  || { echo "FAIL: v0.9.4 R5 Pass 2 spawn must carry existing_code_facts input"; exit 1; }
+
+# RETURN_TO_ARCHITECT re-spawn injects previous_architect_draft
+grep -qF "previous_architect_draft" "$F" \
+  || { echo "FAIL: v0.9.4 R5 RETURN_TO_ARCHITECT must inject previous_architect_draft fact block"; exit 1; }
+
+# Re-spawn only Pass 2 — Pass 1 invariant within a phase
+grep -qiE "Pass 2 ONLY|ONLY Pass 2|Pass 2 \\(Step 1c\\)|Pass 1 is invariant|Pass 1.*invariant" "$F" \
+  || { echo "FAIL: v0.9.4 R5 RETURN re-spawn must target Pass 2 only (Pass 1 invariant within phase)"; exit 1; }
+
+# Phase close cleans up Pass 1 YAML alongside test hash file
+grep -qF ".pass1_files_touched_p<n>.yml" "$F" \
+  || { echo "FAIL: v0.9.4 R5 phase close must delete .pass1_files_touched_p<n>.yml temp artifact"; exit 1; }
+
 echo OK
