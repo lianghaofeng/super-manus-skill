@@ -36,7 +36,7 @@
 # Override here only if you accept lower-quality plans or weaker review catches.
 #impl-architect: opus
 #impl-reviewer: opus
-#reverse-prd-architect: opus
+#reverse-architect: opus
 
 # Writers — `model: inherit` in frontmatter, so they follow the main session's
 # model by default. On a Sonnet 4.6 main thread you already get sonnet for

@@ -105,4 +105,33 @@ grep -qiF "phase tests" "$F" || { echo "FAIL: return summary must mention 'phase
 grep -qiF "e2e" "$F" || { echo "FAIL: return summary must mention e2e"; exit 1; }
 grep -qiE "red|currently red|failing" "$F" || { echo "FAIL: return summary must mention 'red' (or failing) state"; exit 1; }
 
+# === v0.9.6 R12: cross-update reflections injection for test-writer =========
+# v0.9.4 R6 introduced prior_reflections injection for architect only.
+# v0.9.6 R12 extends the same mechanism to test-writer — same data source
+# (sm_collect_reflections), different reading lens (test-relevant Heuristics).
+# Test-writer's recurring failure modes (vacuous tests, inline-dict fixtures,
+# mirror-test reflex, missed e2e) are exactly the patterns Reflexion catches.
+
+# Input documented
+grep -qF "prior_reflections" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must document prior_reflections input"; exit 1; }
+# Heuristic line is load-bearing
+grep -qF "Heuristic" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must reference Heuristic line as the load-bearing element"; exit 1; }
+# Cross-update nature
+grep -qiE "cross-update|every.*findings|other update|across update" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must describe prior_reflections as cross-update (not just same-update)"; exit 1; }
+# Test-writer-specific reading lens — at least one of the four pattern categories
+grep -qiE "fixture realness|real-data fixture|inline.dict|mirror.test|edge case coverage|e2e completion" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must enumerate test-relevant Heuristic categories (fixture realness / mirror-test / edge case / e2e completion)"; exit 1; }
+# Procedure section exists
+grep -qiE "^## Honor prior_reflections|## Honor.*prior_reflections" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must declare a '## Honor prior_reflections' procedure section"; exit 1; }
+# Provenance handling — same-update vs cross-update applicability
+grep -qiE "provenance|same-update|<update-slug>|may need translation" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must teach the test-writer to read update-slug provenance"; exit 1; }
+# Disregard-explicitly clause (silent ignore is the failure mode)
+grep -qiE "explicit.*justify|silent ignore|disregard.*explicit|honored Heuristic.*doesn.t apply" "$F" \
+  || { echo "FAIL: v0.9.6 R12 must require explicit justification when a Heuristic doesn't apply (no silent ignore)"; exit 1; }
+
 echo OK

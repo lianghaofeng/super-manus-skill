@@ -24,12 +24,12 @@ grep -qF "sm_active_update" "$F" \
 grep -qF "task_plan.md" "$F" || { echo "FAIL: must reference task_plan.md"; exit 1; }
 grep -qF "tasks/p" "$F" || { echo "FAIL: must reference tasks/p<n>_impl.md path"; exit 1; }
 
-# Project-global v0.4/v0.5 paths (no per-feature wrapper). impl-all.md cross-refs
-# impl.md for the full end-of-update gate spec, so prd_drift and roadmap may
+# Project-global paths (no per-feature wrapper). impl-all.md cross-refs
+# impl.md for the full end-of-update gate spec, so drift_log and roadmap may
 # appear as basenames here — that's fine as long as project-global prd/ is
 # anchored. The full-path versions are asserted in test_command_impl_logic.sh.
 grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must reference docs/super-manus/prd/ (project-global PRD root)"; exit 1; }
-grep -qF "prd_drift.md" "$F" || { echo "FAIL: must reference prd_drift.md (drift log, basename or full path)"; exit 1; }
+grep -qF "drift_log.md" "$F" || { echo "FAIL: must reference drift_log.md (v0.9.5 R10 — renamed from prd_drift.md; basename or full path)"; exit 1; }
 grep -qF "roadmap.md" "$F" || { echo "FAIL: must reference roadmap.md (basename or full path)"; exit 1; }
 
 # Spawns ALL FOUR agents — architect, reviewer (3 invocations), test-writer, code-writer.

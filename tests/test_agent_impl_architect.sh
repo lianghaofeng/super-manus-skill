@@ -215,4 +215,30 @@ grep -qiE "cross-update|cross update|across update|every findings|other update" 
 grep -qiE "provenance|same-update|cross-update.*translation|different module|may need translation" "$F" \
   || { echo "FAIL: v0.9.4 R6 must teach the architect to read update-slug provenance"; exit 1; }
 
+# === v0.9.5 R7: per-module spec.md fact injection =========================
+# Pass 2 inputs gain module_spec_path + spec_facts so the architect honors
+# the long-lived engineering contract (## Data contracts / ## Interface
+# contracts / ## Behavioral contracts / ## Design rationale) when drafting
+# ## Approach. Same status as existing_code_facts: non-negotiable.
+
+grep -qF "module_spec_path" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must document module_spec_path input (Pass 2)"; exit 1; }
+grep -qF "spec_facts" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must document spec_facts input (Pass 2)"; exit 1; }
+grep -qF "<module>.spec.md" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must reference docs/super-manus/prd/<module>.spec.md path"; exit 1; }
+# spec_facts is non-negotiable target-state context (same status as existing_code_facts)
+grep -qiE "spec_facts.*non-negotiable|non-negotiable.*spec_facts|spec_facts.*target.state|target.state.*spec_facts" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must declare spec_facts as non-negotiable target-state context"; exit 1; }
+# Drift-surface rule when spec_facts and existing_code_facts disagree (architect surfaces, doesn't pick a side)
+grep -qiE "if they disagree|spec_facts.*existing_code_facts|existing_code_facts.*spec_facts|that IS the drift|surface it" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must instruct the architect to surface (not silently resolve) spec/code disagreement"; exit 1; }
+
+# v0.9.5 R7 write barrier: architect MUST forbid listing <module>.spec.md in ## Files touched
+grep -qiE "spec\.md is FORBIDDEN|FORBIDDEN.*spec\.md|never list.*\.spec\.md|do NOT.*spec\.md.*Files touched" "$F" \
+  || { echo "FAIL: v0.9.5 R7 architect must explicitly forbid listing <module>.spec.md in ## Files touched (orchestrator denylist + code-writer read-only barrier are the other two layers)"; exit 1; }
+# The escalation path: (audit) marker in ## Approach, NOT the whitelist
+grep -qiE "audit.*marker.*Approach|surface.*Approach.*audit|\(audit\) marker pointing the reviewer" "$F" \
+  || { echo "FAIL: v0.9.5 R7 architect must redirect spec-correction needs to (audit) markers in ## Approach, not the Files touched whitelist"; exit 1; }
+
 echo OK

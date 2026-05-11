@@ -1,13 +1,13 @@
 ---
-description: Structured edit on a single prd/<module>.md — add a new capability, tighten/split/demote/exclude an existing bullet. Forward iteration ("add a feature") or drift absorption (resolve a pending prd_drift row). Single-section minimum edit, no changelog markers.
+description: Structured edit on a single prd/<module>.md — add a new capability, tighten/split/demote/exclude an existing bullet. Forward iteration ("add a feature") or drift absorption (resolve a pending drift_log.md ## PRD drift row). Single-section minimum edit, no changelog markers.
 ---
 
 This command performs ONE structured edit on a single `prd/<module>.md`. Two trigger contexts share the same 5-option workflow:
 
 - **Forward iteration** — user wants to add a new `## What users get` bullet, tighten an existing one, or extend `## Quality bar` BEFORE any code is written. There is no drift to absorb; this is normal product evolution. After the edit, run `/super-manus:sync <module>` to scaffold the implementation milestone.
-- **Drift absorption** — user has decided that PRD should move (rather than the implementation reverting) to resolve a `pending` row in `prd_drift.md`. The edit restores PRD ↔ implementation alignment.
+- **Drift absorption** — user has decided that PRD should move (rather than the implementation reverting) to resolve a `pending` row in `drift_log.md`. The edit restores PRD ↔ implementation alignment.
 
-Either mode produces a single-section, single-line edit with no changelog markers — `prd/<module>.md` stays a current-state product snapshot. The orchestrator detects which mode applies from `prd_drift.md` and adapts the lead question + post-edit bookkeeping accordingly.
+Either mode produces a single-section, single-line edit with no changelog markers — `prd/<module>.md` stays a current-state product snapshot. The orchestrator detects which mode applies from `drift_log.md` and adapts the lead question + post-edit bookkeeping accordingly.
 
 ## Setup
 
@@ -18,7 +18,7 @@ The user may pass the module as `$ARGUMENTS` (e.g. `/super-manus:prd-update api`
 Read in this order:
 
 1. `docs/super-manus/prd/<module>.md` — full file
-2. `docs/super-manus/prd_drift.md` — find the most recent row whose `Module` column matches and `Resolution` is `pending`. **This determines the mode**:
+2. `docs/super-manus/drift_log.md` — search the `## PRD drift` H2 section ONLY (NOT `## Spec drift` — that's `/super-manus:spec-update`'s concern). Find the most recent row whose `Module` column matches and `Resolution` is `pending`. **This determines the mode**:
    - Matching row exists → **drift absorption** mode; the row's conflict description is the deviation to absorb.
    - No matching row → **forward iteration** mode; ask the user once: "What edit do you want to make to `prd/<module>.md`? One sentence — the new bullet to add, the existing bullet to change, or the section to extend."
 3. The active update for this module (if any) — resolved by the most recently modified subfolder under `docs/super-manus/impl/<module>/`. Read its `task_plan.md ## Goal` and most recent `tasks/p<n>_impl.md ## Objective` if present. In drift mode this grounds the conflict; in forward mode this confirms the new bullet doesn't already exist in flight. If `docs/super-manus/impl/<module>/` is empty (forward mode on a fresh module), skip this step.
@@ -71,6 +71,74 @@ If LSP is unavailable, fall back to grep + Read alone per the protocol; flag the
 
 Use the Edit tool on `docs/super-manus/prd/<module>.md` with the smallest old_string / new_string pair that captures the change. Do not rewrite the whole file.
 
+## Post-edit topic-overlap check (v0.9.6 R11)
+
+After the PRD edit lands, check whether the edit touches a topic that the sibling `prd/<module>.spec.md` also discusses. PRD and spec are upstream/downstream views of the same module (R7 OQ3 ratification) — they MAY discuss the same behavior, they MUST NOT contradict. This check is an **early-warning radar**, NOT a hard gate. The user decides what to do with the warning.
+
+### Detection
+
+1. **Skip if spec missing.** If `docs/super-manus/prd/<module>.spec.md` doesn't exist, skip this whole section (the missing-spec row from end-of-update gate Pass 1 will flag the gap separately).
+2. **Tokenize the edited bullet.** Extract noun/verb tokens (≥4 chars, lowercase, alphanumeric, deduped) from the `new_string` you just wrote. Skip stopwords: `that, this, with, from, into, when, then, what, your, will, have, been, would, should, could, also, only, both, each, more, most, very, just, like, such, some, many, much, even`. Aim for 5-15 candidate tokens.
+3. **Scan spec sections by H2.** Read `prd/<module>.spec.md`. For each H2 section (`## Data contracts` / `## Interface contracts` / `## Behavioral contracts` / `## Design rationale`), grep for the candidate tokens. Count distinct token hits per section.
+4. **Threshold for "potential overlap":** ≥3 distinct tokens hitting a single H2 section's body. Below 3 is noise; ≥3 is signal.
+
+### Action when overlap detected
+
+Use `AskUserQuestion`:
+
+> The PRD bullet you just edited shares topic vocabulary with `prd/<module>.spec.md ## <section>`:
+>
+> **PRD edit:** `<one-line summary of new_string>`
+> **Spec section bullets matching:** `<list of 1-3 spec bullets that share tokens, truncated to 80 chars each>`
+>
+> What now?
+> - **(a) Open spec to inspect** (recommended) — I'll display the full matching section; you decide what to fix (could be spec, could be the PRD edit, could be neither).
+> - **(b) Confirm consistent** — PRD and spec are saying the same thing in different voices; record the cross-check and continue.
+> - **(c) Mark as soft-acknowledged** — I'm aware of the overlap; don't open it now.
+
+### After choice (a) — symmetric resolution paths (v0.9.6 R11.1)
+
+If user picks (a), display the full matching spec section verbatim (`Read` the file, print the section between matched H2 and the next `## ` boundary). Then ask a **follow-up `AskUserQuestion`** with FOUR equal-weight options. Both "fix spec" and "revert/refine PRD" are first-class — the conflict direction is not pre-judged (R7 OQ3 says PRD ↔ spec is upstream/downstream symmetric, not master/slave).
+
+> After reviewing the spec section, what's the right fix?
+> - **(i) Spec is stale — fix spec now.** I'll inline-execute `/super-manus:spec-update <module>` against the affected spec section, with the matching context already loaded (you don't have to re-find the bullet). The spec-update flow runs from "drift absorption" mode; the row's Resolution flips to `spec-update: <section>` per spec-update's own bookkeeping (overrides the `acknowledged-soft:` value this command would otherwise have written).
+> - **(ii) Spec is stale — fix spec later.** I'll record `acknowledged-soft: spec-edit-deferred`. You commit to running `/super-manus:spec-update <module>` before the milestone closes; the row stays out of the hard gate (per R7 OQ3) so it won't block, but the audit trail is preserved.
+> - **(iii) PRD edit was wrong — revert/refine the PRD edit now.** Re-open the PRD bullet you just wrote. I'll inline-execute another pass of `/super-manus:prd-update <module>` against THIS bullet, starting from "what should it actually say?". The drift_log row from this run gets `acknowledged-soft: prd-edit-revised` — your re-edit is the resolution. NOTE: the original `Edit` tool call you made cannot be auto-reverted (Edit is destructive); you'll either tighten the bullet further OR manually restore the prior wording inside the new prd-update.
+> - **(iv) Both are correct in their voices.** PRD describes the user-facing promise ("signin returns within 200ms p95"), spec describes the algorithmic semantics that deliver it ("Redis sliding-window rate-limit; 429 with Retry-After"). Same topic, both correct, no conflict. Record `acknowledged-soft: confirmed-consistent`.
+
+Inline-execution discipline (for (i) and (iii)): follow the same pattern `/super-manus:drive` uses — **read the target command's `commands/*.md` body and execute its instructions in the main thread; do NOT spawn a sub-Skill or nest slash commands**. The orchestrator stays in one thread; the user sees one continuous flow with multiple `AskUserQuestion` checkpoints.
+
+**Row-write timing — load-bearing (R11.1).** R11 does NOT write a drift_log row at the moment of overlap detection. The row is written ONLY after the user's final choice is known (either at the top-level `(b)`/`(c)`, or at one of the four `(a)` follow-up options). This avoids two bugs: (1) double-row when chained command (i)/(iii) writes its own row, (2) stale `acknowledged-soft:` orphan if the user abandons mid-flow. The chained command for (i)/(iii) writes its own row from scratch — R11 stays out of `drift_log.md` for those branches entirely.
+
+### Logging — final row written exactly once based on user's terminal choice
+
+The audit trail is exactly ONE row in `drift_log.md`. Where it lives and what its Resolution is depends on the user's terminal choice. **No row is written until the terminal choice is known.**
+
+| User's terminal choice | Where row lives | Resolution value | Hard-gates? |
+|---|---|---|---|
+| **(b)** confirm consistent (top-level) | `## Spec drift` | `acknowledged-soft: confirmed-consistent` | No |
+| **(c)** soft-acknowledge (top-level) | `## Spec drift` | `acknowledged-soft: skipped` | No |
+| **(a) → (i)** fix spec now | (no R11 row — chained spec-update writes its own row in `## Spec drift` with `spec-update: <section>`) | n/a (chained command owns it) | No (until escalated by user) |
+| **(a) → (ii)** fix spec later | `## Spec drift` | `acknowledged-soft: spec-edit-deferred` | No |
+| **(a) → (iii)** PRD edit was wrong, refine | (no R11 row — chained prd-update writes its own row in `## PRD drift` with `prd-update: <option-letter>`) | n/a (chained command owns it) | No (until escalated) |
+| **(a) → (iv)** both correct in their voices | `## Spec drift` | `acknowledged-soft: confirmed-consistent` | No |
+
+If overlap NOT detected (token hit count < 3 in every spec section), skip this whole logging — silence is the default. Don't log "no overlap detected" rows; that's noise.
+
+### Manual escalation to hard drift (any branch)
+
+If at any point AFTER the row is written the user re-judges and decides the overlap is a real conflict that SHOULD block end-of-update, they manually edit `docs/super-manus/drift_log.md` and change THAT row's Resolution cell from `acknowledged-soft: ...` to `pending`. drift_log's append-only invariant explicitly permits Resolution-cell mutation (only the cell, not the row itself; do NOT append a new row, that would double-count). The row WILL now gate end-of-update at Pass 3.
+
+### Conflict column format (when R11 itself writes the row — branches (b)/(c)/(a→ii)/(a→iv))
+
+```
+(soft) PRD-spec topic-overlap: PRD edit '<one-line>' shares vocabulary with spec ## <section>
+```
+
+The `(soft)` prefix is a parser hint for human readers — Pass 3 of the end-of-update gate counts only rows with `Resolution = pending` (case-insensitive equality, NOT substring), so `acknowledged-soft: ...` Resolution values preserve audit trail without blocking roadmap → stable. This honors R7 OQ3 (PRD ↔ spec overlap is not hard drift) while giving the user an actionable signal.
+
+For branches (a→i) and (a→iii), the Conflict column is owned by the chained command, not R11.
+
 ## After the edit lands
 
 Behavior is mode-dependent.
@@ -88,7 +156,7 @@ Behavior is mode-dependent.
 
    Keep each line ≤ 1 sentence. No file paths, no code identifiers, no diff snippets.
 
-2. Mark the matching row in `docs/super-manus/prd_drift.md` from `Resolution = pending` to `Resolution = prd-update: <option-letter>`. Keep all other rows untouched.
+2. Mark the matching row in `docs/super-manus/drift_log.md` from `Resolution = pending` to `Resolution = prd-update: <option-letter>`. Keep all other rows untouched.
 
 3. Do **not** write to `docs/super-manus/impl/<module>/<latest-update>/progress.md` — it is hook-managed.
 
@@ -97,7 +165,7 @@ Behavior is mode-dependent.
 ### Forward iteration mode
 
 1. **Skip the findings.md write.** There may be no active update yet (e.g. user is adding a brand-new capability that has no implementation milestone). Forward iteration is normal product evolution; the PRD edit alone is the record. `git log -p prd/<module>.md` is the audit trail.
-2. **Skip the prd_drift.md mark.** No pending row exists.
+2. **Skip the drift_log.md mark.** No pending row exists.
 3. Do **not** write to `progress.md`.
 4. Tell the user, in one line: "PRD `<module>` updated — added/changed `<section>` `<option>`. Run `/super-manus:sync <module>` to scaffold the implementation milestone for this bullet." (Or "...to extend the active milestone" if `docs/super-manus/impl/<module>/<latest-update>/` exists and is still `iterating` per `roadmap.md`.)
 

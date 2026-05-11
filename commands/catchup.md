@@ -14,7 +14,7 @@ The hook emits a JSON object with `hookSpecificOutput.additionalContext`. Read t
 
 - `docs/super-manus/prd/_index.md` (project-global PRD overview + module manifest)
 - the most recently modified update's `task_plan.md` (resolved purely by mtime via `sm_active_update`)
-- pointers to `findings.md`, `progress.md`, `prd/<module>.md`, `roadmap.md`, `prd_drift.md`
+- pointers to `findings.md`, `progress.md`, `prd/<module>.md`, `prd/<module>.spec.md`, `roadmap.md`, `drift_log.md`
 
 If super-manus is not enabled in this project (no `docs/super-manus/prd/`), the hook says so — surface its message verbatim and suggest `/super-manus:start`.
 

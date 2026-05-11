@@ -50,7 +50,7 @@ Concretely:
 Decide: does the phase intent introduce a capability not declared in `## What users get`, or does it conflict with `## Out of scope` or violate `## Quality bar`?
 
 - **No conflict** → continue to "Probe LSP availability".
-- **Conflict** → append one row to `docs/super-manus/prd_drift.md` (project-global drift log, not per-feature):
+- **Conflict** → append one row to `docs/super-manus/drift_log.md ## PRD drift` (v0.9.5 R10 — project-global drift log, two H2 sections; PRD-vs-code conflicts go under `## PRD drift`):
   ```
   | <YYYY-MM-DD> | <module> | <one-line conflict description> | pending |
   ```
@@ -72,7 +72,7 @@ source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
 override=$(sm_agent_model <agent-name>)
 ```
 
-If `$override` is non-empty (one of `opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool — this overrides the agent file's frontmatter. If empty (no entry, commented out, or no `.super-manus/agents.yml`), omit `model:` and let the agent's frontmatter apply: `opus` for thinkers (architect / reviewer / reverse-prd-architect), `inherit` for writers (test-writer / code-writer / sync-planner — they follow the main session's model unless `CLAUDE_CODE_SUBAGENT_MODEL` env var is set).
+If `$override` is non-empty (one of `opus` / `sonnet` / `haiku`), pass `model: "$override"` to the Agent tool — this overrides the agent file's frontmatter. If empty (no entry, commented out, or no `.super-manus/agents.yml`), omit `model:` and let the agent's frontmatter apply: `opus` for thinkers (architect / reviewer / reverse-architect), `inherit` for writers (test-writer / code-writer / sync-planner — they follow the main session's model unless `CLAUDE_CODE_SUBAGENT_MODEL` env var is set).
 
 `effort:` is NOT routed through this file. Effort priority (high → low):
 
@@ -105,7 +105,7 @@ Spawn `impl-architect` with `pass=1`. Standard inputs PLUS the `pass` flag:
 - `findings_path` — `$UPDATE_DIR/findings.md`
 - `progress_path` — `$UPDATE_DIR/progress.md`
 - `lsp_available` — `true` or `false`
-- `prior_reflections` — cross-update reflection collection (v0.9.4 R6). Computed via `sm_collect_reflections "$MODULE" "<phase_name>" "<files_list>"` from [hooks/lib.sh](../hooks/lib.sh). Globs every `docs/super-manus/impl/$MODULE/*/findings.md`, parses each `### <update-slug>/p<n>: <name>` entry (and legacy `### Phase <n>:` entries) plus its optional `<!-- meta: -->` block, filters by keyword (phase_name tokens) and files_touched overlap, sorts by file mtime DESC + retries DESC, returns top K=5. Falls back to "(none)" if no entries match. On Pass 1, pass empty `<files_list>` (only keyword filter active). On Pass 2, pass `$PASS1_PATHS` (both filters active; files match is stronger signal). Re-compute on each spawn within a phase — newly-closed phases of this update may have appended new entries.
+- `prior_reflections` — cross-update reflection collection (v0.9.4 R6). Computed via `sm_collect_reflections "$MODULE" "<phase_name>" "<files_list>"` from [hooks/lib.sh](../hooks/lib.sh). Globs every `docs/super-manus/impl/$MODULE/*/findings.md`, parses each `### <update-slug>/p<n>: <name>` entry (and legacy `### Phase <n>:` entries) plus its optional `<!-- meta: -->` block, filters by keyword (phase_name tokens) and files_touched overlap, sorts by file mtime DESC + retries DESC, returns top K=5. Falls back to "(none)" if no entries match. On Pass 1, pass empty `<files_list>` (only keyword filter active). On Pass 2, pass `$PASS1_PATHS` (both filters active; files match is stronger signal). **Capture once per phase, reuse across all spawns within that phase** (v0.9.6 R12 discipline): findings.md `## Reflections` is touched only at phase close (Step 9, after ALL writers run), so re-computing mid-phase would return the identical result — pure waste, plus it's a contract smell. Bind to `$PRIOR_REFLECTIONS` at Step 1a (with empty files_list for Pass 1) and re-bind once at Step 1c after `$PASS1_PATHS` is known (for Pass 2's stronger filter); reuse that final value for Pass 2 re-spawns AND for test-writer Step 3 spawn. The phase boundary is the only re-compute point.
 - `pass` — `1` (v0.9.4 R5)
 
 Spawning prompt skeleton (Pass 1):
@@ -160,10 +160,23 @@ Standard inputs (same as Pass 1) PLUS:
 - `pass` — `2`
 - `pass1_files_touched` — verbatim contents of `${UPDATE_DIR}/.pass1_files_touched_p<n>.yml`
 - `existing_code_facts` — verbatim `$EXISTING_CODE_FACTS`
+- `module_spec_path` (v0.9.5 R7) — `docs/super-manus/prd/$MODULE.spec.md` absolute path. Always pass the path; the file may not exist on legacy projects.
+- `spec_facts` (v0.9.5 R7) — verbatim contents of `module_spec_path` if the file exists; otherwise the literal string `(none — no spec for this module)`. Compute via Bash:
+
+  ```bash
+  SPEC_PATH="docs/super-manus/prd/${MODULE}.spec.md"
+  if [ -f "$SPEC_PATH" ]; then
+    SPEC_FACTS=$(cat "$SPEC_PATH")
+  else
+    SPEC_FACTS="(none — no spec for this module)"
+  fi
+  ```
+
+  The architect honors `spec_facts` as non-negotiable target-state context, paired with `existing_code_facts` (which is "what the code currently does"). Same status as `existing_code_facts`; if the two disagree, the architect surfaces the drift in `## Approach` with an `(audit)` marker rather than silently picking a side.
 
 Spawning prompt skeleton (Pass 2):
 
-> Inputs from /super-manus:impl orchestrator (Pass 2 — full phase plan, v0.9.4 R5):
+> Inputs from /super-manus:impl orchestrator (Pass 2 — full phase plan, v0.9.4 R5 + v0.9.5 R7):
 >
 > - pass: 2
 > - [standard inputs, same as Pass 1]
@@ -171,8 +184,11 @@ Spawning prompt skeleton (Pass 2):
 >     <verbatim YAML from .pass1_files_touched_p<n>.yml>
 > - existing_code_facts: |
 >     <verbatim fact block from sm_compute_existing_code_facts>
+> - module_spec_path: `<docs/super-manus/prd/<module>.spec.md absolute path>`
+> - spec_facts: |
+>     <verbatim contents of <module>.spec.md, OR the literal `(none — no spec for this module)`>
 >
-> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. The `existing_code_facts` block is non-negotiable factual context — every `## Approach` claim touching a listed file MUST be consistent with the dump (if `foo()` appears in the head dump, write "replace `foo()`", not "add `foo()`"). If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor. Return the summary line when done.
+> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. The `existing_code_facts` block is non-negotiable factual context — every `## Approach` claim touching a listed file MUST be consistent with the dump (if `foo()` appears in the head dump, write "replace `foo()`", not "add `foo()`"). The `spec_facts` block is non-negotiable target-state context — every `## Approach` claim must be consistent with the long-lived contract; if `spec_facts` and `existing_code_facts` disagree, surface the drift in `## Approach` with an `(audit)` marker rather than silently picking a side. If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor. Return the summary line when done.
 
 The agent writes `$UPDATE_DIR/tasks/p<n>_impl.md` directly via the Write/Edit tools, seeding from `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` if the file does not yet exist (the template carries the five stable headings `## Objective` / `## Approach` / `## Edge cases` / `## Files touched` / `## Verification` — `## Edge cases` was added in v0.9.0 to lift "test coverage" from "did test-writer remember?" to an architect-committed checklist). It does NOT print the file to chat and it does NOT write code. If the file already has substantive content in all five sections, it is idempotent — it returns "phase plan already drafted; resume from existing" and the orchestrator continues. If the file exists with the legacy 4-section shape (no `## Edge cases`), the architect inserts the section in place and returns "migrated legacy plan; added Edge cases section".
 
@@ -182,8 +198,9 @@ The orchestrator MUST:
 
 1. Verify `$UPDATE_DIR/tasks/p<n>_impl.md` exists and has non-empty `## Objective`, `## Approach`, `## Edge cases`, `## Files touched`, `## Verification` sections (5 sections, v0.9.0).
 2. If any of the five headings is missing or empty, surface a one-line warning to the user ("impl-architect produced an incomplete plan; please review tasks/p<n>_impl.md before continuing") — do NOT silently fix.
-3. Surface the agent's summary line verbatim to the user.
-4. **Migration handling (v0.9.0).** If the architect's summary line begins with `migrated legacy plan; added Edge cases section`, surface an extra one-line warning to the user **before proceeding to Step 2 (impl-reviewer pre-test)**: `"⚠ legacy 4-section plan migrated to 5-section shape; please review the newly-inserted ## Edge cases section in tasks/p<n>_impl.md before tests are written — it was drafted by the architect without your prior approval of those edges."` Do NOT skip pre-test review on a migrated plan; the reviewer's enumeration check is exactly what we want to catch a hastily-inserted section.
+3. **Spec-path denylist check (v0.9.5 R7 — mechanical write barrier).** Parse `## Files touched` via `sm_parse_files_touched`. If any returned path matches `docs/super-manus/prd/*.spec.md` (Bash glob), REJECT the plan and re-spawn architect with a `previous_attempt_feedback` block explaining: "Plan whitelist includes `<spec path>`. Spec files are forbidden from `## Files touched` per v0.9.5 R7 — they are owned by `/super-manus:spec-update` and `/super-manus:reverse-prd-spec`. Remove the entry; if the phase genuinely needs the spec corrected, surface that as an `(audit)` marker in `## Approach` for the reviewer to route, not via this whitelist." Counter at checkpoint #1 does NOT increment (this is a pre-review structural rejection, not a reviewer verdict). After re-emit, re-run this denylist check. If the re-emitted plan still includes a spec path, ESCALATE_TO_USER with the same message — the user resolves manually. This is the orchestrator-side companion to the architect's "Spec.md is FORBIDDEN in `## Files touched`" rule and the code-writer's spec-read-only barrier; all three layers must hold.
+4. Surface the agent's summary line verbatim to the user.
+5. **Migration handling (v0.9.0).** If the architect's summary line begins with `migrated legacy plan; added Edge cases section`, surface an extra one-line warning to the user **before proceeding to Step 2 (impl-reviewer pre-test)**: `"⚠ legacy 4-section plan migrated to 5-section shape; please review the newly-inserted ## Edge cases section in tasks/p<n>_impl.md before tests are written — it was drafted by the architect without your prior approval of those edges."` Do NOT skip pre-test review on a migrated plan; the reviewer's enumeration check is exactly what we want to catch a hastily-inserted section.
 
 Engineering detail (DB schema, API endpoints, code snippets, file diffs) lives in this phase plan — NOT in the per-module PRD. The PRD answered "this module IS what"; this phase plan answers "this phase DOES what".
 
@@ -273,6 +290,16 @@ Pass these in the Agent tool's `prompt` field:
 - `e2e_dir` — `docs/super-manus/e2e/` absolute path
 - `lsp_available` — `true` or `false`
 - `prior_tests_glob` — comma-separated globs (`$UPDATE_DIR/tests/phase_*`, `docs/super-manus/e2e/<module>/test_*`, `docs/super-manus/e2e/_system/test_*`)
+- `prior_reflections` (v0.9.6 R12) — cross-update reflection collection, computed via the SAME helper architect uses: `sm_collect_reflections "$MODULE" "<phase_name>" "$PASS1_PATHS"` from [hooks/lib.sh](../hooks/lib.sh). **Bind the architect Pass 2 result to a shell variable at Step 1c and reuse THAT variable here**:
+
+  ```bash
+  # In Step 1c, capture once:
+  PRIOR_REFLECTIONS=$(sm_collect_reflections "$MODULE" "$phase_name" "$PASS1_PATHS")
+  # Use $PRIOR_REFLECTIONS in BOTH architect Pass 2 spawn (Step 1c) AND test-writer spawn (Step 3).
+  # NEVER call sm_collect_reflections a second time within the same phase.
+  ```
+
+  The reuse rule is load-bearing for two reasons: (1) findings.md `## Reflections` is touched only at phase close (Step 9, AFTER test-writer runs), so re-computing within the same phase would return the identical result — pure waste; (2) variable binding makes the contract grep-able in the orchestrator script (a future contributor adding a second `sm_collect_reflections` call is a visible code smell, not a silent regression). Falls back to `(none)` when no entries match. The test-writer's persona honors test-relevant Heuristics (fixture realness, edge case coverage, mirror-test traps, e2e completion signals) — see `agents/impl-test-writer.md ## Honor prior_reflections (v0.9.6 R12)`.
 
 ### Spawning prompt skeleton
 
@@ -289,8 +316,9 @@ Pass these in the Agent tool's `prompt` field:
 > - e2e_dir: `<absolute path>`
 > - lsp_available: `<true|false>`
 > - prior_tests_glob: `<comma-separated globs>`
+> - prior_reflections: `<verbatim ## Reflections section text from sm_collect_reflections, or "(none)">`
 >
-> Write phase tests + e2e tests (red) per your agent definition. Commit ONLY test files. Return the summary line when done.
+> Write phase tests + e2e tests (red) per your agent definition. Commit ONLY test files. If `prior_reflections` is non-empty, scan for test-relevant Heuristics (fixture realness / edge case coverage / mirror-test traps / e2e completion signals) and honor each — see `## Honor prior_reflections` in your persona. Return the summary line when done.
 
 The agent writes:
 
@@ -302,7 +330,7 @@ The agent commits ONLY test files. The orchestrator will reject (and abort the p
 
 ### After the test-writer returns
 
-1. Verify the commit touches only paths under `$UPDATE_DIR/tests/` and `docs/super-manus/e2e/`. If any source file was touched, ABORT — append a `test-writer touched non-test files` row to `prd_drift.md` and surface to user.
+1. Verify the commit touches only paths under `$UPDATE_DIR/tests/` and `docs/super-manus/e2e/`. If any source file was touched, ABORT — append a `test-writer touched non-test files` row to `drift_log.md ## PRD drift` (pipeline-violation rows count as PRD-side drift) and surface to user.
 2. Surface the agent's summary line verbatim.
 
 (Hash baseline is established AFTER review #2 APPROVES — see Step 5.)
@@ -567,7 +595,7 @@ done < "$UPDATE_DIR/.test_hashes_p<n>.txt"
 ```
 
 - **All hashes match** → continue to step 5 (verification).
-- **Any mismatch** → ABORT this phase. The phrase "code-writer modified tests" applies. Append a row to `docs/super-manus/prd_drift.md`:
+- **Any mismatch** → ABORT this phase. The phrase "code-writer modified tests" applies. Append a row to `docs/super-manus/drift_log.md ## PRD drift` (pipeline-violation rows count as PRD-side drift):
 
   ```
   | <YYYY-MM-DD> | <module> | code-writer modified tests for phase p<n> | pending |
@@ -653,11 +681,11 @@ Re-read `task_plan.md ## Phases` and count rows where Status is `pending` (exclu
 
 When all phases in `$UPDATE_DIR/task_plan.md` are `closed`, the update is **NOT done** until all three passes succeed. The gate is BLOCKING. Pending == 0 is the required condition to flip the roadmap from `iterating` to `stable`.
 
-### Pass 1 — Refresh drift from this update's commits
+### Pass 1 — Refresh drift from this update's commits + missing-spec detection
 
 Read `docs/super-manus/prd/$MODULE.md` (`## What users get`, `## Quality bar`, `## Out of scope`) and `$UPDATE_DIR/progress.md ## Completed commits`. Apply the **Drift check protocol** at the commit level:
 
-- **"PRD declared but not implemented"** — for each bullet in `## What users get` / `## Quality bar` that no commit visibly satisfies, append to `docs/super-manus/prd_drift.md`:
+- **"PRD declared but not implemented"** — for each bullet in `## What users get` / `## Quality bar` that no commit visibly satisfies, append to `docs/super-manus/drift_log.md ## PRD drift` (v0.9.5 R10 — drift_log replaces prd_drift.md; PRD-side rows go under `## PRD drift`):
   ```
   | <YYYY-MM-DD> | $MODULE | <bullet text> declared but not in commits | pending |
   ```
@@ -667,6 +695,14 @@ Read `docs/super-manus/prd/$MODULE.md` (`## What users get`, `## Quality bar`, `
   ```
 
 The double-source rule still applies: only append a drift row when both LSP and grep (where applicable) agree the gap is real.
+
+**Missing-spec detection (v0.9.5 R7 + R10 — required-mode enforcement).** Independent of commit-vs-PRD drift, also check whether `$MODULE` has a corresponding `<module>.spec.md` sibling. If `docs/super-manus/prd/$MODULE.md` exists but `docs/super-manus/prd/$MODULE.spec.md` does NOT, append one row to `docs/super-manus/drift_log.md ## Spec drift`:
+
+```
+| <YYYY-MM-DD> | $MODULE | missing $MODULE.spec.md (v0.9.5 R7 required-mode: every module must have a sibling engineering reference) | pending |
+```
+
+The user resolves by running `/super-manus:reverse-prd-spec $MODULE spec` (seed from source) or `/super-manus:spec-update $MODULE` (which offers to seed from template). The pending row counts toward Pass 3's `pending == 0` gate, so an update cannot mark roadmap `stable` while the spec sibling is missing.
 
 ### Pass 2 — e2e coverage check (NEW in v0.5)
 
@@ -690,28 +726,33 @@ For each cross-module `## Demo` scenario completed in this update:
 
 Pass 2 violations are resolved by re-spawning `impl-test-writer` in `e2e_only` mode (the user re-runs `/super-manus:impl` and the orchestrator spots the missing e2e in the gate, suggests writing it). Or the user resolves manually.
 
-### Pass 3 — Block until pending == 0
+### Pass 3 — Block until pending == 0 across BOTH drift sections
 
-Read `docs/super-manus/prd_drift.md`. Count rows where the `Module` column equals `$MODULE` AND the `Resolution` column equals `pending` (case-insensitive match on `pending`).
+Read `docs/super-manus/drift_log.md`. Count rows in BOTH H2 sections (`## PRD drift` AND `## Spec drift`) where the `Module` column equals `$MODULE` AND the `Resolution` column equals `pending` (case-insensitive match on `pending`). The total across both sections is what the gate checks — a pending spec-drift row blocks the update the same way a pending PRD-drift row does.
 
-- **If pending > 0** → the update is **BLOCKED**. Print to the user verbatim:
+- **If total pending > 0** → the update is **BLOCKED**. Print to the user verbatim, grouping rows by section so the user knows which command resolves each:
 
-  > Update `<UPDATE_DIR>` cannot be marked done — `<N>` pending PRD drift rows for module `$MODULE`:
+  > Update `<UPDATE_DIR>` cannot be marked done — `<N>` pending drift rows for module `$MODULE` across `drift_log.md`:
   >
-  > 1. `<conflict text from row 1>`
-  > 2. `<conflict text from row 2>`
-  > ...
+  > **## PRD drift** (`<N_prd>` pending):
+  > 1. `<conflict text from PRD-drift row 1>`
+  > 2. ...
   >
-  > Resolve each by either:
-  > - Running `/super-manus:prd-update $MODULE` (PRD edits to absorb the drift; the command flips the row's Resolution out of `pending`), OR
-  > - Reverting the implementation to match PRD and editing the drift row's Resolution to `reverted` directly in `prd_drift.md` with a one-line note in `findings.md ## Decisions` explaining why, OR
-  > - Writing the missing e2e test (for Pass 2 violations) and re-running `/super-manus:impl`.
+  > **## Spec drift** (`<N_spec>` pending):
+  > 1. `<conflict text from spec-drift row 1>`
+  > 2. ...
+  >
+  > Resolve each by:
+  > - **PRD-drift rows**: run `/super-manus:prd-update $MODULE` (PRD edits to absorb the drift; the command flips the row's Resolution out of `pending`), OR
+  > - **Spec-drift rows**: run `/super-manus:spec-update $MODULE` (spec edits to absorb the drift; flips Resolution to `spec-update: <section>`), OR for `missing $MODULE.spec.md` rows, run `/super-manus:reverse-prd-spec $MODULE spec` to seed the spec from source, OR
+  > - For ANY drift kind: revert the implementation to match PRD/spec and edit the drift row's Resolution to `reverted` directly in `drift_log.md` with a one-line note in `findings.md ## Decisions` explaining why, OR
+  > - For Pass 2 e2e violations: write the missing e2e test and re-run `/super-manus:impl`.
   >
   > Then re-run `/super-manus:impl` to re-evaluate this gate.
 
   Do NOT flip the roadmap row to `stable`. Do NOT tell the user the update is complete. STOP.
 
-- **If pending == 0** → the update IS done. Update the module's row in `docs/super-manus/roadmap.md` from `iterating` to `stable`. Continue to "Tell the user".
+- **If total pending == 0** → the update IS done. Update the module's row in `docs/super-manus/roadmap.md` from `iterating` to `stable`. Continue to "Tell the user".
 
 ### Gate is HARD
 

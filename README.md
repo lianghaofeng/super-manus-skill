@@ -2,6 +2,15 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
+> **v0.9.5 release notes — breaking renames** (no backward-compat aliases):
+> - `/super-manus:reverse-prd` → **`/super-manus:reverse-prd-spec`** (now produces PRD AND/OR spec; pick scope interactively or via 2nd positional `both | prd | spec`)
+> - `prd_drift.md` → **`drift_log.md`** (two H2 sections: `## PRD drift` + `## Spec drift`; 4-column schema preserved). `sm-start.sh` auto-migrates legacy projects on next run.
+> - Agent `reverse-prd-architect` → **`reverse-architect`** (update `.super-manus/agents.yml` if you set an override).
+> - **NEW** `prd/<module>.spec.md` per-module engineering reference (4 H2 sections, sibling to `<module>.md`, required per module).
+> - **NEW** `/super-manus:spec-update <module>` — spec-side analog of `/super-manus:prd-update`.
+>
+> Older sections of this README that describe earlier versions retain the old names for historical accuracy. See `docs/design-v0.9.5.md` for the full design.
+
 **LLM Wiki + PRD-driven development, in one loop.**
 
 super-manus fuses two patterns: [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) for knowledge accumulation, and PRD-driven development for execution discipline. The agent compiles your code into a wiki of intent (PRD); the wiki drives the next phase; phase close archives the decisions back. One loop, no chat-history dependency.
@@ -23,9 +32,9 @@ This loop isn't a philosophy — it's pinned down by 4 engineering pillars:
 
 1. **Write a PRD once, then iterate by editing PRD bullets and shipping milestones — every step persisted on disk.** Plans, decisions, findings, and drift entries survive `/clear`, `/compact`, and session restarts. One project = one PRD as target state; per-module milestone folders are the time series. The orchestrator does not depend on chat history to recover where you left off.
 
-2. **Static + dynamic analysis reconstructs the PRD from an existing codebase.** `/super-manus:reverse-prd` runs runtime-first module discovery (compose / Makefile / source structure) plus a passive runtime probe (live processes, listening ports, OpenAPI contracts, git deletion + coldness signals). Long-dormant code is flagged `(audit — runtime-unverified)` rather than carried forward as a live module; runtime-only routes that pure static reading cannot see are recovered through `curl /openapi.json` cross-check.
+2. **Static + dynamic analysis reconstructs the PRD AND the spec from an existing codebase.** `/super-manus:reverse-prd-spec` (renamed from `/super-manus:reverse-prd` in v0.9.5 R9) runs runtime-first module discovery (compose / Makefile / source structure) plus a passive runtime probe (live processes, listening ports, OpenAPI contracts, git deletion + coldness signals). It produces both `prd/<module>.md` (PM voice) and `prd/<module>.spec.md` (engineering voice — schemas, contracts, algorithms) in one source-exploration pass; user picks scope (`both | prd | spec`) interactively. Long-dormant code is flagged `(audit — runtime-unverified)` rather than carried forward as a live module; runtime-only routes that pure static reading cannot see are recovered through `curl /openapi.json` cross-check.
 
-3. **Drift between PRD and code is logged on every iteration — never silently resolved.** Any capability code adds beyond PRD, or any PRD claim code does not deliver, becomes an append-only entry in `prd_drift.md`. The "done" gate refuses to flip until each pending row is resolved by your decision: code retreats, or PRD advances. The agent does not move PRD on its own.
+3. **Drift between PRD/spec and code is logged on every iteration — never silently resolved.** Any capability code adds beyond PRD, or any PRD claim code does not deliver, becomes an append-only entry in `drift_log.md ## PRD drift` (the file was renamed from `prd_drift.md` in v0.9.5 R10; spec ↔ code conflicts go under `## Spec drift` in the same file). The "done" gate refuses to flip until pending rows in BOTH H2 sections are resolved by your decision: code retreats, or PRD/spec advances. The agent does not move PRD or spec on its own.
 
 4. **Architect, test-writer, and code-writer are context-isolated agents, audited by a separate read-only reviewer.** The code-writer cannot modify its own tests — enforced by tool permissions, by persona, and by an orchestrator-side hash baseline. The reviewer audits plan → tests → code at three checkpoints (`pre-test`, `pre-code`, `pre-close`); verdicts are `APPROVE`, `RETURN_TO_<writer>`, or `ESCALATE_TO_USER`, with a per-checkpoint retry budget. Phase tests are committed in red before the code-writer is spawned.
 
@@ -57,10 +66,11 @@ The daily loop is small: write a PRD once, then iterate by editing PRD bullets a
 
 | Command | When to run | What it does |
 |---|---|---|
-| `/super-manus:start` | once per project | Seeds `docs/super-manus/prd/`, `impl/`, `roadmap.md`, `prd_drift.md` (`e2e/` is created lazily by `impl-test-writer` when the first capability ships). |
-| `/super-manus:brainstorm` | new project | 6-question PM interview → writes `prd/_index.md` + per-module `prd/<module>.md` stubs. |
-| `/super-manus:reverse-prd` | existing project, no PRD yet | Reads code (runtime-first module discovery), writes `prd/_index.md` (with ASCII arch diagram) + module stubs. |
-| `/super-manus:prd-update <module>` | adding a capability OR resolving drift | Structured 5-option edit on one `prd/<module>.md`: **add / tighten / split / demote / exclude**. Mode (forward iteration vs drift absorption) is auto-detected. |
+| `/super-manus:start` | once per project | Seeds `docs/super-manus/prd/`, `impl/`, `roadmap.md`, `drift_log.md` (v0.9.5 R10 — renamed from `prd_drift.md`; `e2e/` is created lazily by `impl-test-writer` when the first capability ships). On re-run against an existing pre-v0.9.5 project, auto-migrates legacy `prd_drift.md` and seeds missing per-module `<module>.spec.md` siblings. |
+| `/super-manus:brainstorm` | new project | 6-question PM interview → writes `prd/_index.md` + per-module `prd/<module>.md` stubs (and v0.9.5 R7: matching `prd/<module>.spec.md` siblings, blank engineering reference). |
+| `/super-manus:reverse-prd-spec` | existing project, no PRD/spec yet | Reads code (runtime-first module discovery), writes `prd/_index.md` (with Mermaid arch diagram) + module stubs AND/OR per-module `<module>.spec.md` engineering references. Pick scope interactively (`both | prd | spec`). Renamed from `/super-manus:reverse-prd` in v0.9.5 R9; agent renamed to `reverse-architect`. |
+| `/super-manus:prd-update <module>` | adding a capability OR resolving PRD drift | Structured 5-option edit on one `prd/<module>.md`: **add / tighten / split / demote / exclude**. Mode (forward iteration vs drift absorption) is auto-detected from `drift_log.md ## PRD drift`. |
+| `/super-manus:spec-update <module>` (v0.9.5 R8) | adding an engineering contract OR resolving spec drift | Single-section edit on `prd/<module>.spec.md` (engineering voice — schemas, code identifiers, file paths allowed). Mode auto-detected from `drift_log.md ## Spec drift`. Drift absorb skips findings.md write (engineering reality, not product decision). |
 | `/super-manus:sync <module>` | after a PRD edit | Reads `git diff prd/<module>.md`, drafts 3-6 candidate phases, scaffolds the milestone folder. |
 | `/super-manus:impl` | iterate one phase | Runs ONE phase end-to-end (architect → review → test-writer → review → code-writer → review → verify → close), then stops. Reviewer at 3 checkpoints (pre-test / pre-code / pre-close) drives a re-spawn loop with per-checkpoint retry budget. |
 | `/super-manus:impl-all` | finish a milestone | Loops through ALL pending phases of the active update without pausing. Same 4-agent pipeline + 3 review checkpoints + drift checks per phase. |
@@ -139,7 +149,7 @@ You realize the API needs rate limiting. Don't go write code — write the PRD f
 
 ### Example 3 — code drifted from PRD
 
-While implementing, you added a metrics endpoint that wasn't in PRD. The drift checker stops you and appends a `pending` row to `prd_drift.md`. Two paths:
+While implementing, you added a metrics endpoint that wasn't in PRD. The drift checker stops you and appends a `pending` row to `drift_log.md ## PRD drift` (v0.9.5 R10 — was `prd_drift.md`). Two paths:
 
 ```bash
 # Path A — revert the code, stay aligned with PRD.
@@ -147,25 +157,26 @@ git revert <commit>
 
 # Path B — let PRD catch up to the code (drift absorption).
 /super-manus:prd-update api
-# Drift mode auto-detected (pending row exists for api).
+# Drift mode auto-detected (pending row exists for api in ## PRD drift).
 # Pick "add" to legitimize the metrics endpoint.
 # Writes a paired Decision into the active findings.md;
-# flips prd_drift.md row's Resolution from `pending`.
+# flips drift_log.md row's Resolution from `pending`.
 # End-of-update gate now unblocks.
 ```
 
 ### Example 4 — onboarding an existing project
 
 ```bash
-# Project has code but no PRD.
+# Project has code but no PRD or spec.
 /super-manus:start
-/super-manus:reverse-prd
+/super-manus:reverse-prd-spec
+# Pick scope: both | prd | spec (recommended: both for first run).
 # Stage 1 — runtime-first module discovery (compose / Makefile /
 # apps / scripts).
 # Stage 2 — passive runtime probe (v0.8.0) — ps, listening ports,
 # docker ps, curl /openapi.json, git activity. If compose services
 # are stopped, asks via AskUserQuestion whether to start them.
-# Stage 3 — spawns reverse-prd-architect (chief architect + senior
+# Stage 3 — spawns reverse-architect (chief architect + senior
 # PM persona); architect cross-validates static reading against
 # runtime_facts and writes prd/_index.md (with mandatory ASCII
 # architecture diagram) + per-module stubs.
@@ -196,16 +207,17 @@ The on-disk layout super-manus creates inside a project that uses it:
 ```
 <project-root>/
 └── docs/super-manus/
-    ├── prd/                                    # project-global, ONE source of truth
+    ├── prd/                                    # project-global, ONE source of truth (PRD + spec siblings)
     │   ├── _index.md                           # project overview + module manifest + data flow (target ~700 words of prose; soft cap, code blocks and tables don't count)
-    │   └── <module>.md                         # per-module target state (target ~2000 words of prose; soft cap, code blocks and tables don't count)
+    │   ├── <module>.md                         # per-module target state, PM voice (target ~2000 words of prose; soft cap, code blocks and tables don't count)
+    │   └── <module>.spec.md                    # v0.9.5 R7: per-module engineering reference (target ~3000 words; 4 H2 sections — Data contracts / Interface contracts / Behavioral contracts / Design rationale; required per module)
     ├── e2e/                                    # permanent regression suite, mirrors prd/ (lazy — created by impl-test-writer on first capability)
     │   ├── _system/
     │   │   └── test_<scenario>.<ext>           # cross-module ## Demo scenarios; auto-discovered, runs in CI
     │   └── <module>/
     │       └── test_<capability>.<ext>         # per-module ## What users get capabilities; auto-discovered
     ├── roadmap.md                              # project-global, module status table (auto-managed)
-    ├── prd_drift.md                            # project-global, PRD ↔ implementation drift log (append-only)
+    ├── drift_log.md                            # v0.9.5 R10: project-global, append-only drift log. Two H2 sections (## PRD drift + ## Spec drift), same 4-column schema in each. Renamed from prd_drift.md.
     └── impl/                                   # time series of milestones, per module
         └── <module>/
             └── <YYYY-MM-DD>-<update-name>/     # only place timestamps appear
@@ -239,19 +251,20 @@ Once a PRD exists, three paths can change it. They operate at different scales a
 
 | Scope of change | Path | Source of truth |
 |---|---|---|
-| One bullet (refine / split / demote / exclude / add) | `/super-manus:prd-update <module>` | Your product intent |
-| One module's PRD page (code drifted; want to refresh all 9 sections) | `/super-manus:reverse-prd <module>` | Current source code |
-| Whole project PRD (bootstrap, or comprehensive rewrite) | `/super-manus:reverse-prd` | Current source code |
+| One PRD bullet (refine / split / demote / exclude / add) | `/super-manus:prd-update <module>` | Your product intent |
+| One spec bullet (engineering contract, schema, design rationale) | `/super-manus:spec-update <module>` (v0.9.5 R8) | Your engineering intent |
+| One module's PRD or spec page (code drifted; want to refresh all sections) | `/super-manus:reverse-prd-spec <module> [prd\|spec]` | Current source code |
+| Whole project PRD/spec (bootstrap, or comprehensive rewrite) | `/super-manus:reverse-prd-spec [both\|prd\|spec]` | Current source code |
 
-**Quick rule**: `prd-update` for surgical product-intent edits; `reverse-prd` for source-driven bulk regen. `prd-update` refuses multi-section rewrites; `reverse-prd` has no "edit one bullet" entry. They cover different scales.
+**Quick rule**: `prd-update` / `spec-update` for surgical edits (PM voice / engineering voice respectively); `reverse-prd-spec` for source-driven bulk regen. `prd-update` and `spec-update` both refuse multi-section rewrites; `reverse-prd-spec` has no "edit one bullet" entry. They cover different scales.
 
-**Gray zone — adding N bullets to one section** (e.g. backfilling Exposes/Consumes on multiple modules at once): both tools are awkward here. `prd-update Add` × N runs the 5-option flow N times; per-module `reverse-prd` rewrites all 9 sections. **Hand-editing the file is usually fastest** — [`templates/prd_module.md`](templates/prd_module.md) shows the exact format.
+**Gray zone — adding N bullets to one section** (e.g. backfilling Exposes/Consumes on multiple modules at once): both tools are awkward here. `prd-update Add` × N runs the 5-option flow N times; per-module `reverse-prd-spec` rewrites all sections of the chosen scope. **Hand-editing the file is usually fastest** — [`templates/prd_module.md`](templates/prd_module.md) and [`templates/prd_spec.md`](templates/prd_spec.md) show the exact formats.
 
 ### `prd-update` — two modes, identical options
 
-Same 5 options, two different trigger contexts. The command auto-detects mode from `prd_drift.md`:
+Same 5 options, two different trigger contexts. The command auto-detects mode from `drift_log.md ## PRD drift` (v0.9.5 R10 — was `prd_drift.md`; spec drift goes under `## Spec drift` and is `spec-update`'s concern):
 
-| `prd_drift.md` has a pending row for `<module>`? | Mode | Used for |
+| `drift_log.md ## PRD drift` has a pending row for `<module>`? | Mode | Used for |
 |---|---|---|
 | No | **Forward iteration** | Adding/refining a capability *before* code is written |
 | Yes | **Drift absorption** | PRD catches up to code that already deviated |
@@ -262,7 +275,7 @@ Mode is invisible at the call site — same command, same 5 options. What differ
 |---|---|---|
 | Edits `prd/<module>.md` (single bullet, single section) | ✅ | ✅ |
 | Writes a 3-line Decision into the active update's `findings.md ## Decisions` | — | ✅ |
-| Flips matching `prd_drift.md` row: `Resolution = pending` → `prd-update: <a-e>` | — | ✅ |
+| Flips matching `drift_log.md ## PRD drift` row: `Resolution = pending` → `prd-update: <a-e>` | — | ✅ |
 | Touches `progress.md` | — (hook-managed only) | — (hook-managed only) |
 | Closing message | "Run `/super-manus:sync <module>` to scaffold the milestone." | "Drift row resolved. Resume the update." |
 
@@ -283,7 +296,7 @@ The tech-design refusal is the most common one in practice. PRD is product seman
 
 ## Drift detection
 
-The cardinal rule of super-manus: **the agent never silently updates PRD**. When PRD and code disagree, the disagreement is logged to `prd_drift.md` and surfaced to you — you decide whether code retreats or PRD advances.
+The cardinal rule of super-manus: **the agent never silently updates PRD or spec**. When PRD/spec and code disagree, the disagreement is logged to `drift_log.md` (v0.9.5 R10 — was `prd_drift.md`; PRD-side rows under `## PRD drift`, spec-side rows under `## Spec drift`) and surfaced to you — you decide whether code retreats or PRD/spec advances.
 
 ### What counts as drift
 
@@ -294,7 +307,7 @@ The cardinal rule of super-manus: **the agent never silently updates PRD**. When
 | Code violates a `## Quality bar` constraint | PRD says p99 < 200ms, observed p99 is 5s | **quality violation** |
 | Code crosses a `## Out of scope` line | PRD excludes mobile, repo gains a React Native entry | **out-of-scope crossing** |
 
-Pipeline-violation rows also land in `prd_drift.md` and behave the same way: `code-writer modified tests for phase p<n>` (cheat-prevention hash mismatch), `test-writer touched non-test files`, `missing e2e coverage for capability <c>`, and `e2e for capability <c> is red`. They count toward the gate's `pending` total and block roadmap → `stable` until resolved.
+Pipeline-violation rows also land in `drift_log.md ## PRD drift` and behave the same way: `code-writer modified tests for phase p<n>` (cheat-prevention hash mismatch), `test-writer touched non-test files`, `missing e2e coverage for capability <c>`, and `e2e for capability <c> is red`. Plus v0.9.5 R7 missing-spec rows under `## Spec drift`: `missing <module>.spec.md` (R7 required-mode enforcement). They all count toward the gate's `pending` total and block roadmap → `stable` until resolved.
 
 ### When detection runs
 
@@ -302,7 +315,7 @@ Not a daemon — it runs on six command paths (anchored in [skills/using-sm/SKIL
 
 | Trigger | Compares |
 |---|---|
-| `/super-manus:reverse-prd` | Inferred PRD claims vs current code (initial bootstrap) |
+| `/super-manus:reverse-prd-spec` (v0.9.5 R9 — renamed from `/super-manus:reverse-prd`) | Inferred PRD/spec claims vs current code (initial bootstrap) |
 | `/super-manus:sync <module>` | The new milestone's stated intent vs the module's current PRD |
 | `/super-manus:prd-update` (Tighten / Demote / Split) | The narrowed/demoted/split bullet vs current code (verification before write) |
 | `/super-manus:impl` (phase entry) | The phase's `## Objective` vs PRD `## What users get` / `## Quality bar` / `## Out of scope` |
@@ -325,20 +338,22 @@ LSP unavailable (cold project, polyglot repo, missing toolchain) → grep-only m
 ```
 detected
    ↓
-append one row to prd_drift.md (Resolution = pending)
+append one row to drift_log.md ## PRD drift OR ## Spec drift (Resolution = pending)
    ↓
-agent stops, presents three resolution paths:
-   1. /super-manus:prd-update <m>      — PRD advances to code (drift mode flips Resolution → prd-update: <a-e>)
-   2. git revert <commit> + edit row   — code retreats to PRD; manually set Resolution = reverted with a one-line note in findings.md
-   3. write the missing e2e + re-run   — for Pass 2 "missing/red e2e" rows, the gate clears the row when the e2e is added and goes green
+agent stops, presents resolution paths:
+   1. /super-manus:prd-update <m>      — PRD advances to code (## PRD drift row flips Resolution → prd-update: <a-e>)
+   2. /super-manus:spec-update <m>     — spec advances to code (## Spec drift row flips Resolution → spec-update: <section>) (v0.9.5 R8)
+   3. /super-manus:reverse-prd-spec <m> spec — for "missing <module>.spec.md" rows, seed from source
+   4. git revert <commit> + edit row   — code retreats to PRD/spec; manually set Resolution = reverted with a one-line note in findings.md
+   5. write the missing e2e + re-run   — for Pass 2 "missing/red e2e" rows, the gate clears the row when the e2e is added and goes green
    ↓
-you decide. agent never silently moves PRD.
+you decide. agent never silently moves PRD or spec.
    ↓
 end-of-update gate refuses to flip roadmap → stable
 while any pending row exists for the module
 ```
 
-The `prd_drift.md` file is **row-append-only** — only the Resolution cell is mutable; rows themselves are never deleted or reordered. This is the same mechanism that keeps the implementing agent honest — no silent overrides, every disagreement on the record.
+The `drift_log.md` file (v0.9.5 R10 — was `prd_drift.md`) is **row-append-only** — only the Resolution cell is mutable; rows themselves are never deleted or reordered. Both H2 sections (`## PRD drift` and `## Spec drift`) follow this rule. This is the same mechanism that keeps the implementing agent honest — no silent overrides, every disagreement on the record.
 
 ## Self-sufficient execution discipline
 

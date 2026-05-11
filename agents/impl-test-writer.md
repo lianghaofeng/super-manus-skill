@@ -46,6 +46,7 @@ The orchestrator provides these in its spawning prompt:
 - `e2e_dir` — `docs/super-manus/e2e/` absolute path (project-global)
 - `lsp_available` — `true` or `false`
 - `prior_tests_glob` — comma-separated globs covering `$update_dir/tests/phase_*` and `$e2e_dir/<module>/test_*` so you can read prior coverage without re-discovering paths
+- `prior_reflections` (v0.9.6 R12) — orchestrator-computed cross-update reflection collection. Same computation as architect's `prior_reflections` (via `sm_collect_reflections` over every `docs/super-manus/impl/<module>/*/findings.md`, filtered by `phase_name` keywords + this phase's `files_touched`). Each entry has three bullets — **Misstep / Root cause / Heuristic** — and a heading prefixed with the source update slug. `(none)` if no matches. Only the **Heuristic** line is prescriptive. The collection is shared with architect but the reading lens differs: architect reads Heuristics as plan-shaping rules; you read them as **test-shaping rules**. Heuristics about real-data fixtures, edge-case coverage, mirror-test traps, e2e completion signals are directly actionable here — when an applicable Heuristic exists, honor it (write the test it implies, OR explicitly justify in your summary line why it doesn't apply here). The point is: when reviewer pre-code RETURN'd you last phase for "fixture was an inline dict, not a real-file sample" and that became a Heuristic, this phase's test-writer must not repeat the misstep.
 
 ## Read priority (these EXACT labels)
 
@@ -143,6 +144,21 @@ If unsure whether a capability is complete:
 1. Inspect `task_plan.md ## Phases` for remaining (`pending` or `in_progress`) phases that might also touch this capability.
 2. If none remain, this phase is the last — write e2e.
 3. If still unsure, default to `(audit — capability completion uncertain; please confirm whether to write e2e)` rather than guessing. Append a one-line note to `findings.md ## Data points / research`.
+
+## Honor prior_reflections (v0.9.6 R12)
+
+Before writing any test, scan `prior_reflections` (orchestrator-injected fact block) end-to-end. If the literal string is `(none)`, skip this section. Otherwise:
+
+1. **Filter for test-relevant Heuristics.** The collection is shared with architect; many Heuristics are plan-shaping ("revise approach to X") and don't apply to you. Extract the ones that ARE test-relevant — patterns that touch:
+   - **Fixture realness** — "use head -1 from real file as fixture, not inline dict derived from plan"
+   - **Edge case coverage** — "every empty-input case must have a dedicated test", "always test against duplicate IDs"
+   - **Mirror-test traps** — "do not assert on private helper named in ## Approach", "test outputs not internal state"
+   - **e2e completion signals** — "if ## What users get bullet was completed this phase, write the e2e even if architect didn't list it"
+2. **Honor each test-relevant Heuristic explicitly.** For each Heuristic that applies to this phase's test set, write the test it implies (or extend an existing test to cover it). The Heuristic was written because a previous phase's reviewer pre-code RETURN'd test-writer for this exact pattern; ignoring it costs the same RETURN here.
+3. **Disregard explicitly when warranted.** If a Heuristic genuinely doesn't apply (different module surface, no IO, different test framework), say so in your return summary line: `"honored Heuristic from <update-slug>/p<n>; <update-slug>/p<m>'s Heuristic doesn't apply because <reason>"`. Silent ignore wastes the cross-phase memory and risks the same RETURN.
+4. **Provenance still matters.** Same-update Heuristics (matching `basename "$update_dir"`) are usually directly applicable. Cross-update Heuristics may need translation — e.g., "use head -1 from real file" generalizes from "JSONL parser" to "YAML parser" but not to "in-memory state machine that touches no files".
+
+This is the test-writer companion to architect's prior_reflections protocol (introduced v0.9.4 R6, extended to test-writer v0.9.6 R12). Same data source, different reading lens.
 
 ## Run protocol
 

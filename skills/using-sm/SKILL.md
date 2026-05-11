@@ -17,14 +17,15 @@ User commands live under `commands/`; see each file's frontmatter for descriptio
 └── docs/super-manus/
     ├── prd/                                     ← project-global, ONE source of truth
     │   ├── _index.md                            ← 8 PM-flavored H2 sections (Problem / Audience / Success metrics / Demo / Must / Not doing / Modules / Data flow overview); target ~700 words of prose (soft cap; code blocks and tables excluded)
-    │   └── <module>.md                          ← 9 PM-flavored H2 sections (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions); target ~2000 words of prose (soft cap; code blocks and tables excluded)
+    │   ├── <module>.md                          ← 9 PM-flavored H2 sections (Why this exists / Users / Success / What users get / How it connects / Quality bar / Risks / Out of scope / Open questions); target ~2000 words of prose (soft cap; code blocks and tables excluded)
+    │   └── <module>.spec.md                     ← v0.9.5 R7 NEW: 4 H2 engineering-voice sections (Data contracts / Interface contracts / Behavioral contracts / Design rationale); sibling to <module>.md; target ~3000 words of prose
     ├── e2e/                                     ← v0.5 NEW: permanent regression suite, mirrors prd/
     │   ├── _system/                             ← cross-module scenarios from prd/_index.md ## Demo
     │   │   └── test_<scenario>.<ext>            ← auto-discovered by default test runner; runs in CI
     │   └── <module>/                            ← per-module capabilities from prd/<module>.md ## What users get
     │       └── test_<capability>.<ext>          ← auto-discovered by default test runner; runs in CI
     ├── roadmap.md                               ← project-global, module status table (auto-managed)
-    ├── prd_drift.md                             ← project-global, append-only PRD ↔ implementation drift log
+    ├── drift_log.md                             ← project-global, append-only drift log; v0.9.5 R10 (renamed from prd_drift.md). Two H2 sections: ## PRD drift + ## Spec drift, same 4-column schema in each.
     └── impl/                                    ← time series of milestones, per module
         └── <module>/
             └── <YYYY-MM-DD>-<update-name>/      ← only place timestamps appear
@@ -89,9 +90,18 @@ The naming distinction is load-bearing — orchestrator and CI configs depend on
 - Auto-managed by `/super-manus:start` (empty), `/super-manus:brainstorm` (rows added at `not-started`), `/super-manus:sync` (flips `not-started` → `iterating`), `/super-manus:impl` (flips `iterating` → `stable` once an update's phases are all `closed` AND no pending drift remains).
 - The Note column is **user-owned** — agent must not overwrite a user-written note.
 
-**`docs/super-manus/prd_drift.md`** — append-only PRD ↔ implementation conflict log. `| When | Module | Conflict | Resolution |`.
-- Rows appended by `/super-manus:sync`, `/super-manus:impl`, and `/super-manus:drive` when they detect a conflict.
-- Resolution column is updated by `/super-manus:prd-update <module>` when the user takes the "update PRD" path; left as `pending` otherwise.
+**`docs/super-manus/prd/<module>.spec.md`** (v0.9.5 R7) — per-module engineering reference, sibling to `<module>.md`. 4 H2 sections, target ~3000 words of prose (soft cap; fenced code blocks and tables excluded):
+- `## Data contracts` — schemas, tables, field semantics, validation rules. Mechanical: full rewrite by `reverse-architect` on every reverse run.
+- `## Interface contracts` — `### Exposes` (public surface) + `### Consumes` (cross-module + external dependencies). Full rewrite by reverse-architect.
+- `## Behavioral contracts` — stable algorithm / SLA semantics that survive impl rewrites (rate limits, retry policy, ordering guarantees). Reverse-architect SEEDS if absent, otherwise PRESERVES + appends `(audit)` candidates.
+- `## Design rationale` — why this shape; long-lived. **Reverse-architect NEVER touches this section** — 100% human-curated.
+- Required per module (R7 OQ1 ratification). Stateless modules use `(none — module is stateless)` placeholders. Missing spec.md → `pending` row in `drift_log.md ## Spec drift` blocks roadmap from flipping `stable`.
+- Engineering voice (schemas, code identifiers, file paths ALLOWED — the explicit difference from PRD voice). Edited via `/super-manus:spec-update <module>` (single section, no changelog markers, ~3000-word soft cap) or refreshed via `/super-manus:reverse-prd-spec <module> spec`.
+
+**`docs/super-manus/drift_log.md`** (v0.9.5 R10 — renamed from `prd_drift.md`) — append-only drift log with TWO H2 sections, same 4-column `| Date | Module | Conflict | Resolution |` schema in each:
+- **`## PRD drift`** — PRD ↔ implementation conflicts. Rows appended by `/super-manus:sync`, `/super-manus:impl`, `/super-manus:drive`. Resolution updated by `/super-manus:prd-update <module>`.
+- **`## Spec drift`** — spec ↔ implementation conflicts AND `missing <module>.spec.md` rows from end-of-update gate Pass 1. Rows appended by `/super-manus:impl` (gate), `/super-manus:reverse-prd-spec` (on contradiction). Resolution updated by `/super-manus:spec-update <module>` or `/super-manus:reverse-prd-spec <module> spec`.
+- Pending count for the gate is the SUM of pending rows across BOTH sections.
 
 ## 3. When to update each file
 
@@ -100,17 +110,18 @@ The naming distinction is load-bearing — orchestrator and CI configs depend on
 | `prd/_index.md` | First brainstorm; product framing or module split changes. Engineering changes never trigger this. |
 | `prd/<module>.md` | First brainstorm seeds a stub; user audits/expands it; `/super-manus:prd-update <module>` makes a surgical edit (with paired `findings.md` decision entry). |
 | `roadmap.md` | Auto-managed by `start` / `brainstorm` / `sync` / `impl`. Hand-edit only the Note column. |
-| `prd_drift.md` | Append-only by `sync` / `impl` / `drive` on detected drift; Resolution updated by `prd-update`. |
+| `drift_log.md ## PRD drift` (v0.9.5 R10 — renamed from `prd_drift.md`) | Append-only by `sync` / `impl` / `drive` on detected PRD-vs-code drift; Resolution updated by `prd-update`. |
+| `drift_log.md ## Spec drift` (v0.9.5 R10) | Append-only by `impl` (end-of-update gate) on missing-spec or by `reverse-architect` on spec-vs-code contradiction; Resolution updated by `spec-update` or `reverse-prd-spec`. |
 | `task_plan.md` (per update) | A phase status changes (`closed` / `in_progress` / `blocked`); a new phase is added or split. `## Goal` only changes if the per-module PRD's framing changes. |
 | `findings.md` (per update) | Any decision (with reasoning), any error, any research finding worth surviving the session. PRD revisions for this module also get a paired entry here. **`## Reflections` is orchestrator-only** — appended at phase close by `/super-manus:impl` when a phase had ≥1 reviewer RETURN; never hand-edited. |
 | `progress.md` (per update) | NEVER directly. Wait for a hook reminder. Post-commit hook tells you to append to `## Completed commits`; Stop hook checkpoint asks you to consider writing to `## Session log`. |
 | `tasks/p<n>_impl.md` (per update) | A phase entered `in_progress`; the approach / DB schema / API design changes mid-phase; the verification step changes. |
 
-**Drift detection responsibility.** When running `/super-manus:impl`, `/super-manus:sync`, or `/super-manus:drive`, you must compare the user's stated intent / commit messages against `prd/<module>.md ## What users get` / `## Quality bar` / `## Out of scope`. If you see a capability that PRD doesn't declare (or one that violates the Quality bar), append one row to `prd_drift.md` with `Resolution = pending` and stop the user with two paths: (1) revert implementation, or (2) `/super-manus:prd-update <module>`. Do **not** silently update PRD. The mechanics of *how* to compare PRD claims against actual code are defined in §4 (Drift check protocol).
+**Drift detection responsibility.** When running `/super-manus:impl`, `/super-manus:sync`, or `/super-manus:drive`, you must compare the user's stated intent / commit messages against `prd/<module>.md ## What users get` / `## Quality bar` / `## Out of scope`. If you see a capability that PRD doesn't declare (or one that violates the Quality bar), append one row to `drift_log.md ## PRD drift` (v0.9.5 R10 — was `prd_drift.md`) with `Resolution = pending` and stop the user with two paths: (1) revert implementation, or (2) `/super-manus:prd-update <module>`. Do **not** silently update PRD. The mechanics of *how* to compare PRD claims against actual code are defined in §4 (Drift check protocol).
 
 ## 4. Drift check protocol
 
-When `/super-manus:reverse-prd`, `/super-manus:sync`, `/super-manus:impl`, or `/super-manus:prd-update` need to compare PRD claims against the actual codebase, follow this protocol. It is the single source of truth for PRD↔code cross-checking — commands reference it, they don't reinvent it.
+When `/super-manus:reverse-prd-spec`, `/super-manus:sync`, `/super-manus:impl`, `/super-manus:prd-update`, or `/super-manus:spec-update` need to compare PRD/spec claims against the actual codebase, follow this protocol. It is the single source of truth for PRD↔code and spec↔code cross-checking — commands reference it, they don't reinvent it.
 
 ### Tool roles
 
@@ -132,7 +143,7 @@ LSP gives structural truth from indexed code. grep / Read gives textual signals 
 
 ### Double-source rule
 
-A claim entering PRD `## What users get` / `## How it connects` / `## Quality bar`, or a verdict entering `prd_drift.md`, must be confirmed by **both LSP and grep** when both apply. Single-source claims either get the `(audit)` marker in `prd/<module>.md` or land in `## Open questions`. Do not append a drift row from a single weak signal.
+A claim entering PRD `## What users get` / `## How it connects` / `## Quality bar`, or a verdict entering `drift_log.md` (either `## PRD drift` or `## Spec drift` section, v0.9.5 R10 — renamed from `prd_drift.md`), must be confirmed by **both LSP and grep** when both apply. Single-source claims either get the `(audit)` marker in `prd/<module>.md` (or `prd/<module>.spec.md` for spec-side claims) or land in `## Open questions`. Do not append a drift row from a single weak signal.
 
 ### Budget
 
@@ -147,10 +158,11 @@ If no language server is available (cold project, missing toolchain, polyglot re
 
 ### Per-command application
 
-- `/super-manus:reverse-prd` — full-codebase pass to bootstrap PRD; module boundaries and `## What users get` are LSP-led, `## Why this exists` / `## Users` / `## Success` / Demo are README-led. Writes to `docs/super-manus/prd/`.
+- `/super-manus:reverse-prd-spec` (renamed from `/super-manus:reverse-prd` in v0.9.5 R9) — full-codebase pass to bootstrap PRD AND/OR spec (`output_scope=both | prd | spec`); module boundaries and `## What users get` are LSP-led, `## Why this exists` / `## Users` / `## Success` / Demo are README-led; spec `## Data contracts` / `## Interface contracts` are LSP-led, `## Behavioral contracts` is grep + preserve, `## Design rationale` is never auto-derived. Writes to `docs/super-manus/prd/`.
 - `/super-manus:sync <module>` — runs against the user's stated intent before scaffolding the update folder under `docs/super-manus/impl/<module>/`; LSP confirms whether the intent's capability already exists, grep confirms wiring.
-- `/super-manus:impl` — runs against the next phase's intent and `tasks/p<n>_impl.md ## Objective` before drafting code; conflict appends `docs/super-manus/prd_drift.md`.
+- `/super-manus:impl` — runs against the next phase's intent and `tasks/p<n>_impl.md ## Objective` before drafting code; conflict appends `docs/super-manus/drift_log.md ## PRD drift` (v0.9.5 R10 — renamed from `prd_drift.md`).
 - `/super-manus:prd-update <module>` — for **Tighten** and **Demote**, verify the affected bullet against current code; **Split** runs on both halves; **Add** and **Exclude** don't need verification (they declare new intent or remove scope, not align).
+- `/super-manus:spec-update <module>` (v0.9.5 R8) — light drift check only (engineering voice can move with the code); single-section minimum edit on `prd/<module>.spec.md`; drift absorption flips Resolution in `drift_log.md ## Spec drift` (NOT `## PRD drift`); skips findings.md write (engineering reality, not product decision).
 
 ## 5. The 2-action rule
 
@@ -176,7 +188,7 @@ The point is to surface tarpits early, not slog through them silently.
 - Putting **DB schema, API endpoints, code, or any tech-design text** into `prd/<module>.md` deeper than the `## What users get` outline — schema *sketches* (table + fields) are fine; migration code or full request/response DTO definitions are not. Those live in `tasks/p<n>_impl.md ## Approach`.
 - Pasting **TDD plan recaps, file lists, line numbers, function names, test commands, or block-A/B/C breakdowns** into `findings.md ## Decisions` — record the JUDGMENT (3 lines), not the IMPLEMENTATION ARTIFACT.
 - **Putting changelog markers in any prd/ file** — no `~~strikethrough~~`, no "(was: ...)", no "v2 added X", no dated revision footers. PRD is current-state; history is in `git log` and `findings.md`.
-- **Hand-editing `prd_drift.md`** — only `sync` / `impl` / `drive` append; only `prd-update` resolves. Never reorder rows or rewrite history here.
+- **Hand-editing `drift_log.md`** (v0.9.5 R10 — renamed from `prd_drift.md`) — only `sync` / `impl` / `drive` / `reverse-architect` append; only `prd-update` (PRD-side) and `spec-update` / `reverse-prd-spec` (spec-side) resolve. Never reorder rows or rewrite history here. Two H2 sections (`## PRD drift` / `## Spec drift`) are stable headings; do not rename or merge them.
 - **Overwriting the user's Note column in `roadmap.md`** — flip Status, leave Note alone unless the user explicitly asked.
 - **Silently updating PRD** when implementation diverges — always log a drift row and let the user decide.
 - **Inventing a per-feature wrapper folder** — v0.4 has none. PRD lives at `docs/super-manus/prd/`, not `docs/super-manus/<something>/prd/`. If you find yourself constructing a feature-prefixed path, you're working from outdated v0.2/v0.3 instructions.
@@ -196,7 +208,7 @@ The point is to surface tarpits early, not slog through them silently.
 | `verification-before-phase-close` | orchestrator after `impl-code-writer` reports done | phase Status flips to `closed` only after every command in `tasks/p<n>_impl.md ## Verification` exits green; `## Verification` MUST contain (1) a phase-test path command and (2) one user-visible smoke command |
 | `systematic-debugging-in-phase` | orchestrator when a `## Verification` command fails | follow the checklist (re-read Approach, re-read failing test, binary-search the diff, write a regression test, fix, re-run); same error class three times → escalate |
 
-End-of-update drift gate has **Pass 3 — e2e coverage check**: every touched `## What users get` capability needs `e2e/<module>/test_<capability>.<ext>` to exist and pass. Missing or red → `pending` row in `prd_drift.md`, BLOCKS roadmap from flipping to `stable`.
+End-of-update drift gate has **Pass 2 — e2e coverage check**: every touched `## What users get` capability needs `e2e/<module>/test_<capability>.<ext>` to exist and pass. Missing or red → `pending` row in `drift_log.md ## PRD drift` (v0.9.5 R10 — was `prd_drift.md`), BLOCKS roadmap from flipping to `stable`. Pass 1 also checks `<module>.spec.md` exists (R7 required-mode); missing → `pending` row in `## Spec drift`. Pass 3's pending count sums BOTH H2 sections.
 
 ## 9. Coding discipline (karpathy reference)
 
@@ -207,6 +219,6 @@ Single source of truth for the four `andrej-karpathy-skills:karpathy-guidelines`
 3. **Verifiable success criteria** — every task ends with a green check: a test passes, a command exits 0, a user-observable behavior occurs. "It looks done" is not done. The phase plan's `## Verification` section is the literal expression of this inside super-manus.
 4. **Avoid overcomplication** — minimum code that solves the problem. No flexibility / configurability / error handling that wasn't asked for. If you wrote 200 lines and 50 would do, rewrite.
 
-Applies to every super-manus agent (impl-architect / impl-test-writer / impl-code-writer / reverse-prd-architect / sync-planner). Agents reference §9; do NOT inline-duplicate the four principles.
+Applies to every super-manus agent (impl-architect / impl-test-writer / impl-code-writer / reverse-architect / sync-planner). Agents reference §9; do NOT inline-duplicate the four principles.
 
-**Code-writing discipline only**, not code-reading tactics. For "should I LSP, grep, or Read?", there is NO super-manus rule — `impl-*` agents pick whatever fits inside the known module they're working in; `reverse-prd-architect` follows its own runtime-first protocol in [commands/reverse-prd.md](../commands/reverse-prd.md) Stage 1 (LSP NOT used for module discovery).
+**Code-writing discipline only**, not code-reading tactics. For "should I LSP, grep, or Read?", there is NO super-manus rule — `impl-*` agents pick whatever fits inside the known module they're working in; `reverse-architect` follows its own runtime-first protocol in [commands/reverse-prd-spec.md](../../commands/reverse-prd-spec.md) Stage 1 (LSP NOT used for module discovery).

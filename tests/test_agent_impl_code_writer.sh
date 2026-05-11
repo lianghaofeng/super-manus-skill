@@ -76,4 +76,17 @@ grep -qF "## Files touched" "$F" \
 grep -qiE "git add <specific-path>|git add <file>|per file" "$F" \
   || { echo "FAIL: v0.9.4 R4 must require per-file 'git add <specific-path>' staging"; exit 1; }
 
+# === v0.9.5 R7: <module>.spec.md is read-only =============================
+# The per-module engineering reference is target state — code-writer must NOT
+# edit it during a phase (back-channel drift). The persona lists it in the
+# write barrier, alongside tests/ and e2e/.
+
+grep -qF "<module>.spec.md" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must include <module>.spec.md in the write-barrier list"; exit 1; }
+grep -qiE "spec.md.*back-channel|back-channel.*spec|long-lived target|target state" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must explain WHY editing spec.md is forbidden (back-channel drift / target state)"; exit 1; }
+# Escalation path: if spec is wrong, user runs /super-manus:spec-update separately
+grep -qF "/super-manus:spec-update" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must redirect spec changes to /super-manus:spec-update (not in-phase edits)"; exit 1; }
+
 echo OK

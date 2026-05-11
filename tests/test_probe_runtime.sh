@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests scripts/probe-runtime.sh — the v0.8.0 passive runtime probe consumed by
-# /super-manus:reverse-prd Stage 2. The script is read-only by contract; this
+# /super-manus:reverse-prd-spec Stage 2 (renamed from /super-manus:reverse-prd
+# in v0.9.5 R9). The script is read-only by contract; this
 # test enforces (a) the output header contract the orchestrator + agent depend
 # on, (b) graceful degradation in environments missing tools / network /
 # repo state, and (c) the cheat-prevention property that the script never

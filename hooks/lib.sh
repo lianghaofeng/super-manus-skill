@@ -5,7 +5,9 @@
 #                           or empty if none exist
 #   emit_context EVENT TEXT — emits a hook JSON object on stdout
 #
-# v0.4 layout: PRD / roadmap / prd_drift live at docs/super-manus/ (project-global).
+# Project-global layout: PRD / roadmap / drift_log live at docs/super-manus/.
+# (drift_log.md was renamed from prd_drift.md in v0.9.5 R10 — two H2 sections,
+# ## PRD drift and ## Spec drift, share the same 4-column schema.)
 # There is no per-feature wrapper folder and no .super-manus/active state file.
 # Active update is resolved purely by mtime scan.
 
@@ -165,9 +167,9 @@ PY
 #   # .super-manus/agents.yml
 #   impl-architect: opus
 #   impl-reviewer: opus
-#   reverse-prd-architect: sonnet     # user wants cheaper PRD synthesis
+#   reverse-architect: sonnet     # user wants cheaper PRD/spec synthesis (renamed from reverse-prd-architect in v0.9.5 R9)
 #   impl-test-writer: opus
-#   impl-code-writer: sonnet          # user wants cheaper coding
+#   impl-code-writer: sonnet      # user wants cheaper coding
 #   sync-planner: opus
 #
 # Lines starting with `#` are comments; blank lines ignored. Only `model:` is

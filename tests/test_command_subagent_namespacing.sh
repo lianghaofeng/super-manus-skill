@@ -15,7 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-AGENTS=(impl-architect impl-reviewer impl-test-writer impl-code-writer reverse-prd-architect sync-planner)
+AGENTS=(impl-architect impl-reviewer impl-test-writer impl-code-writer reverse-architect sync-planner)
 
 # Scan every command file
 for cmd in commands/*.md; do

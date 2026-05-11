@@ -57,8 +57,11 @@ You MUST NOT edit any file under:
 
 - `$update_dir/tests/` (the update's `tests/` subdirectory — phase tests live here)
 - `docs/super-manus/e2e/` (project-global e2e tests)
+- `docs/super-manus/prd/<module>.spec.md` (v0.9.5 R7 — per-module engineering reference; long-lived target state. Modifying it during a phase is back-channel drift; if the spec is wrong, escalate via `findings.md ## Errors` and let the user run `/super-manus:spec-update <module>` separately.)
 
-This is enforced by your persona AND by the orchestrator's hash check. The orchestrator snapshots SHA-256 of every test file the test-writer touched BEFORE spawning you, and re-hashes AFTER you return. Any mismatch ABORTS the phase, appends a `code-writer modified tests for phase p<n>` row to `prd_drift.md`, and surfaces to the user. Don't try.
+This is enforced by your persona AND by the orchestrator's hash check. The orchestrator snapshots SHA-256 of every test file the test-writer touched BEFORE spawning you, and re-hashes AFTER you return. Any mismatch ABORTS the phase, appends a `code-writer modified tests for phase p<n>` row to `drift_log.md`, and surfaces to the user. Don't try.
+
+The orchestrator also enforces the spec-write barrier mechanically — `## Files touched` whitelisting blocks `docs/super-manus/prd/<module>.spec.md` paths, so an attempted spec edit will trip the post-commit whitelist check the same way an out-of-scope source edit would.
 
 If a test seems wrong (encodes a contradiction with PRD, has a bug that makes it un-passable in any implementation, or asserts on a private symbol that should not exist):
 

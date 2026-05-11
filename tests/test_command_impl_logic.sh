@@ -15,14 +15,31 @@ grep -qF "task_plan.md" "$F" || { echo "FAIL: must reference task_plan.md (per-u
 grep -qF "tasks/p" "$F" || { echo "FAIL: must reference tasks/p<n>_impl.md path"; exit 1; }
 
 # v0.4 path invariants — project-global, no <feature>/ prefix
-grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must use v0.4 project-global prd path docs/super-manus/prd/"; exit 1; }
-grep -qF "docs/super-manus/prd_drift.md" "$F" || { echo "FAIL: must reference docs/super-manus/prd_drift.md (project-global drift log)"; exit 1; }
+grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must use project-global prd path docs/super-manus/prd/"; exit 1; }
+grep -qF "docs/super-manus/drift_log.md" "$F" || { echo "FAIL: must reference docs/super-manus/drift_log.md (v0.9.5 R10 — project-global drift log, renamed from prd_drift.md)"; exit 1; }
 grep -qF "docs/super-manus/roadmap.md" "$F" || { echo "FAIL: must reference docs/super-manus/roadmap.md (project-global roadmap)"; exit 1; }
 
-# Drift detection: must read prd/<module>.md and append a prd_drift.md row on conflict
+# Drift detection: must read prd/<module>.md and append a drift_log.md ## PRD drift row on conflict
 grep -qF "prd/<module>.md" "$F" || { echo "FAIL: must read per-module PRD"; exit 1; }
-grep -qF "prd_drift.md" "$F" || { echo "FAIL: must reference prd_drift.md for drift logging"; exit 1; }
+grep -qF "drift_log.md" "$F" || { echo "FAIL: must reference drift_log.md for drift logging (v0.9.5 R10 — renamed from prd_drift.md)"; exit 1; }
 grep -qiF "drift" "$F" || { echo "FAIL: must call out drift detection responsibility"; exit 1; }
+# v0.9.5 R10: PRD-side drift rows go under ## PRD drift; spec-missing rows go under ## Spec drift
+grep -qF "## PRD drift" "$F" || { echo "FAIL: v0.9.5 R10 must scope PRD-vs-code drift rows to ## PRD drift section"; exit 1; }
+grep -qF "## Spec drift" "$F" || { echo "FAIL: v0.9.5 R10 must reference ## Spec drift for missing-spec rows (R7 required-mode enforcement)"; exit 1; }
+# v0.9.5 R7: Pass 1 missing-spec detection writes a row when <module>.md has no <module>.spec.md sibling
+grep -qiE "missing.*spec\.md|spec\.md sibling|sibling.*missing|missing.*\.spec\.md" "$F" \
+  || { echo "FAIL: v0.9.5 R7+R10 Pass 1 must check for missing <module>.spec.md sibling and append a row to ## Spec drift"; exit 1; }
+# v0.9.5 R7: spec_facts injection at architect Pass 2 spawn (orchestrator side)
+grep -qF "spec_facts" "$F" || { echo "FAIL: v0.9.5 R7 must inject spec_facts at architect Pass 2 spawn"; exit 1; }
+grep -qF "module_spec_path" "$F" || { echo "FAIL: v0.9.5 R7 must pass module_spec_path to architect Pass 2"; exit 1; }
+# v0.9.5 R7: orchestrator-side mechanical denylist on spec paths in ## Files touched
+grep -qiE "spec.path denylist|Spec-path denylist|denylist.*spec|spec.*denylist" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must declare an orchestrator-side spec-path denylist check (mechanical write barrier alongside architect persona rule + code-writer read-only barrier)"; exit 1; }
+grep -qF "*.spec.md" "$F" \
+  || { echo "FAIL: v0.9.5 R7 denylist check must reference the *.spec.md glob pattern"; exit 1; }
+# Reject + re-spawn architect on denylist hit (NOT silent fix)
+grep -qiE "REJECT.*plan|re-spawn architect.*previous_attempt_feedback|previous_attempt_feedback.*spec" "$F" \
+  || { echo "FAIL: v0.9.5 R7 denylist must REJECT the plan + re-spawn architect with previous_attempt_feedback (not silently strip the entry)"; exit 1; }
 
 # Must NOT silently update PRD — drift always logged, user-decided
 grep -qiF "/super-manus:prd-update" "$F" || { echo "FAIL: must point user at prd-update for resolution"; exit 1; }
@@ -54,7 +71,7 @@ grep -qiE "double-source|cross-check|both LSP and" "$F" || { echo "FAIL: impl.md
 
 # End-of-update drift gate is BLOCKING (cannot soft-pass with pending drift)
 grep -qiE "End-of-update drift gate|drift gate.*BLOCKING|BLOCKING.*drift gate" "$F" || { echo "FAIL: impl.md must define a BLOCKING end-of-update drift gate, not a soft consistency check"; exit 1; }
-grep -qiE "pending.*0|pending == 0|pending = 0|pending row.*zero|zero.*pending" "$F" || { echo "FAIL: gate must require zero pending prd_drift rows for the module before completion"; exit 1; }
+grep -qiE "pending.*0|pending == 0|pending = 0|pending row.*zero|zero.*pending" "$F" || { echo "FAIL: gate must require zero pending drift rows for the module before completion"; exit 1; }
 grep -qiE "BLOCKED|cannot be marked done|cannot.*complete" "$F" || { echo "FAIL: gate must explicitly block update completion when pending drift remains"; exit 1; }
 grep -qiF "iterating" "$F" || { echo "FAIL: must mention the 'iterating' roadmap status the gate refuses to advance from"; exit 1; }
 grep -qiF "stable" "$F" || { echo "FAIL: must mention 'stable' as the roadmap status only reachable after the gate passes"; exit 1; }
@@ -256,5 +273,36 @@ done
 # Cross-update scope (was update-scoped pre-v0.9.4)
 grep -qiE "cross-update|every findings.md|glob.*findings|cross update" "$F" \
   || { echo "FAIL: v0.9.4 R6 must describe cross-update reflection injection"; exit 1; }
+
+# === v0.9.6 R12: prior_reflections injection extended to test-writer ========
+# Step 3 (test-writer spawn) gets the SAME prior_reflections fact block as
+# architect Pass 2 (Step 1c). Reuse the value; don't recompute.
+
+# Test-writer's Step 3 region (between Step 3 heading and Step 4 heading) must list prior_reflections
+# Use awk range delimited by next H2 to avoid leaking into other steps.
+step3_body=$(awk '/^## Step 3 — Spawn impl-test-writer/{f=1; next} /^## Step [4-9]|^## End-of-update/{f=0} f' "$F")
+echo "$step3_body" | grep -qF "prior_reflections" \
+  || { echo "FAIL: v0.9.6 R12 must inject prior_reflections to impl-test-writer at Step 3"; exit 1; }
+echo "$step3_body" | grep -qiE "test-relevant|fixture realness|mirror-test|edge case coverage|e2e completion" \
+  || { echo "FAIL: v0.9.6 R12 spawning prompt must hint at test-relevant Heuristic categories"; exit 1; }
+echo "$step3_body" | grep -qiE "reuse.*architect|same.*sm_collect_reflections|do NOT recompute|already computed" \
+  || { echo "FAIL: v0.9.6 R12 should reuse architect's already-computed prior_reflections (don't double-compute)"; exit 1; }
+# v0.9.6 R12: shell variable binding makes the contract grep-able (not just prose-asserted).
+# A future regression where someone re-invokes sm_collect_reflections at Step 3 would be a code smell.
+grep -qF '$PRIOR_REFLECTIONS' "$F" \
+  || { echo "FAIL: v0.9.6 R12 must bind sm_collect_reflections result to \$PRIOR_REFLECTIONS so reuse contract is grep-able (not just prose)"; exit 1; }
+
+# === v0.9.6 R11: end-of-update gate Pass 3 must EXEMPT acknowledged-soft rows ====
+# R11 logging writes Resolution = "acknowledged-soft: <variant>" rows that preserve
+# audit trail without entering the hard gate (R7 OQ3 honor). The gate logic is
+# "Resolution column equals pending case-insensitive" — by construction
+# "acknowledged-soft: ..." doesn't match. But this property must be ASSERTED so a
+# future change (e.g., substring grep instead of equality) doesn't silently break
+# R11's whole "soft, not hard" property.
+gate_pass3=$(awk '/^### Pass 3 — Block until pending == 0/{f=1; next} /^### Pass [0-9]|^## /{f=0} f' "$F")
+echo "$gate_pass3" | grep -qiE "equals.*pending|equals .pending.|column equals .pending." \
+  || { echo "FAIL: v0.9.6 R11 invariant — Pass 3 must use Resolution-EQUALS-pending matching (NOT substring grep), so 'acknowledged-soft: ...' rows are exempted by construction"; exit 1; }
+echo "$gate_pass3" | grep -qiE "case-insensitive" \
+  || { echo "FAIL: Pass 3 must specify case-insensitive equality match on 'pending' (so 'Pending' / 'PENDING' user-typed values work but 'acknowledged-soft: ...' still doesn't match)"; exit 1; }
 
 echo OK

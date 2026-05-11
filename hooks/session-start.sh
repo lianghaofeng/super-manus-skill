@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib.sh"
 
 # v0.4: super-manus is enabled iff docs/super-manus/prd/ exists.
 if [ ! -d "docs/super-manus/prd" ]; then
-  emit_context "SessionStart" "super-manus is not enabled in this project. Run \`/super-manus:start\` to seed \`docs/super-manus/{prd,impl}/\`, \`roadmap.md\`, and \`prd_drift.md\`."
+  emit_context "SessionStart" "super-manus is not enabled in this project. Run \`/super-manus:start\` to seed \`docs/super-manus/{prd,impl}/\`, \`roadmap.md\`, and \`drift_log.md\`."
   exit 0
 fi
 
@@ -23,7 +23,7 @@ fi
 target_dir="docs/super-manus/impl/$update_rel"
 plan=$(cat "$target_dir/task_plan.md" 2>/dev/null || echo "(task_plan.md missing in active update)")
 prd_index=$(cat "docs/super-manus/prd/_index.md" 2>/dev/null || echo "(prd/_index.md missing)")
-text=$(printf 'super-manus active update: %s\n\n--- prd/_index.md ---\n%s\n\n--- task_plan.md ---\n%s\n\n---\n\nFurther context lives in:\n- %s/findings.md (decisions, errors, research)\n- %s/progress.md (commit log, session log, outstanding phases)\n- docs/super-manus/prd/<module>.md (target state per module)\n- docs/super-manus/roadmap.md (module status table)\n- docs/super-manus/prd_drift.md (PRD ↔ implementation drift log)\n\nRun `/super-manus:drive` if you want a one-line decision on the next action. Do not hand-edit progress.md — hooks own it.' \
+text=$(printf 'super-manus active update: %s\n\n--- prd/_index.md ---\n%s\n\n--- task_plan.md ---\n%s\n\n---\n\nFurther context lives in:\n- %s/findings.md (decisions, errors, research)\n- %s/progress.md (commit log, session log, outstanding phases)\n- docs/super-manus/prd/<module>.md (target state per module, PM voice)\n- docs/super-manus/prd/<module>.spec.md (target state per module, engineering voice — v0.9.5 R7)\n- docs/super-manus/roadmap.md (module status table)\n- docs/super-manus/drift_log.md (PRD + spec ↔ implementation drift log; two H2 sections, ## PRD drift / ## Spec drift — v0.9.5 R10 rename from prd_drift.md)\n\nRun `/super-manus:drive` if you want a one-line decision on the next action. Do not hand-edit progress.md — hooks own it.' \
   "$update_rel" "$prd_index" "$plan" "$target_dir" "$target_dir")
 
 emit_context "SessionStart" "$text"

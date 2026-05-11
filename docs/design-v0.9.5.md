@@ -1,8 +1,11 @@
-# super-manus v0.9.5 — deferred items log
+# super-manus v0.9.5 — spec layer + drift_log rename (SHIPPED)
 
-This file is a forward-looking RFC, NOT a shipped release. Items recorded here are deferred design ideas surfaced during v0.9.4 use. Each entry stays here until either (a) it ships in a v0.9.x release (move "Status" inline) or (b) it's rejected (record rejection inline). Do NOT implement any item below without a separate user "ship it" directive.
+**Shipped in v0.9.5** (single-shot release covering R7→R8→R9→R10 together). This file
+was originally a forward-looking RFC; it now also documents what landed. See the
+**Status** section at the bottom for the implementation summary and test counts.
 
-Versioning convention: when an R-item ships, `plugin.json` bumps to `0.9.5` (or later). On ratification the "NOT yet ratified" status flips inline per R-item, same pattern as `design-v0.9.4.md`.
+Versioning convention: `plugin.json` bumped from `0.9.4` to `0.9.5` when this released.
+For future RFCs, follow the same pattern as `design-v0.9.4.md`.
 
 ## Context: PRD voice discipline created a vacuum
 
@@ -426,18 +429,25 @@ Drift gate (BLOCKING end-of-update) counts `pending` rows across **both** H2 sec
 
 ## Status
 
-**Design ratified, NOT yet implemented.** All four R-items have had their Open Questions decided (see each R-item's "Open questions" section — each OQ now carries a "Ratified:" line). Implementation still needs a separate "ship it" directive per R-item.
+**Design ratified AND implemented in v0.9.5 (single-shot release).** All four R-items shipped together — see `plugin.json` version `0.9.5` and the matching test additions / renames under `tests/`.
 
-Ratified design decisions:
+What landed:
 
-- **R7 OQ1** — Required per module (every module must have `<module>.spec.md`; stateless modules use `(none — ...)` placeholders).
+- **R7** (`<module>.spec.md` engineering reference) — `templates/prd_spec.md` + `tests/test_template_prd_spec.sh`; `impl-architect` Pass 2 inputs gain `module_spec_path` + `spec_facts` (non-negotiable target-state context, paired with `existing_code_facts`); `impl-code-writer` write barrier extends to `<module>.spec.md`; `scripts/sm-start.sh` idempotently seeds missing siblings on re-run; `commands/brainstorm.md` seeds spec template alongside every new `<module>.md`.
+- **R8** (`/super-manus:spec-update`) — new `commands/spec-update.md` + `tests/test_command_spec_update_logic.sh`. Standalone command with the same forward-iteration vs drift-absorption shape as `/super-manus:prd-update`; engineering voice (schemas / code identifiers / paths allowed); drift absorption skips `findings.md` write (engineering reality, not product decision).
+- **R9** (rename `reverse-prd` → `reverse-prd-spec` + agent rename) — `commands/reverse-prd.md` → `commands/reverse-prd-spec.md`; `agents/reverse-prd-architect.md` → `agents/reverse-architect.md`; `agents.yml` template + namespacing test + `hooks/lib.sh` comment + `scripts/probe-runtime.sh` comment + `skills/using-sm/SKILL.md` all updated. New `output_scope` input (`both | prd | spec`) selectable interactively or as 2nd positional. No backward-compat alias.
+- **R10** (rename `prd_drift.md` → `drift_log.md`, two H2 sections) — `templates/prd_drift.md` → `templates/drift_log.md` with `## PRD drift` + `## Spec drift` H2s; `tests/test_template_prd_drift.sh` → `tests/test_template_drift_log.sh`; `scripts/sm-start.sh` carries a one-shot migration helper for legacy projects (renames `prd_drift.md` → `prd_drift.md.legacy-pre-v0.9.5` and re-files rows under `## PRD drift`); end-of-update drift gate Pass 1 writes "missing `<module>.spec.md`" rows to `## Spec drift`; Pass 3 sums pending across BOTH H2 sections; `reverse-architect` agent gains `## Section-aware refresh` policy table (Data contracts / Interface contracts → full rewrite; Behavioral contracts → seed-if-absent + preserve + audit candidates; Design rationale → never touch).
+
+Ratified design decisions (carried through to implementation):
+
+- **R7 OQ1** — Required per module (every module must have `<module>.spec.md`; stateless modules use `(none — ...)` placeholders). Enforced by drift gate Pass 1 missing-spec row.
 - **R7 OQ3** — PRD `## Quality bar` vs spec `## Behavioral contracts` is upstream/downstream; reverse-architect emits soft warning on same-topic overlap, not drift.
 - **R8 OQ1** — Standalone `/super-manus:spec-update` command (not a `/prd-update --scope=spec` flag).
-- **R10 OQ1** — File rename `prd_drift.md` → `drift_log.md`, two H2 sections (`## PRD drift` + `## Spec drift`), 4-column schema preserved.
+- **R10 OQ1** — File rename `prd_drift.md` → `drift_log.md`, two H2 sections (`## PRD drift` + `## Spec drift`), 4-column schema preserved (Date / Module / Conflict / Resolution).
 
-Still open:
+Deferred / unchanged from RFC:
 
-- **R7 OQ2** (Data contracts schema format — markdown table vs fenced SQL) — defer to implementation; persona allows both.
-- **R9 OQ1, R9 OQ2, R10 OQ1's migration helper** — narrowing during implementation.
+- **R7 OQ2** (Data contracts schema format — markdown table vs fenced SQL) — persona allows both; not enforced.
+- **R9 OQ2** (idempotent re-run on `output_scope=both` when only one half is dirty) — agent emits `prd/spec for <module> already current; no edits made` line; no diff-detection cleverness.
 
-Recommended sequence: R7 → R8 → R9 → R10, separate milestones, separate phase plans, separate commits.
+Test counts: 46 of 46 tests pass on the v0.9.5 commit (was 44 of 44 on v0.9.4; the deltas are the two new tests `test_template_prd_spec.sh` + `test_command_spec_update_logic.sh`).

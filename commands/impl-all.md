@@ -67,7 +67,7 @@ while there exists a pending or in_progress phase in $UPDATE_DIR/task_plan.md:
   pick next phase (in_progress before pending; flip pending → in_progress)
   # ↓ identical to /super-manus:impl steps below ↓
   drift check (per skills/using-sm/SKILL.md §4 — Drift check protocol; LSP + grep, double-source)
-    on conflict → append prd_drift.md row, surface user, point at /super-manus:prd-update, STOP loop
+    on conflict → append drift_log.md row, surface user, point at /super-manus:prd-update, STOP loop
   Step 1: spawn impl-architect (subagent_type="super-manus:impl-architect") → writes $UPDATE_DIR/tasks/p<n>_impl.md
   Step 2: spawn impl-reviewer (subagent_type="super-manus:impl-reviewer", mode=pre-test) — counter[#1] tracking
     APPROVE → continue; RETURN_TO_ARCHITECT → re-spawn Step 1 (≤2 retries); ESCALATE → STOP loop
@@ -107,7 +107,7 @@ For the per-phase mechanics — drift check protocol (LSP + grep, double-source)
 The loop stops in one of six ways:
 
 1. **No more pending or in_progress phases** — fall through to the end-of-update drift gate below. This is the happy path.
-2. **Drift detected** at the per-phase drift check — append `prd_drift.md` row, surface user with the two paths (revert OR `/super-manus:prd-update`), STOP.
+2. **Drift detected** at the per-phase drift check — append `drift_log.md` row, surface user with the two paths (revert OR `/super-manus:prd-update`), STOP.
 3. **Reviewer ESCALATE_TO_USER** at any of the 3 review checkpoints — counter exhausted (3 attempts at the same checkpoint) or genuinely unresolvable issue. Verdict + history written to `findings.md ## Errors`; user surfaced with the reviewer's suggested user_options. STOP.
 4. **Agent escalation** (test-writer / code-writer raises an issue independent of reviewer) — surface escalation, STOP.
 5. **Hash tamper** — ABORT phase, append `code-writer modified tests for phase p<n>` drift row, surface user, STOP.
@@ -119,11 +119,11 @@ In cases 2–6, the loop stops at the current phase. The user resolves and re-ru
 
 When all phases are `closed`, run the same 3-pass gate as `/super-manus:impl`:
 
-- **Pass 1** — refresh drift from this update's commits vs PRD `## What users get` / `## Quality bar` / `## Out of scope`. Append `pending` rows for "declared but not in commits" and "shipped but not in PRD".
-- **Pass 2** — e2e coverage check: every touched `## What users get` capability has `e2e/<module>/test_<capability>.{ext}` that exists AND passes; every completed `## Demo` scenario has `e2e/_system/test_<scenario>.{ext}` that exists AND passes. Missing or red → `pending` row.
-- **Pass 3** — pending == 0 check on `prd_drift.md` rows for this module. If pending > 0 → BLOCKED, print rows, do NOT flip to stable, STOP. If pending == 0 → flip `iterating` → `stable` in `roadmap.md`. Update done.
+- **Pass 1** — refresh drift from this update's commits vs PRD `## What users get` / `## Quality bar` / `## Out of scope` (rows go to `## PRD drift`); ALSO check `<module>.spec.md` exists for every module touched (missing → row to `## Spec drift`, v0.9.5 R7 + R10).
+- **Pass 2** — e2e coverage check: every touched `## What users get` capability has `e2e/<module>/test_<capability>.{ext}` that exists AND passes; every completed `## Demo` scenario has `e2e/_system/test_<scenario>.{ext}` that exists AND passes. Missing or red → `pending` row in `## PRD drift`.
+- **Pass 3** — pending == 0 check on `drift_log.md` rows for this module across BOTH H2 sections (`## PRD drift` AND `## Spec drift`). If total pending > 0 → BLOCKED, print rows grouped by section, do NOT flip to stable, STOP. If total pending == 0 → flip `iterating` → `stable` in `roadmap.md`. Update done.
 
-The gate is BLOCKING and HARD. There is no soft-pass. Resolution paths: `/super-manus:prd-update`, manual `reverted` edit + `findings.md ## Decisions` entry, or write missing e2e + re-run.
+The gate is BLOCKING and HARD. There is no soft-pass. Resolution paths: `/super-manus:prd-update` (PRD-drift rows), `/super-manus:spec-update` (spec-drift rows including content edits) or `/super-manus:reverse-prd-spec <module> spec` (missing spec.md row), manual `reverted` edit + `findings.md ## Decisions` entry, or write missing e2e + re-run.
 
 The full gate spec lives in [/super-manus:impl](impl.md) under "End-of-update drift gate (BLOCKING — 3-pass in v0.5)" — this command runs the same gate verbatim. Do NOT inline the full spec here.
 

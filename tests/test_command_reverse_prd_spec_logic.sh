@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Tests the orchestrator slash command commands/reverse-prd.md.
-# Content-generation rules live in agents/reverse-prd-architect.md (asserted by
-# tests/test_agent_reverse_prd_architect.sh) — this file checks orchestration only.
+# Tests the orchestrator slash command commands/reverse-prd-spec.md.
+# Content-generation rules live in agents/reverse-architect.md (asserted by
+# tests/test_agent_reverse_architect.sh) — this file checks orchestration only.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
-F=commands/reverse-prd.md
+F=commands/reverse-prd-spec.md
 [ -f "$F" ] || { echo "FAIL: missing"; exit 1; }
 
 # Frontmatter
 grep -qF "description:" "$F" || { echo "FAIL: missing frontmatter description"; exit 1; }
 
 # v0.4: project-global super-manus enablement check (no .super-manus/active state file)
-grep -qF ".super-manus/active" "$F" && { echo "FAIL: reverse-prd.md must NOT reference .super-manus/active in v0.4"; exit 1; } || true
+grep -qF ".super-manus/active" "$F" && { echo "FAIL: reverse-prd-spec.md must NOT reference .super-manus/active in v0.4"; exit 1; } || true
 grep -qF "docs/super-manus/prd/" "$F" || { echo "FAIL: must reference docs/super-manus/prd/ as the v0.4 project-global PRD root"; exit 1; }
 
 # Must produce v0.4 PRD-folder layout: prd/_index.md + per-module prd/<module>.md
@@ -65,13 +65,16 @@ grep -qiE "does NOT touch.*roadmap|do NOT.*roadmap|not touch.*roadmap" "$F" || {
 grep -qiE "cascade scan|cascade report|cascade.*may.*stale|may now be stale" "$F" || { echo "FAIL: per-module mode must run a cascade scan and report (not silently regenerate) other modules that reference the target"; exit 1; }
 
 # Per-module mode passes scope=single-module + target_module to the architect
-grep -qF "scope" "$F" || { echo "FAIL: must pass 'scope' input to reverse-prd-architect"; exit 1; }
+grep -qF "scope" "$F" || { echo "FAIL: must pass 'scope' input to reverse-architect"; exit 1; }
 grep -qiE "single-module|target_module" "$F" || { echo "FAIL: must pass single-module scope / target_module to the architect when in per-module mode"; exit 1; }
 
 # Stage 2 — content writing delegated to a named subagent (Agent tool)
 grep -qiE "Agent tool|Task tool|subagent_type" "$F" || { echo "FAIL: writing must be delegated to a subagent via the Agent tool"; exit 1; }
-grep -qF "reverse-prd-architect" "$F" || { echo "FAIL: must reference the reverse-prd-architect agent by name"; exit 1; }
-grep -qF "agents/reverse-prd-architect.md" "$F" || { echo "FAIL: must link to the agent definition file (agents/reverse-prd-architect.md)"; exit 1; }
+grep -qF "reverse-architect" "$F" || { echo "FAIL: must reference the reverse-architect agent by name (renamed from reverse-prd-architect in v0.9.5 R9)"; exit 1; }
+grep -qF "agents/reverse-architect.md" "$F" || { echo "FAIL: must link to the agent definition file (agents/reverse-architect.md)"; exit 1; }
+# Negative regression — old agent name must not leak back in
+grep -qF "reverse-prd-architect" "$F" \
+  && { echo "FAIL: v0.9.5 R9 must NOT reference the old agent name 'reverse-prd-architect' (renamed to reverse-architect)"; exit 1; } || true
 
 # Spawning prompt must enumerate the eight inputs the agent expects (v0.7.2: added scope + target_module)
 for input in project_root feature_folder scope target_module module_list infra_deps monorepo_signals lsp_available; do
@@ -112,5 +115,45 @@ grep -qiE "## Per-agent model override|Per-agent model override \(v0\.8" "$F" \
   || { echo "FAIL: v0.8.1 must declare a Per-agent model override section"; exit 1; }
 grep -qF "sm_agent_model" "$F" \
   || { echo "FAIL: v0.8.1 must invoke sm_agent_model helper for model resolution"; exit 1; }
+
+# === v0.9.5 R9 additive assertions =========================================
+# Command renamed reverse-prd → reverse-prd-spec; agent renamed
+# reverse-prd-architect → reverse-architect; new output_scope choice
+# (both | prd | spec) selectable interactively or as 2nd positional arg.
+
+# Description must announce dual-deliverable nature (PRD + spec)
+grep -qiE "PRD.*spec|spec.*PRD|prd/<module>\.spec\.md|both PRD" "$F" \
+  || { echo "FAIL: v0.9.5 R9 description must reference dual deliverable (PRD + spec)"; exit 1; }
+
+# Output scope selection — interactive (AskUserQuestion) + 2nd positional support
+grep -qF "Output scope selection" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must declare an ## Output scope selection section"; exit 1; }
+grep -qF "output_scope" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must reference output_scope (architect input)"; exit 1; }
+# All three scope values documented
+for v in both prd spec; do
+  grep -qE "\b${v}\b" "$F" || { echo "FAIL: v0.9.5 R9 must document output_scope value '${v}'"; exit 1; }
+done
+# 2nd positional arg path (non-interactive use)
+grep -qiE "2nd positional|second positional|\[<output_scope>\]|positional" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must support a 2nd positional arg for non-interactive scope selection"; exit 1; }
+
+# Spawning prompt now includes output_scope as an input
+grep -qE 'output_scope.*both.*prd.*spec|output_scope:.*<both' "$F" \
+  || { echo "FAIL: v0.9.5 R9 spawning prompt must enumerate output_scope: <both|prd|spec>"; exit 1; }
+
+# Post-condition checks must verify the spec bundle when output_scope ∈ {both, spec}
+grep -qF "*.spec.md" "$F" \
+  || { echo "FAIL: v0.9.5 R9 post-conditions must check the spec bundle (*.spec.md files)"; exit 1; }
+
+# Spec preservation rule when output_scope=prd (and PRD preservation when output_scope=spec)
+grep -qiE "preserve.*existing.*spec|spec files were NOT modified|do NOT touch.*spec" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must verify spec preservation on output_scope=prd"; exit 1; }
+grep -qiE "preserve.*existing.*PRD|PRD files .*were NOT modified|do NOT touch.*_index|preserve any existing.*<module>\.md" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must verify PRD preservation on output_scope=spec"; exit 1; }
+
+# Negative regression — old command name must not leak back in
+grep -qF "/super-manus:reverse-prd " "$F" \
+  && { echo "FAIL: v0.9.5 R9 must NOT reference the old command '/super-manus:reverse-prd ' (renamed to /super-manus:reverse-prd-spec; no backward-compat alias)"; exit 1; } || true
 
 echo OK

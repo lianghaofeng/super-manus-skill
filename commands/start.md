@@ -14,13 +14,14 @@ If it exits zero, the script printed the absolute path of `docs/super-manus/`. T
 
 Tell the user (omit the "seeded" half if `prd/_index.md` was already present):
 
-> super-manus enabled at `<path>`. Project-global v0.4 skeleton:
+> super-manus enabled at `<path>`. Project-global skeleton:
 > - `prd/_index.md` — project-level overview, module manifest, data flow
-> - `prd/<module>.md` — per-module PRDs land here after `/super-manus:brainstorm` or `/super-manus:reverse-prd`
+> - `prd/<module>.md` — per-module PRDs (PM voice) land here after `/super-manus:brainstorm` or `/super-manus:reverse-prd-spec`
+> - `prd/<module>.spec.md` — per-module engineering reference (sibling, target state, engineering voice — v0.9.5 R7). Seeded automatically alongside each new `<module>.md`; on re-run of `/super-manus:start` against an existing project, missing siblings get seeded too.
 > - `impl/<module>/<YYYY-MM-DD>-<update>/` — per-module per-milestone update folders (created by `/super-manus:sync` and `/super-manus:brainstorm`)
 > - `roadmap.md` — module status table (auto-managed)
-> - `prd_drift.md` — PRD ↔ implementation conflict log (append-only)
+> - `drift_log.md` — PRD ↔ implementation drift log AND spec ↔ implementation drift log, two H2 sections (`## PRD drift` / `## Spec drift`); rows append-only, only the Resolution cell is mutable (v0.9.5 R10 — renamed from `prd_drift.md`)
 >
-> Next: run `/super-manus:brainstorm` to define the product spec and split into modules, or `/super-manus:reverse-prd` to bootstrap PRD from an existing codebase.
+> Next: run `/super-manus:brainstorm` to define the product spec and split into modules, or `/super-manus:reverse-prd-spec` to bootstrap PRD + spec from an existing codebase.
 
 Then load the new prd/_index.md by reading `<path>/prd/_index.md` so you have it in context for the rest of the session.

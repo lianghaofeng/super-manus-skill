@@ -7,8 +7,8 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 # v0.4: super-manus is project-global. /super-manus:start takes ZERO arguments and idempotently
-# creates docs/super-manus/{prd,impl}/ + roadmap.md + prd_drift.md. There is no
-# .super-manus/active state file in v0.4.
+# creates docs/super-manus/{prd,impl}/ + roadmap.md + drift_log.md (v0.9.5 R10 — renamed from prd_drift.md).
+# There is no .super-manus/active state file in v0.4.
 cd "$TMP"
 
 # Helper: invoke the script with REPO_ROOT visible so it knows where templates live
@@ -26,12 +26,14 @@ out=$(sm_start)
 BASE="docs/super-manus"
 [ -d "$BASE" ] || { echo "FAIL: $BASE not created"; exit 1; }
 
-# v0.4 layout: prd/, impl/, roadmap.md, prd_drift.md, NO per-feature wrapper folder
+# Project-global layout: prd/, impl/, roadmap.md, drift_log.md (v0.9.5 R10 — renamed from prd_drift.md), NO per-feature wrapper folder
 [ -d "$BASE/prd" ] || { echo "FAIL: $BASE/prd/ not created"; exit 1; }
 [ -f "$BASE/prd/_index.md" ] || { echo "FAIL: $BASE/prd/_index.md not seeded"; exit 1; }
 [ -d "$BASE/impl" ] || { echo "FAIL: $BASE/impl/ not created"; exit 1; }
 [ -f "$BASE/roadmap.md" ] || { echo "FAIL: $BASE/roadmap.md not seeded"; exit 1; }
-[ -f "$BASE/prd_drift.md" ] || { echo "FAIL: $BASE/prd_drift.md not seeded"; exit 1; }
+[ -f "$BASE/drift_log.md" ] || { echo "FAIL: $BASE/drift_log.md not seeded (v0.9.5 R10 — renamed from prd_drift.md)"; exit 1; }
+# Negative regression — old name must not be seeded
+[ -f "$BASE/prd_drift.md" ] && { echo "FAIL: v0.9.5 R10 must NOT seed legacy $BASE/prd_drift.md (renamed to drift_log.md)"; exit 1; } || true
 
 # v0.4: must NOT create any per-feature wrapper folder under docs/super-manus/<date>-<name>/
 shopt -s nullglob
@@ -51,9 +53,12 @@ done
 # README / pyproject / etc. carries the title). The placeholder may remain for the user
 # to edit in their first audit pass.
 
-# roadmap and prd_drift remain generic (no per-feature substitution)
+# roadmap and drift_log remain generic (no per-feature substitution)
 grep -q "^# Roadmap" "$BASE/roadmap.md" || { echo "FAIL: roadmap.md missing Roadmap title"; exit 1; }
-grep -q "^# PRD drift log" "$BASE/prd_drift.md" || { echo "FAIL: prd_drift.md missing title"; exit 1; }
+grep -q "^# Drift log" "$BASE/drift_log.md" || { echo "FAIL: drift_log.md missing '# Drift log' title (v0.9.5 R10 — was '# PRD drift log')"; exit 1; }
+# Two H2 sections present in seeded drift_log.md
+grep -qF "## PRD drift" "$BASE/drift_log.md" || { echo "FAIL: drift_log.md missing ## PRD drift H2 section"; exit 1; }
+grep -qF "## Spec drift" "$BASE/drift_log.md" || { echo "FAIL: drift_log.md missing ## Spec drift H2 section (v0.9.5 R10)"; exit 1; }
 
 # .gitignore must still be set up so .session-state files don't leak
 [ -f "$BASE/.gitignore" ] || { echo "FAIL: .gitignore not seeded"; exit 1; }
@@ -71,7 +76,9 @@ grep -qF ".session-" "$BASE/.gitignore" || { echo "FAIL: .gitignore should ignor
 [ -f ".super-manus/agents.yml" ] || { echo "FAIL: v0.8.1 sm-start must seed .super-manus/agents.yml from templates/agents.yml"; exit 1; }
 # Default template must have ALL 6 agents commented out (no override out-of-the-box)
 grep -qE "^#impl-architect:" .super-manus/agents.yml || { echo "FAIL: default agents.yml must list impl-architect (commented)"; exit 1; }
-grep -qE "^#reverse-prd-architect:" .super-manus/agents.yml || { echo "FAIL: default agents.yml must list reverse-prd-architect (commented)"; exit 1; }
+grep -qE "^#reverse-architect:" .super-manus/agents.yml || { echo "FAIL: default agents.yml must list reverse-architect (commented; renamed from reverse-prd-architect in v0.9.5 R9)"; exit 1; }
+# Negative regression — old agent name must not appear in seeded agents.yml
+grep -qE "^#?reverse-prd-architect:" .super-manus/agents.yml && { echo "FAIL: v0.9.5 R9 default agents.yml must NOT list legacy 'reverse-prd-architect' (renamed to reverse-architect)"; exit 1; } || true
 # Active overrides (uncommented) MUST be zero in the seeded default — out-of-the-box
 # behavior is "use the agent's pinned default", not "override everything to opus".
 active_overrides=$(grep -cE "^[a-z][a-z0-9-]*:" .super-manus/agents.yml || true)

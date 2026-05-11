@@ -2,8 +2,9 @@
 <!-- Decisions: 2-3 lines max each — what was chosen / why / what was ruled out. NO code, file paths, function names, line numbers, or implementation steps (those live in tasks/p<n>_impl.md and commit messages). -->
 <!-- Errors: one row per failure; Resolution column is one short sentence. -->
 <!-- Data points: smoke numbers, eval scores, links — bullet form, no narrative. -->
-<!-- Reflections: written ONLY by the /super-manus:impl orchestrator at phase close. One H3 entry per phase that had ≥1 reviewer RETURN event. The Heuristic line is the load-bearing one — it's what next phase's impl-architect honors. Do NOT write here by hand.
-v0.9.4 R6: each entry gains a <!-- meta: ... --> block (files_touched / keywords / trigger / retries / created) and the H3 heading is `### <update-slug>/p<n>: <name>` (was `### Phase <n>: <name>` pre-v0.9.4). The orchestrator filters cross-update reflections at architect spawn — only matching entries get injected. -->
+<!-- Reflections: written ONLY by the /super-manus:impl orchestrator at phase close. One H3 entry per phase that had ≥1 reviewer RETURN event. The Heuristic line is the load-bearing one — next phase's impl-architect AND impl-test-writer (v0.9.6 R12 extended Reflexion to test-writer; same data, different reading lens) both honor it. Do NOT write here by hand.
+v0.9.4 R6: each entry gains a <!-- meta: ... --> block (files_touched / keywords / trigger / retries / created) and the H3 heading is `### <update-slug>/p<n>: <name>` (was `### Phase <n>: <name>` pre-v0.9.4). The orchestrator filters cross-update reflections at writer spawn — only matching entries get injected.
+v0.9.6 R12: same Reflexion collection injected to impl-test-writer at Step 3 spawn (reusing architect Pass 2's already-computed value). Test-writer reads the same Heuristics through a test-relevant lens (fixture realness / mirror-test / edge case / e2e completion). Code-writer and reviewer are intentionally NOT in scope (R4 mechanical checks + ## Errors-with-attempt_number cover their failure modes). -->
 # Findings: <feature title>
 
 ## Decisions

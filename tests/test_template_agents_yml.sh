@@ -11,9 +11,13 @@ F=templates/agents.yml
 [ -f "$F" ] || { echo "FAIL: missing $F"; exit 1; }
 
 # All six agents MUST be listed (commented or not) so users see the full surface.
-for agent in impl-architect impl-reviewer reverse-prd-architect impl-test-writer impl-code-writer sync-planner; do
+# v0.9.5 R9: reverse-prd-architect renamed to reverse-architect.
+for agent in impl-architect impl-reviewer reverse-architect impl-test-writer impl-code-writer sync-planner; do
   grep -qE "^#?${agent}:" "$F" || { echo "FAIL: template must list agent '${agent}' (commented or active)"; exit 1; }
 done
+# Negative regression — old name must not leak back in
+grep -qE "^#?reverse-prd-architect:" "$F" \
+  && { echo "FAIL: v0.9.5 R9 must NOT list the old agent name 'reverse-prd-architect' (renamed to reverse-architect)"; exit 1; } || true
 
 # Every agent line MUST be commented out in the seeded default — the file is
 # documentation by default; users uncomment to opt in to overrides.

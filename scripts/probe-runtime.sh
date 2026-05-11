@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Passive runtime probe for /super-manus:reverse-prd Stage 2.
+# Passive runtime probe for /super-manus:reverse-prd-spec Stage 2 (renamed from
+# /super-manus:reverse-prd in v0.9.5 R9 — script unchanged otherwise).
 #
 # Reads what's currently running (processes, ports, docker containers, compose
 # services, OpenAPI contracts) plus git activity (deleted/cold/hot files) and
-# emits a fixed-format report on stdout. The reverse-prd-architect consumes
-# this as cross-validation evidence against static source reading.
+# emits a fixed-format report on stdout. The reverse-architect agent consumes
+# this as cross-validation evidence against static source reading (agent
+# renamed from reverse-prd-architect in v0.9.5 R9).
 #
 # Contract:
 #   - Read-only. NEVER invokes mutating commands (docker run/up, psql -c "...",

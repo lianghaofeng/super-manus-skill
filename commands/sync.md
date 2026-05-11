@@ -13,7 +13,7 @@ docs/super-manus/
 ├── prd/_index.md
 ├── prd/<module>.md
 ├── roadmap.md
-├── prd_drift.md
+├── drift_log.md
 └── impl/<module>/<YYYY-MM-DD>-<update>/
 ```
 
@@ -43,7 +43,7 @@ Because the user just edited PRD to declare the new capability, drift is **impos
 
   > The diff removes `<deleted bullet>` from `## What users get`. Removing a committed capability is a `/super-manus:prd-update <module>` job (option **Demote** or **Exclude**), not a `/super-manus:sync`. Stopping.
 
-  Then stop. Do not append to `prd_drift.md` (the user's own edit isn't a drift event between PRD and code).
+  Then stop. Do not append to `drift_log.md` (the user's own edit isn't a drift event between PRD and code).
 
 - The diff includes deletions from `## Quality bar` AND adds nothing under `## What users get` or `## Quality bar` — same redirect, same stop.
 

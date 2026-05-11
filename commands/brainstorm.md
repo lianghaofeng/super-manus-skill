@@ -49,6 +49,15 @@ When you have answers (or 6 turns elapsed), write the following files. Use the `
    - `## Risks` — if the user mentioned a risk in question 5 that lands on this module, drop it under the appropriate Product / Technical / Org bullet. Otherwise leave the section as `<placeholder>` for the user to fill — do NOT invent risks.
    - Leave `## What users get`, `## How it connects`, `## Quality bar`, `## Out of scope`, `## Open questions` as light placeholders for the user (or `/super-manus:prd-update`) to flesh out — the brainstorm command must NOT invent schema/endpoint/dependency content here.
 
+2b. **`docs/super-manus/prd/<module>.spec.md`** for each module — copy from `templates/prd_spec.md` verbatim, substitute `<module name>` with the actual module name, and leave the four H2 sections (`## Data contracts`, `## Interface contracts`, `## Behavioral contracts`, `## Design rationale`) at their `(none — ...)` / `(no ... yet)` placeholders. Brainstorm has no source code to read yet — the spec is genuinely empty until either (a) the user runs `/super-manus:reverse-prd-spec <module>` after some implementation lands, or (b) the user writes engineering content via `/super-manus:spec-update <module>` as the design crystallizes. Seeding the file at brainstorm time satisfies the v0.9.5 R7 required-mode contract (every `<module>.md` has a sibling `<module>.spec.md`) without inventing content.
+
+   Use Bash for the substitution (template is read-only under `${CLAUDE_PLUGIN_ROOT}/`):
+
+   ```bash
+   sed "s|<module name>|${module}|g" "${CLAUDE_PLUGIN_ROOT}/templates/prd_spec.md" \
+     > "docs/super-manus/prd/${module}.spec.md"
+   ```
+
 3. **`docs/super-manus/roadmap.md`** — under `## Modules`, add one row per module: `| <module> | not-started | |`. Drop the `<module-a>` placeholder if it's still there (it shouldn't be after the seed, but be defensive).
 
 Use the user's answers verbatim where possible. Keep each section terse — Problem and Demo are 1–3 sentences; Must / Not doing are bullet lists.

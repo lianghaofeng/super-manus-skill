@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# Tests the reverse-prd-architect agent definition (agents/reverse-prd-architect.md).
-# This agent is spawned by /super-manus:reverse-prd to write the PRD bundle —
-# it owns the architect+PM persona, ASCII diagram rules, content-source priorities,
-# and (audit) policy. Orchestrator-level concerns are tested by
-# tests/test_command_reverse_prd_logic.sh.
+# Tests the reverse-architect agent definition (agents/reverse-architect.md).
+# This agent is spawned by /super-manus:reverse-prd-spec to write the PRD + spec
+# bundle — it owns the architect+PM persona, Mermaid diagram rules,
+# content-source priorities, the section-aware refresh policy (v0.9.5 R10), and
+# (audit) policy. Orchestrator-level concerns are tested by
+# tests/test_command_reverse_prd_spec_logic.sh.
+# Renamed from agents/reverse-prd-architect.md in v0.9.5 R9.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
-F=agents/reverse-prd-architect.md
-[ -f "$F" ] || { echo "FAIL: missing agent definition agents/reverse-prd-architect.md"; exit 1; }
+F=agents/reverse-architect.md
+[ -f "$F" ] || { echo "FAIL: missing agent definition agents/reverse-architect.md"; exit 1; }
 
 # Frontmatter — name must match the subagent_type the orchestrator spawns
-grep -qE "^name: reverse-prd-architect$" "$F" || { echo "FAIL: frontmatter 'name' must equal 'reverse-prd-architect'"; exit 1; }
+grep -qE "^name: reverse-architect$" "$F" || { echo "FAIL: frontmatter 'name' must equal 'reverse-architect' (renamed from reverse-prd-architect in v0.9.5 R9)"; exit 1; }
 grep -qE "^description:" "$F" || { echo "FAIL: frontmatter 'description' is required"; exit 1; }
 grep -qE "^tools:" "$F" || { echo "FAIL: frontmatter must declare 'tools' (Read/Write/Edit/Glob/Grep/Bash at minimum)"; exit 1; }
 
-# v0.8.0: reverse-prd-architect synthesizes a whole-project PRD bundle in one
+# v0.8.0: reverse-architect synthesizes a whole-project PRD + spec bundle in one
 # pass — the heaviest single-shot agent in the plugin. Pinned to opus + max.
 grep -qE "^model: opus$" "$F" || { echo "FAIL: frontmatter must pin 'model: opus' (system-level synthesis)"; exit 1; }
-grep -qE "^effort: max$" "$F" || { echo "FAIL: frontmatter must declare 'effort: max' (whole-project PRD synthesis)"; exit 1; }
+grep -qE "^effort: max$" "$F" || { echo "FAIL: frontmatter must declare 'effort: max' (whole-project PRD+spec synthesis)"; exit 1; }
 
 # Persona: chief system architect + senior PM
 grep -qiE "chief system architect|system architect" "$F" || { echo "FAIL: persona must be a chief system architect"; exit 1; }
@@ -181,5 +183,55 @@ section_body_h3 "^### \`## How it connects\`" | grep -qiE "flowchart|mermaid" \
 # R3: skip-when-single-step rule
 section_body_h3 "^### \`## How it connects\`" | grep -qiE "single-step.*skip|skip.*single-step|no empty headings|CRUD API.*skip|passive metric.*skip" \
   || { echo "FAIL: v0.9.3 User-facing flow guidance must specify the skip-when-single-step rule (no empty headings)"; exit 1; }
+
+# === v0.9.5 R9 + R10 additive assertions ===================================
+# Agent renamed reverse-prd-architect → reverse-architect; gains dual deliverable
+# (PRD + spec); spec output follows section-aware refresh policy with hard
+# never-touch on ## Design rationale.
+
+# Persona references the new orchestrator command name
+grep -qF "/super-manus:reverse-prd-spec" "$F" \
+  || { echo "FAIL: v0.9.5 R9 agent must reference /super-manus:reverse-prd-spec as its spawning orchestrator"; exit 1; }
+
+# Dual-deliverable section
+grep -qF "## Deliverables" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must declare a ## Deliverables section covering PRD + spec outputs"; exit 1; }
+grep -qF "<module>.spec.md" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must declare prd/<module>.spec.md as a deliverable"; exit 1; }
+
+# output_scope input documented (3 values)
+grep -qF "output_scope" "$F" \
+  || { echo "FAIL: v0.9.5 R9 must document the output_scope input"; exit 1; }
+for v in both prd spec; do
+  grep -qE "\`?${v}\`?" "$F" || { echo "FAIL: v0.9.5 R9 must enumerate output_scope value '${v}'"; exit 1; }
+done
+
+# Section-aware refresh policy (R10 extension on the agent side)
+grep -qF "## Section-aware refresh" "$F" \
+  || { echo "FAIL: v0.9.5 R10 must declare a '## Section-aware refresh' section"; exit 1; }
+# 4 spec sections must appear in the policy table
+for h in "## Data contracts" "## Interface contracts" "## Behavioral contracts" "## Design rationale"; do
+  grep -qF "$h" "$F" || { echo "FAIL: v0.9.5 R10 section-aware policy must reference spec section '$h'"; exit 1; }
+done
+# Never-touch rule on ## Design rationale (the load-bearing one)
+grep -qiE "Never touch|never auto-derived|never touched" "$F" \
+  || { echo "FAIL: v0.9.5 R10 must enforce 'Never touch' on ## Design rationale (100% human-curated)"; exit 1; }
+# Seed-if-absent + preserve + (audit) candidates rule on ## Behavioral contracts
+grep -qiE "Seed if absent|preserve.*append.*audit|(audit) bullet listing" "$F" \
+  || { echo "FAIL: v0.9.5 R10 must declare seed-if-absent + preserve + (audit) candidates rule on ## Behavioral contracts"; exit 1; }
+
+# Spec drift row format on contradiction
+grep -qF "## Spec drift" "$F" \
+  || { echo "FAIL: v0.9.5 R10 contradiction handler must reference drift_log.md ## Spec drift section"; exit 1; }
+grep -qF "drift_log.md" "$F" \
+  || { echo "FAIL: v0.9.5 R10 contradiction handler must reference drift_log.md (renamed from prd_drift.md)"; exit 1; }
+
+# 3000-word soft cap for spec
+grep -qF "3000" "$F" \
+  || { echo "FAIL: v0.9.5 R7 must mention ~3000-word soft cap for prd/<module>.spec.md"; exit 1; }
+
+# Soft warning on PRD↔spec topic overlap (NOT a drift row)
+grep -qiE "soft warning|topic.overlap|same.topic.*overlap|upstream/downstream" "$F" \
+  || { echo "FAIL: v0.9.5 R7 OQ3 must emit a SOFT WARNING (not a drift row) on PRD↔spec topic overlap"; exit 1; }
 
 echo OK
