@@ -56,7 +56,16 @@ docs/super-manus/prd/
 
 Sibling layout: same directory as PRD, both share the module name. They're two views of the same module, target-state, long-lived. No new directory.
 
-**Optional per module.** Stateless / pure-CRUD / glue-code modules don't need it; only modules with non-trivial data shape, interfaces, or behavioral semantics warrant one. The drift gate does NOT require a spec for every module.
+**Required per module** (ratified). Every module declared in `roadmap.md ## Modules` MUST have a corresponding `<module>.spec.md` alongside its `<module>.md` PRD. Stateless / pure-CRUD / glue-code modules still need the file, but their sections can be `(none — module is stateless)` placeholders.
+
+Required-mode execution:
+
+1. **`/super-manus:start`** seeds `<module>.spec.md` (from `templates/prd_spec.md`) for every module declared at start time.
+2. **`/super-manus:brainstorm`** seeds `<module>.spec.md` alongside every new `<module>.md` it creates (so newly-added modules don't get caught by the drift gate on their first milestone).
+3. **`/super-manus:reverse-prd-spec`** in `scope=both` produces `<module>.spec.md` for every module on first run, even if all 4 sections start as `(none)`.
+4. **End-of-update drift gate Pass 1** (R10 extension) appends a `drift_log.md ## Spec drift` row for any module that has `<module>.md` but no `<module>.spec.md`. The row is `pending`; gate blocks milestone close until resolved.
+
+The strict requirement keeps engineering discipline uniform — every module has a stated technical contract, even if minimal. Empty-section placeholders (`(none — module is stateless)`) are explicit declarations, not omissions.
 
 **Word cap.** Target ~3000 words of prose (soft cap; fenced code blocks and markdown tables don't count). Engineering density is higher than PRD's per-module 2000-word target.
 
@@ -216,9 +225,9 @@ scripts, agents, and tests parse them by exact match. -->
 
 ### Open questions
 
-1. **Required vs optional.** I'm proposing optional (per-module gate). Argument for required: forces engineering discipline; every module gets a spec. Argument against (my recommendation): noise on glue / stateless modules; opt-in is friendlier. Final call goes to user.
+1. **Required vs optional** — **Ratified: required per module.** See "Required per module" subsection above for execution details (start / brainstorm / reverse-prd-spec all seed; drift gate Pass 1 blocks on missing spec.md). Stateless modules satisfy the requirement with `(none — module is stateless)` placeholder content.
 2. **Schema as markdown table vs fenced SQL.** `## Data contracts` example uses a markdown table; some users may prefer fenced ```sql blocks. Persona should allow both — table for cross-referencing, SQL for migration-traceable.
-3. **`## Behavioral contracts` overlap with PRD `## Quality bar`.** PRD's `## Quality bar` already carries NFRs (latency, scale). Spec's `## Behavioral contracts` carries algorithmic semantics. The two CAN overlap — same algorithm enforces both. Policy: PRD states the user-observable promise ("signin returns within 200ms"); spec states the algorithm that delivers it ("rate limit on Redis sliding window, retry-after on exceed"). Reverse-architect surfaces overlap as a warning, not as drift.
+3. **`## Behavioral contracts` overlap with PRD `## Quality bar`** — **Ratified: upstream/downstream relationship, no de-dup.** PRD's `## Quality bar` carries the **user-facing promise** ("signin returns within 200ms p95"). Spec's `## Behavioral contracts` carries the **algorithmic semantics that deliver the promise** ("Redis sliding-window rate-limit; 429 with Retry-After on exceed; prepared statement hits idx_email"). Two views of the same thing — PRD looks out, spec looks in. They MAY discuss the same algorithm; they MUST NOT contradict. `reverse-architect` emits a **soft warning** when it detects same-topic bullets across the two ("PRD `## Quality bar` bullet '<X>' and spec `## Behavioral contracts` bullet '<Y>' appear to discuss the same behavior — please confirm upstream/downstream consistency"). The warning is informational, NOT a drift row.
 
 ## R8. `/super-manus:spec-update <module>` command
 
@@ -244,7 +253,7 @@ Flow:
 2. **Drift check (light).** Unlike PRD's drift check (which requires LSP + grep cross-check), spec is engineering voice — it can move with the code. Surface a single soft check: "any uncommitted source changes in this module's directory?" — if yes, warn that spec edits may collide with in-flight work.
 3. **Mode auto-detect** (same as `/prd-update`):
    - **Forward iteration**: user adds/tightens a bullet. No `findings.md` entry required (engineering edits don't carry product-decision weight; the spec edit itself + `git log` are the trace).
-   - **Drift absorption**: a `prd_drift.md` row is `pending` AND tagged `spec-drift` (NEW row type, see R10). Resolve by editing spec; flip Resolution to `absorbed`.
+   - **Drift absorption**: a `drift_log.md ## Spec drift` row is `pending` for this module (see R10 — `drift_log.md` is the v0.9.5 R10 rename of `prd_drift.md`). Resolve by editing spec; flip Resolution to `absorbed`.
 4. **Constraints during edit:**
    - One section at a time (forward iteration); multi-section requires the full reverse-prd-spec path.
    - No changelog markers (no strikethrough, no `(was: ...)`, no dated revision marks).
@@ -258,7 +267,7 @@ Flow:
 
 ### Open questions
 
-1. **Reuse `/prd-update` with a `--scope=spec` flag, OR new command?** I lean new command. `/prd-update` carries PM voice discipline + has different drift semantics (PRD drift is product, spec drift is technical). Reusing one command with mode flags conflates the two; separate commands keep the persona clean.
+1. **Reuse `/prd-update` with a `--scope=spec` flag, OR new command?** — **Ratified: standalone `/spec-update` command.** `/prd-update` carries PM voice discipline + has different drift semantics (PRD drift is product-level, spec drift is technical). Reusing one command with mode flags conflates the two; separate commands keep the persona clean.
 
 ## R9. `/super-manus:reverse-prd-spec` rename + scope choice + agent rename
 
@@ -351,15 +360,46 @@ Same shape as existing PRD treatment of `## Open questions` — the principle is
 
 ### Drift surfacing
 
-When `reverse-architect` finds source-level evidence that *contradicts* a preserved `## Behavioral contracts` bullet (e.g., spec says "rate limit 5/15min" but source shows `RateLimiter(10, "1m")`), it does NOT silently update the bullet. Instead it appends a `prd_drift.md` row:
+### File rename + two H2 layout (ratified)
+
+`prd_drift.md` is renamed to **`drift_log.md`** (v0.9.5 R10). The current 4-column schema is preserved verbatim, but the file now carries two H2 sections — one per drift kind:
+
+```markdown
+# Drift log
+
+## PRD drift
+
+| Date | Module | Conflict | Resolution |
+|---|---|---|---|
+| 2026-05-11 | auth | login flow doesn't match PRD ## What users get bullet "social signin" | pending |
+
+## Spec drift
+
+| Date | Module | Conflict | Resolution |
+|---|---|---|---|
+| 2026-05-11 | auth | spec ## Behavioral contracts says "rate limit 5/15min" but src/auth/limiter.py:42 instantiates RateLimiter(10, "1m") | pending |
+| 2026-05-11 | payments | missing payments.spec.md | pending |
+```
+
+H2 boundary parsing is the established super-manus idiom (used by `task_plan.md ## Phases`, `progress.md ## Completed commits` / `## Session log`, `findings.md ## Decisions / ## Errors / ## Data points / ## Reflections`). Reuses existing tooling shape.
+
+### Behavior on contradiction
+
+When `reverse-architect` finds source-level evidence that *contradicts* a preserved `## Behavioral contracts` bullet (e.g., spec says "rate limit 5/15min" but source shows `RateLimiter(10, "1m")`), it does NOT silently update the bullet. Instead it appends a row to `drift_log.md ## Spec drift`:
 
 ```
 | <YYYY-MM-DD> | <module> | spec ## Behavioral contracts says "rate limit 5/15min" but src/auth/limiter.py:42 instantiates RateLimiter(10, "1m") | pending |
 ```
 
-(Same row format as existing prd_drift, identified by `spec-drift` subtype in a new optional Type column — see Cross-cutting below.)
+Similarly, **end-of-update drift gate Pass 1** writes "missing `<module>.spec.md`" rows to `## Spec drift` (R7 required-mode enforcement).
 
-User resolves via `/super-manus:spec-update <module>` (edit the bullet) or `/super-manus:prd-update` (if it's really a PRD-level NFR) or by reverting the code. Drift gate (BLOCKING end-of-update) treats spec-drift rows the same as PRD-drift rows for the resolved-vs-pending count.
+User resolves via:
+
+- `/super-manus:spec-update <module>` — edit the bullet to match source, or absorb the drift.
+- `/super-manus:prd-update` — if the deviation is actually a PRD-level NFR (e.g., signin latency promise needs updating), not a spec issue.
+- Revert the source code — keep contract as authoritative.
+
+Drift gate (BLOCKING end-of-update) counts `pending` rows across **both** H2 sections of `drift_log.md` for the module → must be zero to flip roadmap to `stable`.
 
 ### Tests
 
@@ -370,10 +410,9 @@ User resolves via `/super-manus:spec-update <module>` (edit the bullet) or `/sup
 
 ### Open questions
 
-1. **Column subtype on `prd_drift.md`.** Currently `prd_drift.md` has columns `Date | Module | Conflict | Resolution`. Adding a `Type` column (`prd` / `spec`) makes spec-drift identifiable but breaks the existing 4-column schema (hook parsers depend on it). Two options:
-   - **Add Type as 5th column** — breaking schema change; needs migration of existing drift rows.
-   - **Encode in Conflict text** — every spec-drift row's Conflict starts with `spec:` prefix; parsers do substring match. Soft, non-breaking.
-   Recommend (b) for v0.9.5; promote to (a) in v1.0 if telemetry shows the distinction matters.
+1. **How to distinguish PRD drift from spec drift in `prd_drift.md`?** — **Ratified: rename file to `drift_log.md`, split into two H2 sections (`## PRD drift` + `## Spec drift`), preserve 4-column schema in each.** Chosen path is **E (rename) + D (two H2)** combined. Rationale: H2 boundary parsing is super-manus's established idiom (every other parsed artifact uses H2 sections); generic name (`drift_log.md`) is future-proof if more drift kinds are added later (e.g., e2e-drift); 4-column schema preserved means existing hook/script parsers only need a section-scoping change, not a schema migration.
+
+   Migration: existing `docs/super-manus/prd_drift.md` files become `drift_log.md` with the current rows landing under `## PRD drift`. The `## Spec drift` section starts empty. R9 ship checklist includes the rename + a one-shot migration helper.
 
 ## Cross-cutting concerns
 
@@ -387,4 +426,18 @@ User resolves via `/super-manus:spec-update <module>` (edit the bullet) or `/sup
 
 ## Status
 
-NOT yet ratified. Each R-item needs explicit user "ship it" before implementation. Recommended sequence: R7 → R8 → R9 → R10, separate milestones, separate phase plans, separate commits.
+**Design ratified, NOT yet implemented.** All four R-items have had their Open Questions decided (see each R-item's "Open questions" section — each OQ now carries a "Ratified:" line). Implementation still needs a separate "ship it" directive per R-item.
+
+Ratified design decisions:
+
+- **R7 OQ1** — Required per module (every module must have `<module>.spec.md`; stateless modules use `(none — ...)` placeholders).
+- **R7 OQ3** — PRD `## Quality bar` vs spec `## Behavioral contracts` is upstream/downstream; reverse-architect emits soft warning on same-topic overlap, not drift.
+- **R8 OQ1** — Standalone `/super-manus:spec-update` command (not a `/prd-update --scope=spec` flag).
+- **R10 OQ1** — File rename `prd_drift.md` → `drift_log.md`, two H2 sections (`## PRD drift` + `## Spec drift`), 4-column schema preserved.
+
+Still open:
+
+- **R7 OQ2** (Data contracts schema format — markdown table vs fenced SQL) — defer to implementation; persona allows both.
+- **R9 OQ1, R9 OQ2, R10 OQ1's migration helper** — narrowing during implementation.
+
+Recommended sequence: R7 → R8 → R9 → R10, separate milestones, separate phase plans, separate commits.
