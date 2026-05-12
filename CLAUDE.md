@@ -19,7 +19,9 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
   - `prd_module.md` (9 H2): `## Why this exists`, `## Users`, `## Success`, `## What users get`, `## How it connects`, `## Quality bar`, `## Risks`, `## Out of scope`, `## Open questions`
   - `prd_spec.md` (4 H2, v0.9.5 R7): `## Data contracts`, `## Interface contracts`, `## Behavioral contracts`, `## Design rationale` (engineering voice; sibling to `prd_module.md`)
   - `roadmap.md`: `## Modules`
-  - `drift_log.md` (v0.9.5 R10 — renamed from `prd_drift.md`): `# Drift log` (H1) + two H2 sections `## PRD drift` and `## Spec drift`, each carrying a 4-column `| Date | Module | Conflict | Resolution |` table
+  - `drift_log.md` (v0.9.5 R10 — renamed from `prd_drift.md`; v0.9.7 R15 — Author column added between Date and Module): `# Drift log` (H1) + two H2 sections `## PRD drift` and `## Spec drift`, each carrying a 5-column `| Date | Author | Module | Conflict | Resolution |` table. Author cell is sourced from `git config user.name` at append time (falls back to `unknown` if unset).
+- `.gitattributes` (v0.9.7 R13) is **narrowly scoped**: only `docs/super-manus/drift_log.md` and `docs/super-manus/roadmap.md` get `merge=union`. NEVER add `prd/*.md` or `prd/*.spec.md` rules — those are structured documents and union merge would silently keep contradictory edits to the same H2 section (Alice "200ms" + Bob "300ms" = both lines preserved, no conflict surfaced). `tests/test_gitattributes.sh` enforces the negative regression.
+- `templates/codeowners.example` (v0.9.7 R14) is the canonical reference for GitHub CODEOWNERS routing per super-manus path conventions. Three sections: per-module ownership stanzas, cross-module shared files requiring multiple-team review, and inline-documented GitHub CODEOWNERS quirks (gitignore-style matching, same-org teams, last-match-wins). NOT auto-installed — users copy manually. `tests/test_template_codeowners.sh` enforces the three sections + ≥3 quirks documented.
 - `templates/prd.md` (legacy v0.1 flat-folder PRD) is kept for backward compatibility and must not be removed.
 - Plugin manifest (`.claude-plugin/plugin.json`) and hook configuration (`hooks/hooks.json`) are load-bearing. Validate JSON before committing.
 
@@ -38,7 +40,7 @@ This file is for AI agents (and humans) modifying the super-manus plugin itself.
     │   ├── _system/test_<scenario>.<ext>    ← cross-module scenarios from prd/_index.md ## Demo
     │   └── <module>/test_<capability>.<ext> ← per-module capabilities from prd/<module>.md ## What users get
     ├── roadmap.md                           ← project-global, module status table
-    ├── drift_log.md                         ← project-global, append-only drift log (v0.9.5 R10 — renamed from prd_drift.md). Two H2 sections: `## PRD drift` + `## Spec drift`. Same 4-column `| Date | Module | Conflict | Resolution |` schema in each.
+    ├── drift_log.md                         ← project-global, append-only drift log (v0.9.5 R10 — renamed from prd_drift.md; v0.9.7 R15 — Author column added). Two H2 sections: `## PRD drift` + `## Spec drift`. Same 5-column `| Date | Author | Module | Conflict | Resolution |` schema in each.
     └── impl/<module>/<YYYY-MM-DD>-<update>/ ← time series of milestones (only place timestamps appear)
         ├── task_plan.md
         ├── findings.md
@@ -79,7 +81,8 @@ Invariants:
 
 ## Where to look
 
-- `docs/design-v0.9.6.md` — current test-writer Reflexion + PRD↔spec topic-overlap radar design (v0.9.6). Read before changing the test-writer spawn inputs, the `## Honor prior_reflections` test-writer procedure, the post-edit topic-overlap check in `prd-update` / `spec-update`, or the `acknowledged-soft:` Resolution discipline.
+- `docs/design-v0.9.7.md` — current multi-author baseline design (v0.9.7). Read before changing `.gitattributes` merge rules, the `templates/codeowners.example` template, or the `drift_log.md` 5-column schema with Author cell.
+- `docs/design-v0.9.6.md` — test-writer Reflexion + PRD↔spec topic-overlap radar design (v0.9.6). Read before changing the test-writer spawn inputs, the `## Honor prior_reflections` test-writer procedure, the post-edit topic-overlap check in `prd-update` / `spec-update`, or the `acknowledged-soft:` Resolution discipline.
 - `docs/design-v0.9.5.md` — spec-layer + drift-log-rename design (v0.9.5). Read before changing the per-module `<module>.spec.md` shape, the `/super-manus:spec-update` command, the `reverse-prd-spec` rename + scope question, the section-aware refresh policy, or the `drift_log.md` two-section structure.
 - `docs/design-v0.9.0.md` — reviewer-upgrade design (v0.9.0). Read before changing edge-case enumeration discipline, the pre-close test-run requirement, or the reviewer's grep/Read budget.
 - `docs/design-v0.8.md` — v0.8 design. Read before changing the runtime probe, Cross-validation protocol, model/effort routing, or `agents.yml` override mechanism.

@@ -305,4 +305,25 @@ echo "$gate_pass3" | grep -qiE "equals.*pending|equals .pending.|column equals .
 echo "$gate_pass3" | grep -qiE "case-insensitive" \
   || { echo "FAIL: Pass 3 must specify case-insensitive equality match on 'pending' (so 'Pending' / 'PENDING' user-typed values work but 'acknowledged-soft: ...' still doesn't match)"; exit 1; }
 
+# === v0.9.7 R15: drift_log row append uses 5-column schema with Author ===
+# impl.md has 7 drift-row append sites: per-phase conflict, code-writer-modified-tests,
+# PRD-declared-but-not-implemented, implemented-but-not-in-PRD, missing-spec,
+# missing-e2e, red-e2e. Every row-append example must show the 5-column form
+# with <author> as the second cell.
+author_row_count=$(grep -cF "| <YYYY-MM-DD> | <author> |" "$F" || true)
+[ "$author_row_count" -ge 7 ] \
+  || { echo "FAIL: v0.9.7 R15 — impl.md must have at least 7 drift-row append examples with <author> cell (found $author_row_count); expected sites: per-phase conflict, code-writer-modified-tests, PRD-declared-but-not-implemented, implemented-but-not-in-PRD, missing-spec, missing-e2e, red-e2e"; exit 1; }
+
+# Negative regression — old 4-column form must NOT appear in any drift_log row example.
+# Match the bare 4-col pattern: | <YYYY-MM-DD> | <module-or-$MODULE> | ... — without
+# <author> in the second cell.
+if grep -E '^\s*\|\s*<YYYY-MM-DD>\s*\|\s*(<module>|\$MODULE)\s*\|' "$F" >/dev/null; then
+  echo "FAIL: v0.9.7 R15 — impl.md still has a drift_log row example missing the <author> cell (old 4-column form). All row-append examples must be 5-column: | <YYYY-MM-DD> | <author> | <module> | <conflict> | <resolution> |"
+  exit 1
+fi
+
+# Author cell source must be documented
+grep -qF "git config user.name" "$F" \
+  || { echo "FAIL: v0.9.7 R15 — impl.md must document Author cell source ('git config user.name')"; exit 1; }
+
 echo OK

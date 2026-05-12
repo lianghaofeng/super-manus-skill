@@ -1,0 +1,18 @@
+# super-manus multi-author baseline (v0.9.7 R13).
+#
+# `merge=union` is git's built-in 3-way merge strategy for append-only ledgers:
+# when two branches both append rows to the file, git keeps BOTH sets of new
+# rows instead of reporting a same-line conflict at EOF.
+#
+# Applied ONLY to the two append-only project-state files. PRD (`prd/*.md`) and
+# spec (`prd/*.spec.md`) are STRUCTURED documents, not ledgers — applying union
+# to them would silently keep contradictory edits to the same `## Quality bar`
+# bullet (Alice "200ms" + Bob "300ms" = both lines preserved, no conflict
+# surfaced, PRD is now self-contradictory). git's default 3-way merge on PRD
+# / spec correctly surfaces those as conflicts for a human to resolve.
+#
+# Do NOT add `prd/*.md`, `prd/*.spec.md`, or any structured document here.
+# See docs/design-v0.9.7.md R13 for the full rationale.
+
+docs/super-manus/drift_log.md merge=union
+docs/super-manus/roadmap.md merge=union

@@ -2,9 +2,26 @@
 
 > 🌐 **语言**: [English](README.md) · **简体中文**
 
+> **v0.9.7 发布说明 —— 多人协作基线**（v0.9.6 的纯加层，一次 schema 迁移自动处理）：
+>
+> 这一版的动机是**让 2-10 人小团队顺畅协作**：现状是个人 / 双人项目跑得很顺，但只要第二个开发开始往同一仓库提 PR，`drift_log.md` 和 `roadmap.md` 末尾就会反复撞行；跨模块改动也没有自动指派 reviewer 的机制。v0.9.7 用最小代价（git 原生 `merge=union` + 一份 CODEOWNERS 模板 + drift_log 增列）把这些摩擦点抹掉，让 3-10 人团队能舒服共用一个 super-manus 项目。
+>
+> - **新增** `.gitattributes`：`drift_log.md` 和 `roadmap.md` 加 `merge=union`。两个开发在不同分支同时往这两个 append-only 文件末尾加行，git 不再报 EOF 冲突。PRD/spec 故意不加（union 会让 Alice "200ms" 和 Bob "300ms" 静默共存，比冲突更糟）。
+> - **新增** `templates/codeowners.example`——拷到 `.github/CODEOWNERS` 改占位符即可用。包含 super-manus 每个 module 必备的三条路径规则（PRD / spec / impl）+ 跨模块文件多 team review 规则 + GitHub CODEOWNERS 四大坑的内联文档（gitignore 风格匹配、同 org 限制、last-match-wins）。
+> - `drift_log.md` schema：**4 → 5 列**（`| Date | Author | Module | Conflict | Resolution |`）。Author 来自 `git config user.name`（没配回退 `unknown`）。pre-v0.9.7 老项目下次跑 `sm-start.sh` 自动迁移：旧行注入 `unknown`，第二次跑是 no-op。
+>
+> **这版没解决什么**（诚实标出天花板）：
+> - **两人改同一份 PRD / spec 的同一 H2 段、同一行** —— git 仍然会报冲突，由人手解。`merge=union` 故意不涵盖这种结构化文档（不然 Alice "200ms" + Bob "300ms" 会被静默并存，比冲突更糟）。
+> - **同一 module 上并发跑多个 update。** 顺序迭代是完全支持的（Alice 做完 RBAC → PR 合并 → Bob 接着在上面做 OAuth —— 正常 PR 流程，不撞）。v0.9.7 没解决的是**同模块两个 update 同时跑**：会撞 PRD bullet 和源码，因为全局账本 union merge 不扩展到结构化文档。同模块高并发要等后续 in-flight marker（v0.10 候选）。**实用建议**：同一时间一个 module 一个分支只让一个人做。
+> - **团队规模上限大约 10-15 人** —— 模块数 > 15、或跨 team 共用一个仓库时，单一 `_index.md` / `drift_log.md` 视野就不够了。这一步要 workspace 拆分（v1.0 候选）。
+>
+> 看起来像局限但其实不是的（澄清一下）：（a）"被打断后切回原 update" —— super-manus 本来就能干。`sm_active_update` 按 mtime 解析最近 update folder，切去 hotfix 回来直接跑 `/super-manus:impl` 就续上。（b）"看队友在做什么" —— `git pull` 就够，`drift_log.md` 新行 + `impl/<module>/<update>/` 新文件夹就是可见性信号。（c）任务分配 / 看板 / SLA —— 设计上就不在 super-manus 范围内：它是 PRD 驱动开发工具，不是项目管理工具。要这些请配合 Linear / Jira / GitHub Projects。
+>
+> 完整设计见 `docs/design-v0.9.7.md`。
+
 > **v0.9.5 重大重命名**（无向后兼容别名）：
 > - `/super-manus:reverse-prd` → **`/super-manus:reverse-prd-spec`**（现在同时产出 PRD 和 spec；用 2nd positional `both | prd | spec` 选 scope，或交互选）
-> - `prd_drift.md` → **`drift_log.md`**（两个 H2 sections：`## PRD drift` + `## Spec drift`；4 列 schema 不变）。`sm-start.sh` 在下次 run 时自动迁移老项目。
+> - `prd_drift.md` → **`drift_log.md`**（两个 H2 sections：`## PRD drift` + `## Spec drift`；v0.9.5 是 4 列 schema，v0.9.7 R15 加了 Author 列）。`sm-start.sh` 在下次 run 时自动迁移老项目。
 > - Agent `reverse-prd-architect` → **`reverse-architect`**（如果你在 `.super-manus/agents.yml` 设了 override，要更新条目）。
 > - **新增** `prd/<module>.spec.md`——每个 module 的工程参考文档（4 个 H2 sections，与 `<module>.md` 同级，required per module）。
 > - **新增** `/super-manus:spec-update <module>`——`/super-manus:prd-update` 的 spec 端对应命令。
@@ -214,7 +231,7 @@ super-manus 在使用它的项目里建出的磁盘布局：
     │   └── <module>/
     │       └── test_<capability>.<ext>         # 来自 prd/<module>.md ## What users get 的能力测试；自动发现
     ├── roadmap.md                              # 项目级，模块状态表（自动管理）
-    ├── drift_log.md                            # v0.9.5 R10：项目级，append-only 漂移日志。两个 H2 sections（## PRD drift + ## Spec drift），相同 4 列 schema。从 prd_drift.md 重命名。
+    ├── drift_log.md                            # v0.9.5 R10：项目级，append-only 漂移日志。两个 H2 sections（## PRD drift + ## Spec drift），相同 5 列 schema（v0.9.7 R15 加了 Author 列：| Date | Author | Module | Conflict | Resolution |）。Author 来自 `git config user.name`，没配回退 `unknown`。从 prd_drift.md 重命名。
     └── impl/                                   # 每模块的里程碑时间序列
         └── <module>/
             └── <YYYY-MM-DD>-<update-name>/     # 时间戳唯一出现的地方

@@ -40,4 +40,12 @@ grep -qiF "decision" "$F" || { echo "FAIL: must announce a decision before actin
 # Auto-mode: drive should execute, not just plan, when an unambiguous next step exists
 grep -qiF "execute" "$F" || { echo "FAIL: must mention executing the chosen next step"; exit 1; }
 
+# === v0.9.7 R15: drift_log row append uses 5-column schema with Author ===
+# drive.md's drift sweep appends rows to ## PRD drift; the row format must
+# include <author> between <YYYY-MM-DD> and the module column.
+grep -qF "| <YYYY-MM-DD> | <author> |" "$F" \
+  || { echo "FAIL: v0.9.7 R15 — drive.md row-append example must include <author> cell between date and module (5-column drift_log schema)"; exit 1; }
+grep -qF "git config user.name" "$F" \
+  || { echo "FAIL: v0.9.7 R15 — drive.md must document Author cell source ('git config user.name')"; exit 1; }
+
 echo OK

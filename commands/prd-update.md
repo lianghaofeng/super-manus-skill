@@ -129,6 +129,16 @@ If overlap NOT detected (token hit count < 3 in every spec section), skip this w
 
 If at any point AFTER the row is written the user re-judges and decides the overlap is a real conflict that SHOULD block end-of-update, they manually edit `docs/super-manus/drift_log.md` and change THAT row's Resolution cell from `acknowledged-soft: ...` to `pending`. drift_log's append-only invariant explicitly permits Resolution-cell mutation (only the cell, not the row itself; do NOT append a new row, that would double-count). The row WILL now gate end-of-update at Pass 3.
 
+### Row schema (v0.9.7 R15 — 5 columns)
+
+The full row appended to `drift_log.md ## Spec drift` for branches (b)/(c)/(a→ii)/(a→iv) is:
+
+```
+| <YYYY-MM-DD> | <author> | <module> | (soft) PRD-spec topic-overlap: PRD edit '<one-line>' shares vocabulary with spec ## <section> | acknowledged-soft: <variant> |
+```
+
+The `<author>` cell is sourced from `git config user.name` (fall back to `unknown` if unset). Schema: `Date | Author | Module | Conflict | Resolution`.
+
 ### Conflict column format (when R11 itself writes the row — branches (b)/(c)/(a→ii)/(a→iv))
 
 ```

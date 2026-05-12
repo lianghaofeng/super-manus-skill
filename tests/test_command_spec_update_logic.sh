@@ -159,4 +159,14 @@ grep -qiE "Hard-gates|enter.*hard gate|blocks.*roadmap" "$F" \
 grep -qiE "case-insensitive equality.*NOT substring|equality.*NOT substring|equals.*case-insensitive" "$F" \
   || { echo "FAIL: v0.9.6 R11.1 must clarify Pass 3 uses case-insensitive EQUALITY (not substring grep)"; exit 1; }
 
+# === v0.9.7 R15: drift_log row append uses 5-column schema with Author ===
+# spec-update.md writes drift_log rows in branches (b)/(c)/(a→ii)/(a→iv). The full
+# row-template example must use the 5-column form with <author> as the second cell.
+grep -qF "| <YYYY-MM-DD> | <author> | <module> |" "$F" \
+  || { echo "FAIL: v0.9.7 R15 — spec-update.md must show a 5-column drift_log row template with <author> as the second cell (branches b/c/a→ii/a→iv)"; exit 1; }
+grep -qF "git config user.name" "$F" \
+  || { echo "FAIL: v0.9.7 R15 — spec-update.md must document Author cell source ('git config user.name')"; exit 1; }
+grep -qiE "Date \| Author \| Module \| Conflict \| Resolution|5 column|5-column" "$F" \
+  || { echo "FAIL: v0.9.7 R15 — spec-update.md must call out the 5-column drift_log schema explicitly so writers know the cell order"; exit 1; }
+
 echo OK

@@ -1,0 +1,87 @@
+# super-manus CODEOWNERS template (v0.9.7 R14)
+#
+# Copy this file to .github/CODEOWNERS in your project root, then edit the
+# @your-org/<team> placeholders to match your actual GitHub teams / users.
+#
+# This is NOT auto-installed by /super-manus:start — it would conflict with
+# projects that already have CODEOWNERS rules for non-super-manus paths. The
+# manual copy + adapt is the right ROI: 5 minutes per project.
+#
+# ----------------------------------------------------------------------------
+# GitHub CODEOWNERS quirks — read these BEFORE editing:
+# ----------------------------------------------------------------------------
+#
+# 1. Path matching is gitignore-style, NOT glob. `**` behaves differently:
+#    - `docs/super-manus/impl/api/**` matches ANY depth under impl/api/
+#    - `*.spec.md` matches files in ANY directory (gitignore-style)
+#    - `/docs/super-manus/...` (leading slash) anchors to repo root
+#    Always test with `git check-ignore` or a CODEOWNERS validator.
+#
+# 2. Teams must be in the SAME GitHub organization as the repo. A team like
+#    `@other-org/squad` will silently fail to assign reviewers.
+#
+# 3. For personal repos / forks, use `@username` directly (not `@org/team`).
+#
+# 4. LAST matching pattern wins. Order matters. Put more-specific rules
+#    BELOW more-general ones (e.g., `*.md @docs-team` first, then a specific
+#    `prd/api.md @backend-team` below to override).
+#
+# 5. File size limits: max 3MB, max 3000 lines. CODEOWNERS over this is
+#    silently ignored by GitHub — keep it tight.
+#
+# 6. Comments start with `#`. No inline comments after a rule (the parser
+#    treats everything after the username list as part of the list).
+#
+# ----------------------------------------------------------------------------
+# super-manus per-module convention:
+# ----------------------------------------------------------------------------
+#
+# Each module owns these three path patterns:
+#
+#   docs/super-manus/prd/<module>.md         (PRD, PM voice)
+#   docs/super-manus/prd/<module>.spec.md    (spec, engineering voice)
+#   docs/super-manus/impl/<module>/**        (all milestone updates)
+#
+# Both `<module>.md` and `<module>.spec.md` should go to the SAME team so PRD
+# and code stay in sync (the spec sibling is engineering's view of what the
+# PRD promises — they must not drift apart in review).
+#
+# Cross-module files (prd/_index.md, roadmap.md, drift_log.md) require multiple
+# teams' review because any cross-module change touches them.
+#
+# ----------------------------------------------------------------------------
+# Per-module ownership — duplicate this stanza for each module you have:
+# ----------------------------------------------------------------------------
+
+docs/super-manus/prd/api.md           @your-org/backend-team
+docs/super-manus/prd/api.spec.md      @your-org/backend-team
+docs/super-manus/impl/api/**          @your-org/backend-team
+
+docs/super-manus/prd/web.md           @your-org/frontend-team
+docs/super-manus/prd/web.spec.md      @your-org/frontend-team
+docs/super-manus/impl/web/**          @your-org/frontend-team
+
+# Add more module stanzas here as your project grows.
+
+# ----------------------------------------------------------------------------
+# Cross-module files — require approval from multiple teams:
+# ----------------------------------------------------------------------------
+
+docs/super-manus/prd/_index.md        @your-org/backend-team @your-org/frontend-team
+docs/super-manus/roadmap.md           @your-org/backend-team @your-org/frontend-team
+docs/super-manus/drift_log.md         @your-org/backend-team @your-org/frontend-team
+
+# E2E tests are cross-module by design (they test capability scenarios that
+# cross module boundaries) — same shared ownership.
+docs/super-manus/e2e/**               @your-org/backend-team @your-org/frontend-team
+
+# ----------------------------------------------------------------------------
+# Plugin / project-level files — adapt to your repo's existing reviewer convention:
+# ----------------------------------------------------------------------------
+
+# Plugin manifest changes (version bumps, capabilities) — typically maintainer-only.
+# .claude-plugin/**                    @your-org/maintainers
+
+# CLAUDE.md / README.md — typically a docs team or the project maintainer.
+# CLAUDE.md                            @your-org/maintainers
+# README*.md                           @your-org/maintainers

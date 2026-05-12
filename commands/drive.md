@@ -50,8 +50,9 @@ For each module M with at least one update folder:
 2. Read the most recent update's `progress.md ## Completed commits`.
 3. If a commit message hints at a capability not in `## What users get` or contradicts `## Out of scope`, append one row to `docs/super-manus/drift_log.md ## PRD drift` (v0.9.5 R10 — drift_log replaces the old prd_drift.md; PRD-side drift goes under the `## PRD drift` H2):
    ```
-   | <YYYY-MM-DD> | M | <one-line>: <commit hint> not declared in prd/M.md | pending |
+   | <YYYY-MM-DD> | <author> | M | <one-line>: <commit hint> not declared in prd/M.md | pending |
    ```
+   The `<author>` cell is sourced from `git config user.name` (fall back to `unknown` if unset) — v0.9.7 R15 schema: `Date | Author | Module | Conflict | Resolution`.
 4. Do NOT silently update the PRD. The drift row is a flag; resolution waits for the user via `/super-manus:prd-update`.
 
 Surface a one-line summary of new drift rows (if any) before executing the chosen action. If new drift was logged AND it conflicts with the chosen action, override and run `/super-manus:prd-update <module>` instead.

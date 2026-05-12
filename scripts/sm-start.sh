@@ -41,6 +41,56 @@ fi
 base="docs/super-manus"
 index_file="$base/prd/_index.md"
 
+# v0.9.7 R15 migration: drift_log.md 4-column schema → 5-column (Author second).
+# Detect: drift_log.md exists AND its first table-header row is the legacy 4-col
+# form `| Date | Module | Conflict | Resolution |`. Rewrite both H2 sections to
+# 5-col, injecting `unknown` as the Author cell for every existing data row.
+# Idempotent: a re-run finds the new schema and skips.
+# Runs BEFORE the v0.9.5 R10 migration block below so a freshly-renamed
+# drift_log.md still gets the column upgrade in the same sm-start invocation.
+if [ -f "$base/drift_log.md" ] && grep -qF "| Date | Module | Conflict | Resolution |" "$base/drift_log.md"; then
+  TARGET="$base/drift_log.md" python3 - <<'PY'
+import os, sys
+target_path = os.environ["TARGET"]
+src = open(target_path).read()
+lines = src.splitlines()
+out = []
+NEW_HEADER = "| Date | Author | Module | Conflict | Resolution |"
+NEW_SEP    = "| --- | --- | --- | --- | --- |"
+OLD_HEADER = "| Date | Module | Conflict | Resolution |"
+OLD_SEP    = "| --- | --- | --- | --- |"
+in_data = False
+for line in lines:
+    if line == OLD_HEADER:
+        out.append(NEW_HEADER)
+        in_data = False  # next line should be separator
+        continue
+    if line == OLD_SEP:
+        out.append(NEW_SEP)
+        in_data = True
+        continue
+    if in_data and line.startswith("|") and not line.startswith("| ---"):
+        # Data row: insert `unknown` as the second cell. Be conservative:
+        # if the row already has 5 columns (re-run mid-migration?), skip it.
+        cells = line.split("|")
+        # cells = ['', ' Date ', ' Module ', ' Conflict ', ' Resolution ', '']  (5 inner cells = 6 splits for old 4-col)
+        # For old 4-col data: 6 splits. For new 5-col data: 7 splits. Anything else → leave alone.
+        if len(cells) == 6:
+            new_cells = [cells[0], cells[1], " unknown ", cells[2], cells[3], cells[4], cells[5]]
+            out.append("|".join(new_cells))
+            continue
+        # Already 5-col or malformed — leave as is.
+        out.append(line)
+        continue
+    if line.startswith("##"):
+        in_data = False  # H2 boundary closes data section
+    out.append(line)
+# Preserve trailing newline behavior.
+trailing_nl = "\n" if src.endswith("\n") else ""
+open(target_path, "w").write("\n".join(out) + trailing_nl)
+PY
+fi
+
 # v0.9.5 R10 migration (runs on both fresh + idempotent paths so re-runs of
 # sm-start against a pre-v0.9.5 project actually pick up the rename): legacy
 # prd_drift.md present but no drift_log.md yet → seed drift_log.md from template,
@@ -54,6 +104,8 @@ if [ -f "$base/prd_drift.md" ] && [ ! -f "$base/drift_log.md" ]; then
   cp "$src" "$base/drift_log.md"
   # Insert legacy data rows under ## PRD drift section, after the schema separator row.
   # Python because awk -v doesn't accept multi-line variables cleanly.
+  # v0.9.7 R15: drift_log template is now 5-col, so legacy 4-col data rows are
+  # transformed to 5-col by injecting `unknown` as the Author cell.
   LEGACY="$legacy" TARGET="$base/drift_log.md" python3 - <<'PY'
 import os, re, sys
 legacy = open(os.environ["LEGACY"]).read()
@@ -62,14 +114,23 @@ rows = [ln for ln in legacy.splitlines() if ln.startswith("|")]
 data_rows = rows[2:] if len(rows) > 2 else []
 if not data_rows:
     sys.exit(0)
+# v0.9.7 R15: transform legacy 4-col data rows to 5-col with `unknown` Author.
+def upgrade_4col_to_5col(row):
+    cells = row.split("|")
+    # 4-col data row: ['', ' Date ', ' Module ', ' Conflict ', ' Resolution ', '']  → 6 splits
+    if len(cells) == 6:
+        return "|".join([cells[0], cells[1], " unknown ", cells[2], cells[3], cells[4], cells[5]])
+    # Already 5-col or malformed: leave as is.
+    return row
+data_rows = [upgrade_4col_to_5col(r) for r in data_rows]
 target_path = os.environ["TARGET"]
 target = open(target_path).read().splitlines()
 out = []
 inserted = False
 for line in target:
     out.append(line)
-    if not inserted and line == "| --- | --- | --- | --- |":
-        # First match is ## PRD drift's separator; insert legacy rows here.
+    # First match is ## PRD drift's separator (5-col since template is v0.9.7 R15).
+    if not inserted and line == "| --- | --- | --- | --- | --- |":
         out.extend(data_rows)
         inserted = True
 open(target_path, "w").write("\n".join(out) + "\n")

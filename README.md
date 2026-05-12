@@ -2,9 +2,26 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
+> **v0.9.7 release notes — multi-author baseline** (additive on top of v0.9.6; one schema migration, auto-handled):
+>
+> The driver for this release is **making super-manus comfortable for 2-10 person teams**: solo / pair projects already work well, but as soon as a second developer starts opening PRs against the same repo, `drift_log.md` and `roadmap.md` collide at EOF on every parallel commit, and cross-module changes lack auto-routing to the right reviewers. v0.9.7 closes those gaps with the lightest possible moves (git-native `merge=union` + a CODEOWNERS template + one new drift_log column) so 3-10 person teams can share one super-manus project without the cumulative merge-friction tax.
+>
+> - **NEW** `.gitattributes` with `merge=union` for `drift_log.md` + `roadmap.md`. Two authors appending to either ledger on parallel branches no longer trigger an EOF merge conflict. PRD/spec files deliberately excluded — those stay on git's default 3-way merge (union would silently merge contradictory edits).
+> - **NEW** `templates/codeowners.example` — copy to `.github/CODEOWNERS` and adapt to your GitHub teams. Documents the three required path patterns per super-manus module + the four sharp edges of GitHub's CODEOWNERS parser.
+> - `drift_log.md` schema: **4 → 5 columns** (`| Date | Author | Module | Conflict | Resolution |`). Author cell sourced from `git config user.name` at append time (falls back to `unknown`). Pre-v0.9.7 projects are auto-migrated by `sm-start.sh` on next invocation: existing rows get `unknown` injected; second invocation is a no-op.
+>
+> **What this release does NOT solve** (be honest about the ceiling):
+> - **Two authors editing the same H2 section / same line of a PRD or spec file** — git still reports a conflict, resolved by hand. `merge=union` deliberately does not cover structured documents (it would silently keep contradictory edits).
+> - **Concurrent updates against the same module.** Sequential iteration on one module is fully supported (Alice ships RBAC → PR merges → Bob picks up OAuth on top of it — no collisions, the standard PR flow). What v0.9.7 does *not* solve is **two updates running in parallel against the same module**: they'll still collide on PRD bullets and on source code, because the global-ledger union merge doesn't extend to structured documents. Same-module high-concurrency wants an in-flight marker (v0.10 candidate). Practical recommendation: keep one author per module per branch at a time.
+> - **Team-size ceiling around 10-15 people** — once your project has 15+ modules or multiple teams sharing the repo, the single `_index.md` / `drift_log.md` becomes hard to scan; that wants workspace partitioning (v1.0 candidate).
+>
+> Things that look like limitations but aren't, for the record: (a) "Picking up mid-update after a context switch" — super-manus already handles this; `sm_active_update` resolves the most-recent update folder by mtime, so running `/super-manus:impl` after a hotfix just resumes where you left off. (b) "Seeing what teammates are working on" — that's what `git pull` is for; `drift_log.md` new rows + `impl/<module>/<update>/` new folders are the visibility signal. (c) Task assignment / Kanban / SLAs — out of scope by design; super-manus is a PRD-driven-development tool, not a project-management tool. Pair it with Linear / Jira / GitHub Projects.
+>
+> See `docs/design-v0.9.7.md` for the full design.
+
 > **v0.9.5 release notes — breaking renames** (no backward-compat aliases):
 > - `/super-manus:reverse-prd` → **`/super-manus:reverse-prd-spec`** (now produces PRD AND/OR spec; pick scope interactively or via 2nd positional `both | prd | spec`)
-> - `prd_drift.md` → **`drift_log.md`** (two H2 sections: `## PRD drift` + `## Spec drift`; 4-column schema preserved). `sm-start.sh` auto-migrates legacy projects on next run.
+> - `prd_drift.md` → **`drift_log.md`** (two H2 sections: `## PRD drift` + `## Spec drift`; v0.9.5 was 4-column, v0.9.7 R15 added the Author column). `sm-start.sh` auto-migrates legacy projects on next run.
 > - Agent `reverse-prd-architect` → **`reverse-architect`** (update `.super-manus/agents.yml` if you set an override).
 > - **NEW** `prd/<module>.spec.md` per-module engineering reference (4 H2 sections, sibling to `<module>.md`, required per module).
 > - **NEW** `/super-manus:spec-update <module>` — spec-side analog of `/super-manus:prd-update`.

@@ -52,8 +52,9 @@ Decide: does the phase intent introduce a capability not declared in `## What us
 - **No conflict** → continue to "Probe LSP availability".
 - **Conflict** → append one row to `docs/super-manus/drift_log.md ## PRD drift` (v0.9.5 R10 — project-global drift log, two H2 sections; PRD-vs-code conflicts go under `## PRD drift`):
   ```
-  | <YYYY-MM-DD> | <module> | <one-line conflict description> | pending |
+  | <YYYY-MM-DD> | <author> | <module> | <one-line conflict description> | pending |
   ```
+  The `<author>` cell is sourced from `git config user.name` (fall back to `unknown` if unset) — v0.9.7 R15 multi-author attribution. Schema is 5 columns: `Date | Author | Module | Conflict | Resolution`.
   Then tell the user: "Drift detected in phase <n> (`<phase-name>`) of `<module>`. Two paths:
   1. Revert the phase intent to match PRD `## What users get` / `## Quality bar` / `## Out of scope`.
   2. Run `/super-manus:prd-update $MODULE` first, then re-run `/super-manus:impl`."
@@ -598,7 +599,7 @@ done < "$UPDATE_DIR/.test_hashes_p<n>.txt"
 - **Any mismatch** → ABORT this phase. The phrase "code-writer modified tests" applies. Append a row to `docs/super-manus/drift_log.md ## PRD drift` (pipeline-violation rows count as PRD-side drift):
 
   ```
-  | <YYYY-MM-DD> | <module> | code-writer modified tests for phase p<n> | pending |
+  | <YYYY-MM-DD> | <author> | <module> | code-writer modified tests for phase p<n> | pending |
   ```
 
   Surface to the user verbatim:
@@ -687,11 +688,11 @@ Read `docs/super-manus/prd/$MODULE.md` (`## What users get`, `## Quality bar`, `
 
 - **"PRD declared but not implemented"** — for each bullet in `## What users get` / `## Quality bar` that no commit visibly satisfies, append to `docs/super-manus/drift_log.md ## PRD drift` (v0.9.5 R10 — drift_log replaces prd_drift.md; PRD-side rows go under `## PRD drift`):
   ```
-  | <YYYY-MM-DD> | $MODULE | <bullet text> declared but not in commits | pending |
+  | <YYYY-MM-DD> | <author> | $MODULE | <bullet text> declared but not in commits | pending |
   ```
 - **"Implemented but not in PRD"** — for each capability visible in commits that is not declared in PRD, append:
   ```
-  | <YYYY-MM-DD> | $MODULE | <capability> shipped but not in prd/$MODULE.md | pending |
+  | <YYYY-MM-DD> | <author> | $MODULE | <capability> shipped but not in prd/$MODULE.md | pending |
   ```
 
 The double-source rule still applies: only append a drift row when both LSP and grep (where applicable) agree the gap is real.
@@ -699,7 +700,7 @@ The double-source rule still applies: only append a drift row when both LSP and 
 **Missing-spec detection (v0.9.5 R7 + R10 — required-mode enforcement).** Independent of commit-vs-PRD drift, also check whether `$MODULE` has a corresponding `<module>.spec.md` sibling. If `docs/super-manus/prd/$MODULE.md` exists but `docs/super-manus/prd/$MODULE.spec.md` does NOT, append one row to `docs/super-manus/drift_log.md ## Spec drift`:
 
 ```
-| <YYYY-MM-DD> | $MODULE | missing $MODULE.spec.md (v0.9.5 R7 required-mode: every module must have a sibling engineering reference) | pending |
+| <YYYY-MM-DD> | <author> | $MODULE | missing $MODULE.spec.md (v0.9.5 R7 required-mode: every module must have a sibling engineering reference) | pending |
 ```
 
 The user resolves by running `/super-manus:reverse-prd-spec $MODULE spec` (seed from source) or `/super-manus:spec-update $MODULE` (which offers to seed from template). The pending row counts toward Pass 3's `pending == 0` gate, so an update cannot mark roadmap `stable` while the spec sibling is missing.
@@ -712,11 +713,11 @@ For each `## What users get` capability touched by this update's commits:
 2. Run it. It must pass.
 3. Missing → append a `pending` row:
    ```
-   | <YYYY-MM-DD> | $MODULE | missing e2e coverage for capability <capability> | pending |
+   | <YYYY-MM-DD> | <author> | $MODULE | missing e2e coverage for capability <capability> | pending |
    ```
 4. Red → append a `pending` row:
    ```
-   | <YYYY-MM-DD> | $MODULE | e2e for capability <capability> is red | pending |
+   | <YYYY-MM-DD> | <author> | $MODULE | e2e for capability <capability> is red | pending |
    ```
 
 For each cross-module `## Demo` scenario completed in this update:
