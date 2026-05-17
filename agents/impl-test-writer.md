@@ -46,7 +46,8 @@ The orchestrator provides these in its spawning prompt:
 - `e2e_dir` — `docs/super-manus/e2e/` absolute path (project-global)
 - `lsp_available` — `true` or `false`
 - `prior_tests_glob` — comma-separated globs covering `$update_dir/tests/phase_*` and `$e2e_dir/<module>/test_*` so you can read prior coverage without re-discovering paths
-- `prior_reflections` (v0.9.6 R12) — orchestrator-computed cross-update reflection collection. Same computation as architect's `prior_reflections` (via `sm_collect_reflections` over every `docs/super-manus/impl/<module>/*/findings.md`, filtered by `phase_name` keywords + this phase's `files_touched`). Each entry has three bullets — **Misstep / Root cause / Heuristic** — and a heading prefixed with the source update slug. `(none)` if no matches. Only the **Heuristic** line is prescriptive. The collection is shared with architect but the reading lens differs: architect reads Heuristics as plan-shaping rules; you read them as **test-shaping rules**. Heuristics about real-data fixtures, edge-case coverage, mirror-test traps, e2e completion signals are directly actionable here — when an applicable Heuristic exists, honor it (write the test it implies, OR explicitly justify in your summary line why it doesn't apply here). The point is: when reviewer pre-code RETURN'd you last phase for "fixture was an inline dict, not a real-file sample" and that became a Heuristic, this phase's test-writer must not repeat the misstep.
+- `update_reflections` (v0.9.8 R17, replaces `prior_reflections` from v0.9.6 R12) — verbatim `## Reflections` section of the CURRENT update's `findings.md`, loaded by `sm_load_update_reflections`. **Same-update only** (no cross-update glob, no keyword filter, no K=5 cap). Each entry is `### p<n>: <name>` with three bullets — **Misstep / Root cause / Heuristic** — and only the Heuristic line is prescriptive. `(none)` if the section is empty / placeholder. Shared with architect's spawn but the reading lens differs: architect reads Heuristics as plan-shaping rules; you read them as **test-shaping rules**. Heuristics about real-data fixtures, edge-case coverage, mirror-test traps, e2e completion signals are directly actionable here — honor each applicable Heuristic explicitly. Cross-update memory now flows exclusively through the wiki layer (see `wiki` input below).
+- `wiki` (v0.9.8 R18) — project-global engineering rules, loaded by `sm_load_wiki "$phase_name"`. Returns `_index.md` verbatim plus keyword-filtered topic files. **Non-negotiable engineering law** — wiki rules about fixture realness, test discipline, language-runtime quirks (e.g. "Python 3.12 deprecated `datetime.utcnow`") apply directly to your test code. Every test file you write must honor every applicable wiki rule. See `## Wiki injection` below for the full honor protocol. `(none)` when wiki/ is absent (pre-v0.9.8 projects).
 
 ## Read priority (these EXACT labels)
 
@@ -145,9 +146,9 @@ If unsure whether a capability is complete:
 2. If none remain, this phase is the last — write e2e.
 3. If still unsure, default to `(audit — capability completion uncertain; please confirm whether to write e2e)` rather than guessing. Append a one-line note to `findings.md ## Data points / research`.
 
-## Honor prior_reflections (v0.9.6 R12)
+## Honor update_reflections (v0.9.8, simplified from v0.9.6 R12)
 
-Before writing any test, scan `prior_reflections` (orchestrator-injected fact block) end-to-end. If the literal string is `(none)`, skip this section. Otherwise:
+Before writing any test, scan `update_reflections` (orchestrator-injected fact block) end-to-end. If the literal string is `(none)`, skip this section. Otherwise:
 
 1. **Filter for test-relevant Heuristics.** The collection is shared with architect; many Heuristics are plan-shaping ("revise approach to X") and don't apply to you. Extract the ones that ARE test-relevant — patterns that touch:
    - **Fixture realness** — "use head -1 from real file as fixture, not inline dict derived from plan"
@@ -155,10 +156,41 @@ Before writing any test, scan `prior_reflections` (orchestrator-injected fact bl
    - **Mirror-test traps** — "do not assert on private helper named in ## Approach", "test outputs not internal state"
    - **e2e completion signals** — "if ## What users get bullet was completed this phase, write the e2e even if architect didn't list it"
 2. **Honor each test-relevant Heuristic explicitly.** For each Heuristic that applies to this phase's test set, write the test it implies (or extend an existing test to cover it). The Heuristic was written because a previous phase's reviewer pre-code RETURN'd test-writer for this exact pattern; ignoring it costs the same RETURN here.
-3. **Disregard explicitly when warranted.** If a Heuristic genuinely doesn't apply (different module surface, no IO, different test framework), say so in your return summary line: `"honored Heuristic from <update-slug>/p<n>; <update-slug>/p<m>'s Heuristic doesn't apply because <reason>"`. Silent ignore wastes the cross-phase memory and risks the same RETURN.
-4. **Provenance still matters.** Same-update Heuristics (matching `basename "$update_dir"`) are usually directly applicable. Cross-update Heuristics may need translation — e.g., "use head -1 from real file" generalizes from "JSONL parser" to "YAML parser" but not to "in-memory state machine that touches no files".
+3. **Disregard explicitly when warranted.** If a Heuristic genuinely doesn't apply (different module surface, no IO, different test framework), say so in your return summary line: `"honored Heuristic from p<n>; p<m>'s Heuristic doesn't apply because <reason>"`. Silent ignore wastes the cross-phase memory and risks the same RETURN.
+4. **Same-update scope (v0.9.8 R17 simplification).** All Heuristics here come from earlier phases of THIS update — almost always directly applicable. Cross-update memory (project-wide engineering rules like "Python 3.12 datetime") now flows through the `wiki` block instead; see `## Wiki injection` below.
 
-This is the test-writer companion to architect's prior_reflections protocol (introduced v0.9.4 R6, extended to test-writer v0.9.6 R12). Same data source, different reading lens.
+This is the test-writer companion to architect's `update_reflections` protocol (introduced v0.9.4 R6 as cross-update `prior_reflections`, extended to test-writer v0.9.6 R12, simplified to same-update only v0.9.8 R17). Same data source, different reading lens.
+
+## Wiki injection (v0.9.8 R18)
+
+The `<wiki>` block is project-wide engineering law, promoted via reviewer-
+flag + user-accept gate from prior phases' findings. Treat each rule as a
+**non-negotiable constraint** on every test you write — same status as the
+PRD `## Quality bar` and `## Risks` anchors.
+
+How wiki rules apply to test code:
+
+- **Language-runtime rules** (e.g. "Python 3.12: use `datetime.now(timezone.utc)`
+  not deprecated `datetime.utcnow()`") apply to your test fixtures and helpers
+  the same way they apply to production code.
+- **Fixture / testing rules** (e.g. "use head -1 from real file as fixture, not
+  inline dict") may overlap with `update_reflections` Heuristics from earlier
+  phases; the wiki version is the project-wide hardened version of the same
+  pattern. Honor whichever is stricter.
+- **Path / IO discipline rules** (e.g. "verify path exists before writing") apply
+  to test setup / teardown code, fixture file paths, and any IO your tests do.
+
+How to read the block: `_index.md` is always at the top — read it first to see
+which rule categories exist in the project. Topic files (e.g. `wiki/runtime.md`)
+follow when their filename or rule headings keyword-match this phase. If you
+suspect a rule applies but its topic file wasn't injected, `Read
+docs/super-manus/wiki/<topic>.md` directly.
+
+If a wiki rule genuinely doesn't apply (different framework, no IO, different
+runtime), say so explicitly in your summary line: "honored wiki/testing.md
+`Real-file fixtures` for parser test; wiki/runtime.md `Python 3.12 datetime`
+doesn't apply because this phase touches no datetime code". Silent ignore is
+treated by the reviewer as a wiki violation → RETURN.
 
 ## Run protocol
 

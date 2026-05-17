@@ -30,7 +30,7 @@ Read `$UPDATE_DIR/task_plan.md ## Phases` table. Find:
 
 1. The first row whose Status is `in_progress` — that's where to continue. If absent, fall through.
 2. The first row whose Status is `pending` — that's where to begin. Flip its Status to `in_progress` (one-line edit in task_plan.md).
-3. If no `in_progress` and no `pending` phases remain, all phases are `closed` or `blocked`. Skip ahead to the **End-of-update drift gate** below — the gate decides whether the update is done. Do NOT short-circuit "all closed → done" without running the 3-pass gate.
+3. If no `in_progress` and no `pending` phases remain, all phases are `closed` or `blocked`. Skip ahead to the **End-of-update drift gate** below — the gate decides whether the update is done. Do NOT short-circuit "all closed → done" without running the 4-pass gate (3 blocking + 1 advisory wiki-lint).
 
 Let `n` and `<phase name>` be the chosen row's `#` and `Name`.
 
@@ -106,7 +106,8 @@ Spawn `impl-architect` with `pass=1`. Standard inputs PLUS the `pass` flag:
 - `findings_path` — `$UPDATE_DIR/findings.md`
 - `progress_path` — `$UPDATE_DIR/progress.md`
 - `lsp_available` — `true` or `false`
-- `prior_reflections` — cross-update reflection collection (v0.9.4 R6). Computed via `sm_collect_reflections "$MODULE" "<phase_name>" "<files_list>"` from [hooks/lib.sh](../hooks/lib.sh). Globs every `docs/super-manus/impl/$MODULE/*/findings.md`, parses each `### <update-slug>/p<n>: <name>` entry (and legacy `### Phase <n>:` entries) plus its optional `<!-- meta: -->` block, filters by keyword (phase_name tokens) and files_touched overlap, sorts by file mtime DESC + retries DESC, returns top K=5. Falls back to "(none)" if no entries match. On Pass 1, pass empty `<files_list>` (only keyword filter active). On Pass 2, pass `$PASS1_PATHS` (both filters active; files match is stronger signal). **Capture once per phase, reuse across all spawns within that phase** (v0.9.6 R12 discipline): findings.md `## Reflections` is touched only at phase close (Step 9, after ALL writers run), so re-computing mid-phase would return the identical result — pure waste, plus it's a contract smell. Bind to `$PRIOR_REFLECTIONS` at Step 1a (with empty files_list for Pass 1) and re-bind once at Step 1c after `$PASS1_PATHS` is known (for Pass 2's stronger filter); reuse that final value for Pass 2 re-spawns AND for test-writer Step 3 spawn. The phase boundary is the only re-compute point.
+- `update_reflections` (v0.9.8 R17, replaces v0.9.4 R6 `prior_reflections`) — verbatim `## Reflections` section of the CURRENT update's `findings.md`. Computed via `sm_load_update_reflections "$UPDATE_DIR"` from [hooks/lib.sh](../hooks/lib.sh). **Same-update only** — no cross-update glob, no keyword filter, no K=5 cap (cross-update memory now flows through `wiki` instead; see below). Falls back to `(none)` when the section is empty / placeholder. **Capture once per phase, reuse across all spawns** (same discipline as v0.9.6 R12): findings.md `## Reflections` is touched only at phase close (Step 9, AFTER all writers run), so re-computing mid-phase returns identical output. Bind to `$UPDATE_REFLECTIONS` at Step 1a, reuse for Pass 2 (Step 1c, including all re-spawns) and test-writer (Step 3).
+- `wiki` (v0.9.8 R18) — project-global engineering rules. Computed via `sm_load_wiki "$phase_name"` from [hooks/lib.sh](../hooks/lib.sh). Returns `_index.md` verbatim (every rule, one bullet each) plus keyword-filtered topic files. Falls back to empty when `docs/super-manus/wiki/` is absent (pre-v0.9.8 projects). **Capture once per phase, reuse across all four spawn types** (architect Pass 1+2, test-writer, code-writer, reviewer at all 3 checkpoints) — `wiki/` is touched only by Step 9's promote gate, so mid-phase re-computation is wasted work. Bind to `$WIKI_BLOCK` at Step 1a and reuse verbatim throughout. The architect/test-writer/code-writer honor `<wiki>` as non-negotiable engineering law; the reviewer enforces (wiki violation = RETURN). See `agents/impl-architect.md ## Wiki injection` (and equivalents in the writer agents) for the honor protocol, and `agents/impl-reviewer.md ## Wiki injection (enforce framing)` for the enforce protocol.
 - `pass` — `1` (v0.9.4 R5)
 
 Spawning prompt skeleton (Pass 1):
@@ -124,7 +125,9 @@ Spawning prompt skeleton (Pass 1):
 > - findings_path: `<absolute path>`
 > - progress_path: `<absolute path>`
 > - lsp_available: `<true|false>`
-> - prior_reflections: `<verbatim ## Reflections section text, or "(none)" if empty>`
+> - update_reflections: `<verbatim ## Reflections section text, or "(none)" if empty>`
+> - wiki: |
+>     `<verbatim sm_load_wiki output: _index.md + keyword-filtered topic files, or empty if wiki/ absent>`
 >
 > Run Pass 1 per your agent definition. Inspect source, decide the files this phase will touch, and write the YAML to `${update_dir}/.pass1_files_touched_p<n>.yml`. Do NOT draft the phase plan in Pass 1. Return the Pass 1 summary line.
 
@@ -141,16 +144,24 @@ PASS1_PATHS=$(grep -E '^\s*-\s' "$PASS1_FILE" \
 
 If `PASS1_PATHS` is empty, surface to the user: "impl-architect Pass 1 produced no files_touched; cannot proceed." STOP.
 
-### Step 1b — Compute existing_code_facts
+### Step 1b — Compute existing_code_facts + capture update_reflections + wiki
 
-Use `sm_compute_existing_code_facts` (defined in [hooks/lib.sh](../hooks/lib.sh)) to build the fact block over `PASS1_PATHS`:
+Use `sm_compute_existing_code_facts` (defined in [hooks/lib.sh](../hooks/lib.sh)) to build the existing-code fact block over `PASS1_PATHS`, and capture the two phase-stable fact blocks (`UPDATE_REFLECTIONS` and `WIKI_BLOCK`) once per phase so they're reused across every downstream spawn without re-computation:
 
 ```bash
 source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh"
 EXISTING_CODE_FACTS=$(sm_compute_existing_code_facts "$PASS1_PATHS")
+UPDATE_REFLECTIONS=$(sm_load_update_reflections "$UPDATE_DIR")
+WIKI_BLOCK=$(sm_load_wiki "$phase_name")
 ```
 
-Each file in the block gets a `### <path>` header, `git log -5 --oneline -- <path>` output, and `head -N` (N=100 for ≤5 files, N=50 for >5 files). Files that don't exist are flagged `(NEW file)` — the architect uses this signal to decide "add" vs "replace".
+`EXISTING_CODE_FACTS`: each file gets a `### <path>` header, `git log -5 --oneline -- <path>` output, and `head -N` (N=100 for ≤5 files, N=50 for >5 files). Files that don't exist are flagged `(NEW file)` — the architect uses this signal to decide "add" vs "replace".
+
+`UPDATE_REFLECTIONS`: verbatim `## Reflections` body from the current update's `findings.md`, or empty/`(none)` placeholder. **Same-update only** — cross-update wisdom flows via wiki.
+
+`WIKI_BLOCK`: `_index.md` verbatim + keyword-filtered topic files from `docs/super-manus/wiki/`. Empty when wiki is absent. **Phase-stable** — wiki is touched only by Step 9's promote gate, so the same `WIKI_BLOCK` value is reused for every spawn within this phase (architect Pass 2 + all re-spawns, test-writer, code-writer, reviewer at all 3 checkpoints).
+
+Re-spawns within the same phase MUST reuse `$UPDATE_REFLECTIONS` and `$WIKI_BLOCK` (no re-computation). The only legitimate re-compute point is the next phase's Step 1b.
 
 ### Step 1c — Pass 2 spawn (full phase plan)
 
@@ -188,8 +199,11 @@ Spawning prompt skeleton (Pass 2):
 > - module_spec_path: `<docs/super-manus/prd/<module>.spec.md absolute path>`
 > - spec_facts: |
 >     <verbatim contents of <module>.spec.md, OR the literal `(none — no spec for this module)`>
+> - update_reflections: `<verbatim ## Reflections section text, or "(none)" if empty>`
+> - wiki: |
+>     `<verbatim $WIKI_BLOCK from Step 1b>`
 >
-> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. The `existing_code_facts` block is non-negotiable factual context — every `## Approach` claim touching a listed file MUST be consistent with the dump (if `foo()` appears in the head dump, write "replace `foo()`", not "add `foo()`"). The `spec_facts` block is non-negotiable target-state context — every `## Approach` claim must be consistent with the long-lived contract; if `spec_facts` and `existing_code_facts` disagree, surface the drift in `## Approach` with an `(audit)` marker rather than silently picking a side. If `prior_reflections` is non-empty, treat each Heuristic line as a checklist item to honor. Return the summary line when done.
+> Draft (or resume) `${update_dir}/tasks/p<n>_impl.md` per your agent definition. The `existing_code_facts` block is non-negotiable factual context — every `## Approach` claim touching a listed file MUST be consistent with the dump (if `foo()` appears in the head dump, write "replace `foo()`", not "add `foo()`"). The `spec_facts` block is non-negotiable target-state context — every `## Approach` claim must be consistent with the long-lived contract; if `spec_facts` and `existing_code_facts` disagree, surface the drift in `## Approach` with an `(audit)` marker rather than silently picking a side. The `wiki` block is project-global engineering law — every `## Approach` claim must honor every applicable wiki rule, same status as spec_facts; if a rule genuinely doesn't apply to this phase, say so explicitly in your summary line (no silent ignore — reviewer enforces). If `update_reflections` is non-empty, treat each Heuristic line as a checklist item to honor. Return the summary line when done.
 
 The agent writes `$UPDATE_DIR/tasks/p<n>_impl.md` directly via the Write/Edit tools, seeding from `${CLAUDE_PLUGIN_ROOT}/templates/phase_plan.md` if the file does not yet exist (the template carries the five stable headings `## Objective` / `## Approach` / `## Edge cases` / `## Files touched` / `## Verification` — `## Edge cases` was added in v0.9.0 to lift "test coverage" from "did test-writer remember?" to an architect-committed checklist). It does NOT print the file to chat and it does NOT write code. If the file already has substantive content in all five sections, it is idempotent — it returns "phase plan already drafted; resume from existing" and the orchestrator continues. If the file exists with the legacy 4-section shape (no `## Edge cases`), the architect inserts the section in place and returns "migrated legacy plan; added Edge cases section".
 
@@ -225,6 +239,7 @@ Same inputs as architect (`project_root`, `module`, `update_dir`, `phase_number`
 
 - `mode` — `pre-test`
 - `attempt_number` — `1` on first invocation; incremented on re-spawn after RETURN
+- `wiki` (v0.9.8 R18) — verbatim `$WIKI_BLOCK` captured at Step 1b; reused unchanged across all three review checkpoints in this phase. Reviewer enforces wiki against the writer output it's reviewing (writer wiki violation → RETURN_TO_<writer>).
 
 ### Spawning prompt skeleton
 
@@ -243,8 +258,10 @@ Same inputs as architect (`project_root`, `module`, `update_dir`, `phase_number`
 > - phase_plan_path: `<absolute path>`
 > - findings_path: `<absolute path>`
 > - lsp_available: `<true|false>`
+> - wiki: |
+>     `<verbatim $WIKI_BLOCK from Step 1b>`
 >
-> Run pre-test review per your agent definition. Return ONE of: APPROVE, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
+> Run pre-test review per your agent definition. The `wiki` block is project-global engineering law — verify the architect's plan does not contradict any applicable wiki rule (violation = RETURN_TO_ARCHITECT, same severity as a spec violation). Return ONE of: APPROVE, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
 
 ### Verdict handling
 
@@ -291,16 +308,8 @@ Pass these in the Agent tool's `prompt` field:
 - `e2e_dir` — `docs/super-manus/e2e/` absolute path
 - `lsp_available` — `true` or `false`
 - `prior_tests_glob` — comma-separated globs (`$UPDATE_DIR/tests/phase_*`, `docs/super-manus/e2e/<module>/test_*`, `docs/super-manus/e2e/_system/test_*`)
-- `prior_reflections` (v0.9.6 R12) — cross-update reflection collection, computed via the SAME helper architect uses: `sm_collect_reflections "$MODULE" "<phase_name>" "$PASS1_PATHS"` from [hooks/lib.sh](../hooks/lib.sh). **Bind the architect Pass 2 result to a shell variable at Step 1c and reuse THAT variable here**:
-
-  ```bash
-  # In Step 1c, capture once:
-  PRIOR_REFLECTIONS=$(sm_collect_reflections "$MODULE" "$phase_name" "$PASS1_PATHS")
-  # Use $PRIOR_REFLECTIONS in BOTH architect Pass 2 spawn (Step 1c) AND test-writer spawn (Step 3).
-  # NEVER call sm_collect_reflections a second time within the same phase.
-  ```
-
-  The reuse rule is load-bearing for two reasons: (1) findings.md `## Reflections` is touched only at phase close (Step 9, AFTER test-writer runs), so re-computing within the same phase would return the identical result — pure waste; (2) variable binding makes the contract grep-able in the orchestrator script (a future contributor adding a second `sm_collect_reflections` call is a visible code smell, not a silent regression). Falls back to `(none)` when no entries match. The test-writer's persona honors test-relevant Heuristics (fixture realness, edge case coverage, mirror-test traps, e2e completion signals) — see `agents/impl-test-writer.md ## Honor prior_reflections (v0.9.6 R12)`.
+- `update_reflections` (v0.9.8 R17, replaces v0.9.6 R12 `prior_reflections`) — verbatim `## Reflections` section of the CURRENT update's `findings.md`, captured at Step 1b via `sm_load_update_reflections "$UPDATE_DIR"` and reused here as `$UPDATE_REFLECTIONS`. **Same-update only** — cross-update memory now flows via `wiki` (no glob, no keyword filter, no K-cap). Reuse rule still applies: never call `sm_load_update_reflections` a second time within the same phase (the reflections section is touched only at Step 9 phase close, AFTER test-writer runs, so a re-compute would return identical output). Falls back to `(none)` when the section is empty / placeholder. The test-writer's persona honors test-relevant Heuristics (fixture realness, edge case coverage, mirror-test traps, e2e completion signals) — see `agents/impl-test-writer.md ## Honor update_reflections`.
+- `wiki` (v0.9.8 R18) — verbatim `$WIKI_BLOCK` captured at Step 1b; reused unchanged across every spawn in this phase. The test-writer honors wiki rules in test code (fixture discipline, language-runtime quirks, IO patterns) the same way the architect honors them in plan content — see `agents/impl-test-writer.md ## Wiki injection`.
 
 ### Spawning prompt skeleton
 
@@ -317,9 +326,11 @@ Pass these in the Agent tool's `prompt` field:
 > - e2e_dir: `<absolute path>`
 > - lsp_available: `<true|false>`
 > - prior_tests_glob: `<comma-separated globs>`
-> - prior_reflections: `<verbatim ## Reflections section text from sm_collect_reflections, or "(none)">`
+> - update_reflections: `<verbatim ## Reflections section text from sm_load_update_reflections, or "(none)">`
+> - wiki: |
+>     `<verbatim $WIKI_BLOCK from Step 1b>`
 >
-> Write phase tests + e2e tests (red) per your agent definition. Commit ONLY test files. If `prior_reflections` is non-empty, scan for test-relevant Heuristics (fixture realness / edge case coverage / mirror-test traps / e2e completion signals) and honor each — see `## Honor prior_reflections` in your persona. Return the summary line when done.
+> Write phase tests + e2e tests (red) per your agent definition. Commit ONLY test files. The `wiki` block is project-global engineering law — every test you write must honor every applicable wiki rule (no silent ignore; if a rule doesn't apply, say so in your summary). If `update_reflections` is non-empty, scan for test-relevant Heuristics (fixture realness / edge case coverage / mirror-test traps / e2e completion signals) and honor each — see `## Honor update_reflections` and `## Wiki injection` in your persona. Return the summary line when done.
 
 The agent writes:
 
@@ -342,10 +353,11 @@ After the test-writer commits red tests, the orchestrator spawns `impl-reviewer`
 
 ### Inputs to pass
 
-Same as Step 2 but with `mode = pre-code` and one additional input:
+Same as Step 2 but with `mode = pre-code` and three additional inputs:
 
 - `phase_tests_glob` — `$UPDATE_DIR/tests/phase_p<n>_*.{ext}`
 - `e2e_tests_glob` — comma-separated globs covering touched e2e files (extracted from the test-writer's commit)
+- `wiki` (v0.9.8 R18) — verbatim `$WIKI_BLOCK` captured at Step 1b; reused unchanged. Reviewer at this checkpoint enforces wiki against test code (test code violating a wiki rule → RETURN_TO_TEST_WRITER).
 
 ### Spawning prompt skeleton
 
@@ -366,8 +378,10 @@ Same as Step 2 but with `mode = pre-code` and one additional input:
 > - e2e_tests_glob: `<comma-separated globs>`
 > - findings_path: `<absolute path>`
 > - lsp_available: `<true|false>`
+> - wiki: |
+>     `<verbatim $WIKI_BLOCK from Step 1b>`
 >
-> Run pre-code review per your agent definition. Return ONE of: APPROVE, RETURN_TO_TEST_WRITER, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
+> Run pre-code review per your agent definition. The `wiki` block is project-global engineering law — verify the test code does not contradict any applicable wiki rule (violation = RETURN_TO_TEST_WRITER). Return ONE of: APPROVE, RETURN_TO_TEST_WRITER, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
 
 ### Verdict handling
 
@@ -462,6 +476,7 @@ Pass these in the Agent tool's `prompt` field:
 - `phase_tests_glob` — `$UPDATE_DIR/tests/phase_p<n>_*.{ext}`
 - `e2e_tests_glob` — comma-separated globs covering touched e2e files (extracted from the test-writer's commit)
 - `lsp_available` — `true` or `false`
+- `wiki` (v0.9.8 R18) — verbatim `$WIKI_BLOCK` captured at Step 1b; reused unchanged. The code-writer honors wiki rules in source code (language-runtime quirks, path discipline, API selection rules) — see `agents/impl-code-writer.md ## Wiki injection`.
 
 ### Spawning prompt skeleton
 
@@ -478,8 +493,10 @@ Pass these in the Agent tool's `prompt` field:
 > - phase_tests_glob: `<glob>`
 > - e2e_tests_glob: `<comma-separated globs>`
 > - lsp_available: `<true|false>`
+> - wiki: |
+>     `<verbatim $WIKI_BLOCK from Step 1b>`
 >
-> Write source code to make all phase tests + touched e2e tests pass per your agent definition. Do NOT touch any file under `tests/` or `docs/super-manus/e2e/`. Commit ONLY source files. Return the summary line when done.
+> Write source code to make all phase tests + touched e2e tests pass per your agent definition. The `wiki` block is project-global engineering law — your source code must honor every applicable wiki rule (no silent ignore; if a rule doesn't apply, say so in your summary). Do NOT touch any file under `tests/` or `docs/super-manus/e2e/`. Commit ONLY source files. Return the summary line when done.
 
 The agent iterates source-code → run tests → repeat until all green, then commits source files only and returns. The agent may also return early in **stuck state** ("tests un-passable") — surface that state to review #3 in Step 6 below. If the agent returns with `escalation: OUT_OF_SCOPE_DIRTY` (v0.9.4 R4 — the agent detected the same dirty-tree condition the pre-spawn check would catch on a manual user (b) selection), STOP this phase: append the escalation to `findings.md ## Errors`, surface the agent's summary verbatim, and instruct the user to commit/stash and re-run.
 
@@ -538,6 +555,7 @@ Same as Step 4 plus:
 
 - `mode` — `pre-close`
 - `code_writer_stuck` — `true` if code-writer returned with "tests un-passable" / similar; `false` if code-writer reported all tests green
+- `wiki` (v0.9.8 R18) — verbatim `$WIKI_BLOCK` captured at Step 1b; reused unchanged. At this checkpoint reviewer enforces wiki against source code (code violating a wiki rule → RETURN_TO_CODE_WRITER). Pre-close is also the ONLY checkpoint where reviewer optionally surfaces `wiki-candidates:` in its verdict (see `## Step 9 — Phase close` promote gate below).
 
 ### Spawning prompt skeleton
 
@@ -558,8 +576,10 @@ Same as Step 4 plus:
 > - e2e_tests_glob: `<comma-separated globs>`
 > - findings_path: `<absolute path>`
 > - lsp_available: `<true|false>`
+> - wiki: |
+>     `<verbatim $WIKI_BLOCK from Step 1b>`
 >
-> Run pre-close review per your agent definition. Return ONE of: APPROVE, RETURN_TO_CODE_WRITER, RETURN_TO_TEST_WRITER, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
+> Run pre-close review per your agent definition. The `wiki` block is project-global engineering law — verify the source code does not contradict any applicable wiki rule (violation = RETURN_TO_CODE_WRITER). At this checkpoint you are reading `findings.md ## Reflections` — if you spot a reflection that's generalizable beyond this phase (cross-module / cross-update engineering rule, e.g. "Python 3.12 deprecated datetime.utcnow"), surface it via the optional `wiki-candidates:` YAML block in your APPROVE verdict. See `agents/impl-reviewer.md ## Verdict format` for the schema. Return ONE of: APPROVE, RETURN_TO_CODE_WRITER, RETURN_TO_TEST_WRITER, RETURN_TO_ARCHITECT, ESCALATE_TO_USER.
 
 ### Verdict handling
 
@@ -657,11 +677,22 @@ When ALL `## Verification` commands pass:
      - `retries` = the count of RETURN rows just counted.
      - `created` = today's date in `YYYY-MM-DD`.
 
-     The metadata block is what `sm_collect_reflections` filters on at the next architect spawn (this update's or any future update's). Without it, the entry still appears (heading-token fallback), but `files_touched` matching is unavailable.
-2. Edit `task_plan.md ## Phases` to flip the phase row's Status from `in_progress` to `closed`.
-3. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"` to regenerate `progress.md ## Outstanding`.
-4. Delete the temporary `$UPDATE_DIR/.test_hashes_p<n>.txt` file (it served its purpose).
-5. Delete the temporary `$UPDATE_DIR/.pass1_files_touched_p<n>.yml` file (v0.9.4 R5 — Pass 1 artifact served its purpose).
+     The metadata block was originally used by v0.9.4 R6 `sm_collect_reflections` for cross-update keyword/files filtering. v0.9.8 R17 simplified the loader to same-update-only with no filter, so the metadata is no longer load-bearing for spawn injection — but it remains useful as an audit pointer (orchestrator's wiki promote-rejected pre-check, `/super-manus:wiki-lint` gap detection, and future-you understanding what triggered each reflection).
+2. **Wiki promote gate (v0.9.8 R17).** If the pre-close reviewer's APPROVE verdict (from Step 6) included a `wiki-candidates:` YAML block, run the promote gate now (after the reflection synthesis above, before flipping phase Status). For each candidate in the block:
+   - `AskUserQuestion`: "Promote to `wiki/<topic>.md`?" with options `accept` / `reject` / `edit-wording` (and recommended option marked if reviewer rationale clearly applies).
+   - On `accept`:
+     - Append the rule to `docs/super-manus/wiki/<topic>.md` (create the file if absent, seeded with `# <Topic>` H1).
+     - Regenerate `docs/super-manus/wiki/_index.md` from scratch by re-scanning every `wiki/*.md` (excluding `_index.md` / `_log.md`): emit one `## <H1>` section per topic file, one bullet per H2 rule heading inside it.
+     - Append a `## [<today>] promote | <topic>.md / <rule-heading>` H2 entry to `wiki/_log.md` with the source findings path + phase heading in the body.
+   - On `reject` / `edit-rejected`:
+     - Append a `## [<today>] promote-rejected | <topic>.md / <rule-heading>` H2 entry to `wiki/_log.md` (same body shape; reviewer can pre-check this on future phases to avoid re-flagging the same rejected rule).
+   - On `edit-wording`: prompt the user for revised body via a follow-up free-text question, then treat as `accept` with the revised body.
+
+   No annotation lands on the source `findings.md` entry — `wiki/_log.md` is the sole provenance record (v0.9.8 R17 simplification; keeps the source-side findings.md file from accumulating meta noise across phases). If `wiki-candidates:` is absent from the reviewer verdict, skip this step entirely (the common case).
+3. Edit `task_plan.md ## Phases` to flip the phase row's Status from `in_progress` to `closed`.
+4. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/refresh-outstanding.sh" "$UPDATE_DIR"` to regenerate `progress.md ## Outstanding`.
+5. Delete the temporary `$UPDATE_DIR/.test_hashes_p<n>.txt` file (it served its purpose).
+6. Delete the temporary `$UPDATE_DIR/.pass1_files_touched_p<n>.yml` file (v0.9.4 R5 — Pass 1 artifact served its purpose).
 
 The post-commit hook automatically appends commit lines to `$UPDATE_DIR/progress.md ## Completed commits`. Do **not** hand-edit `progress.md` — it is hook-managed.
 
@@ -678,9 +709,9 @@ Re-read `task_plan.md ## Phases` and count rows where Status is `pending` (exclu
 
 - **No pending phases remain** → fall through to the **End-of-update drift gate** below.
 
-## End-of-update drift gate (BLOCKING — 3-pass in v0.5)
+## End-of-update drift gate (BLOCKING for Pass 1-3, NON-BLOCKING for Pass 4 — 4-pass in v0.9.8)
 
-When all phases in `$UPDATE_DIR/task_plan.md` are `closed`, the update is **NOT done** until all three passes succeed. The gate is BLOCKING. Pending == 0 is the required condition to flip the roadmap from `iterating` to `stable`.
+When all phases in `$UPDATE_DIR/task_plan.md` are `closed`, the update is **NOT done** until Pass 1-3 succeed (Pass 4 is advisory only — see below). Pass 1-3 are BLOCKING. Pending == 0 across BOTH PRD-drift and Spec-drift sections is the required condition to proceed to Pass 4 + flip the roadmap from `iterating` to `stable`. Pass 4 surfaces wiki-health advisory counts to the user but does NOT block the flip.
 
 ### Pass 1 — Refresh drift from this update's commits + missing-spec detection
 
@@ -753,7 +784,28 @@ Read `docs/super-manus/drift_log.md`. Count rows in BOTH H2 sections (`## PRD dr
 
   Do NOT flip the roadmap row to `stable`. Do NOT tell the user the update is complete. STOP.
 
-- **If total pending == 0** → the update IS done. Update the module's row in `docs/super-manus/roadmap.md` from `iterating` to `stable`. Continue to "Tell the user".
+- **If total pending == 0** → continue to Pass 4 (the last pass — non-blocking — before flipping the roadmap row).
+
+### Pass 4 — wiki-lint (v0.9.8 R19, NON-BLOCKING)
+
+Spawn `impl-reviewer` with `mode=wiki-lint`. The reviewer runs five health checks against `docs/super-manus/wiki/` + every `docs/super-manus/impl/*/*/findings.md` and appends one `## [<today>] lint | end-of-update drift gate` H2 entry to `wiki/_log.md` summarizing the findings.
+
+Inputs to pass (different shape from impl-mode reviewer spawns):
+
+- `mode` — `wiki-lint`
+- `wiki_dir` — `docs/super-manus/wiki/` absolute path
+- `findings_root` — `docs/super-manus/impl` absolute path (the reviewer globs `*/*/findings.md` under this root)
+- `project_root` — current working directory absolute path
+
+No `phase_number` / `phase_name` / `phase_plan_path` / `wiki` block (the reviewer reads wiki/ directly in this mode).
+
+Skip Pass 4 entirely if `docs/super-manus/wiki/` is absent (pre-v0.9.8 project that hasn't yet re-run `/super-manus:start`).
+
+This pass is **non-blocking**: wiki rot (stale rules, contradictions, orphans) is a long-term failure mode the user should see at milestone close, but it shouldn't block the roadmap flip. The reviewer returns `WIKI_LINT_COMPLETE` with five counts (contradictions / stale / orphan / gap / cross-ref miss); the orchestrator surfaces those counts to the user in the final summary but proceeds to flip `iterating` → `stable` regardless.
+
+Resolution path: the user reads `wiki/_log.md` for the lint entry, then acts manually — edit `wiki/<topic>.md` files to retire orphans / resolve contradictions, or trigger a `/super-manus:wiki-lint` standalone run later to re-scan. There is no auto-fix path; wiki maintenance is human-curated.
+
+Update the module's row in `docs/super-manus/roadmap.md` from `iterating` to `stable`. Continue to "Tell the user".
 
 ### Gate is HARD
 

@@ -85,15 +85,21 @@ grep -qiE "not auto-discovered|NOT auto-discovered|auto-discovered" "$F" || { ec
 grep -qiE "phase[- ]test path command|explicit path|phase-test path" "$F" || { echo "FAIL: ## Verification must require an explicit phase-test path command"; exit 1; }
 grep -qiE "smoke command|user-visible" "$F" || { echo "FAIL: ## Verification must require a user-visible smoke command"; exit 1; }
 
-# === v0.7.4 additive assertions ===========================================
-# Architect must document the prior_reflections input + a procedure step that
+# === v0.7.4 additive assertions (updated for v0.9.8 R17 rename) ===========
+# Architect must document the update_reflections input + a procedure step that
 # treats Heuristic lines as a checklist for this phase's plan.
-grep -qF "prior_reflections" "$F" \
-  || { echo "FAIL: v0.7.4 must document the prior_reflections input"; exit 1; }
+# v0.9.8 R17: renamed from prior_reflections (now same-update only — cross-
+# update memory flows through the wiki layer instead).
+grep -qF "update_reflections" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must document the update_reflections input (renamed from prior_reflections)"; exit 1; }
 grep -qF "Heuristic" "$F" \
-  || { echo "FAIL: v0.7.4 must reference the Heuristic line as the load-bearing element of prior_reflections"; exit 1; }
+  || { echo "FAIL: must reference the Heuristic line as the load-bearing element of update_reflections"; exit 1; }
 grep -qiE "checklist|honor.*Heuristic" "$F" \
-  || { echo "FAIL: v0.7.4 must say the architect treats Heuristic lines as a checklist (not free reading)"; exit 1; }
+  || { echo "FAIL: must say the architect treats Heuristic lines as a checklist (not free reading)"; exit 1; }
+# Negative regression: legacy prior_reflections name must be gone (rename is
+# semantic — cross-update behavior was retired, not aliased).
+grep -qE "^\s*-\s*\`?prior_reflections\`?\s+—" "$F" \
+  && { echo "FAIL: v0.9.8 R17 must remove the legacy 'prior_reflections' input from the Inputs list (renamed to update_reflections)"; exit 1; } || true
 
 # === v0.9.0 additive assertions ===========================================
 # Architect must enumerate concrete edge cases anchored in PRD ## Quality bar
@@ -194,26 +200,55 @@ grep -qF "previous_architect_draft" "$F" \
 grep -qiE "Branch on .{0,5}pass|pass mode|pass=1.{0,40}pass=2|If .{0,5}pass=1" "$F" \
   || { echo "FAIL: v0.9.4 R5 procedure must branch on pass input (step 0 or equivalent)"; exit 1; }
 
-# === v0.9.4 R6: cross-update reflection injection =========================
-# prior_reflections is now cross-UPDATE (was cross-phase within one update).
-# Headings use the new `<update-slug>/p<n>: <name>` form; persona must teach
-# the architect to recognize provenance and handle legacy headings.
+# === v0.9.8 R17: same-update reflection injection (replaces v0.9.4 R6) ====
+# v0.9.4 R6 made prior_reflections cross-UPDATE via sm_collect_reflections.
+# v0.9.8 R17 simplifies: same-update only, no glob, no keyword filter, no
+# K=5 cap, no provenance prefix. Cross-update memory now lives in wiki/.
 
-# New heading format documented in Inputs / procedure
+# Same-update scope must be explicit
+grep -qiE "same.update|current update.*findings|no cross.update glob" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must describe update_reflections as same-update only (not cross-update)"; exit 1; }
+
+# Reference the new loader function
+grep -qF "sm_load_update_reflections" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must reference sm_load_update_reflections (the new loader)"; exit 1; }
+
+# Wiki is the cross-update channel — must be cross-referenced so the architect
+# knows where to look for project-wide engineering rules.
+grep -qiE "wiki.{0,40}cross.update|cross.update.{0,40}wiki|exclusively through the wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must explain that wiki is the new cross-update memory channel"; exit 1; }
+
+# Negative regression: v0.9.4 R6's <update-slug>/p<n>: heading format is no
+# longer needed (since same-update only, no provenance prefix needed)
 grep -qE "<update-slug>/p<n>" "$F" \
-  || { echo "FAIL: v0.9.4 R6 must document new heading format '### <update-slug>/p<n>: <name>'"; exit 1; }
+  && { echo "FAIL: v0.9.8 R17 should drop the <update-slug>/p<n> heading prefix (provenance prefix unneeded when scope is single update)"; exit 1; } || true
 
-# Legacy heading still supported (parser handles both)
-grep -qiE "legacy .{0,30}Phase <m>|legacy.{0,30}heading|pre-v0\.9\.4" "$F" \
-  || { echo "FAIL: v0.9.4 R6 must mention legacy '### Phase <m>:' headings are still parsed"; exit 1; }
+# Negative regression: sm_collect_reflections must not be referenced (renamed
+# to sm_load_update_reflections; the cross-update glob behavior is retired)
+grep -qF "sm_collect_reflections" "$F" \
+  && { echo "FAIL: v0.9.8 R17 must remove sm_collect_reflections references (renamed to sm_load_update_reflections)"; exit 1; } || true
 
-# Cross-update nature called out
-grep -qiE "cross-update|cross update|across update|every findings|other update" "$F" \
-  || { echo "FAIL: v0.9.4 R6 must describe prior_reflections as cross-update (not just cross-phase)"; exit 1; }
+# === v0.9.8 R18: wiki injection ==========================================
+# Architect Pass 2 spawn includes a <wiki> fact block (sm_load_wiki output).
+# Status is non-negotiable engineering law — same as existing_code_facts and
+# spec_facts. Architect must honor every applicable wiki rule.
 
-# Provenance handling — same-update vs cross-update applicability
-grep -qiE "provenance|same-update|cross-update.*translation|different module|may need translation" "$F" \
-  || { echo "FAIL: v0.9.4 R6 must teach the architect to read update-slug provenance"; exit 1; }
+# wiki input documented
+grep -qF "wiki" "$F" || { echo "FAIL: v0.9.8 R18 must document the wiki input"; exit 1; }
+grep -qF "sm_load_wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must reference sm_load_wiki helper"; exit 1; }
+
+# Non-negotiable framing — wiki is engineering law, not optional
+grep -qiE "non-negotiable.*wiki|wiki.*non-negotiable|engineering law" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare wiki rules as non-negotiable engineering law"; exit 1; }
+
+# ## Wiki injection section heading exists
+grep -qiE "^## Wiki injection" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare a '## Wiki injection' section"; exit 1; }
+
+# Honor protocol mentioned: explicit opt-out (no silent ignore)
+grep -qiE "silent ignore|doesn.t apply|honored wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must require explicit opt-out when a wiki rule doesn't apply (no silent ignore)"; exit 1; }
 
 # === v0.9.5 R7: per-module spec.md fact injection =========================
 # Pass 2 inputs gain module_spec_path + spec_facts so the architect honors

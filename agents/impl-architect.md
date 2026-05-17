@@ -28,7 +28,8 @@ The orchestrator (the `/super-manus:impl` slash command) provides these in its i
 - `findings_path` — `$update_dir/findings.md`
 - `progress_path` — `$update_dir/progress.md`
 - `lsp_available` — `true` or `false`
-- `prior_reflections` — orchestrator-computed cross-update reflection collection (v0.9.4 R6). The orchestrator globs every `docs/super-manus/impl/<module>/*/findings.md`, parses each `### <update-slug>/p<n>: <name>` entry (and legacy `### Phase <m>: <name>` entries from pre-v0.9.4 updates) plus its `<!-- meta: -->` block, filters by keyword and files_touched overlap with this phase, and returns up to 5 top matches sorted by recency + retry-count. `(none)` if no matches. Each entry has three bullets (Misstep / Root cause / **Heuristic**); only the **Heuristic** line is prescriptive. Heading provenance (`<update-slug>/`) tells you whether a lesson is from this update or a prior one — same-update lessons are usually directly applicable; cross-update lessons may need translation.
+- `update_reflections` (v0.9.8 R17, replaces `prior_reflections` from v0.9.4 R6) — verbatim `## Reflections` section of the CURRENT update's `findings.md`, loaded by `sm_load_update_reflections`. **Same-update only** (no cross-update glob, no keyword filter, no K=5 cap). Each entry is `### p<n>: <name>` followed by three bullets (Misstep / Root cause / **Heuristic**); only the **Heuristic** line is prescriptive. `(none)` if the section is empty / placeholder. Cross-update memory now flows exclusively through the wiki layer (see `wiki` input below) — module-local lore that hasn't graduated to wiki is allowed to fade at update boundaries. If a Heuristic genuinely doesn't apply (different files / different surface), say so explicitly in your summary line rather than silently ignoring.
+- `wiki` (v0.9.8 R18) — project-global engineering rules, loaded by `sm_load_wiki "$phase_name"`. Returns `_index.md` verbatim (full catalog of all rules — small) plus keyword-filtered topic files. **Non-negotiable engineering law** — same status as `existing_code_facts` and `spec_facts`. Every `## Approach` claim must honor every applicable wiki rule. If a rule genuinely doesn't apply (different runtime, different surface area), say so explicitly in your summary line ("honored wiki/runtime.md rule X; wiki/paths.md rule Y doesn't apply because Z"). See `## Wiki injection` below for the full honor protocol. `(none)` when wiki/ is absent (pre-v0.9.8 projects).
 - `pass` (v0.9.4 R5) — `1` or `2`. Two-pass spawn. Pass 1: emit ONLY a YAML files_touched candidate (no plan file). Pass 2: draft the full five-section plan with orchestrator-computed `existing_code_facts` as fact block. See `## Pass discipline (two-pass spawn)` below.
 - `existing_code_facts` (v0.9.4 R5, Pass 2 only) — verbatim fact block computed by the orchestrator via `sm_compute_existing_code_facts` over Pass 1's files_touched list. Each file gets `git log -5 --oneline` + `head -N` (or "NEW file" marker if absent). **Non-negotiable factual context**: every `## Approach` claim that touches a listed file MUST be consistent with this dump. The block exists specifically to prevent state-blind "add vs replace" mistakes — if a function already appears in the head dump, your plan must say "replace/extend", not "add".
 - `previous_architect_draft` (v0.9.4 R5, Pass 2 re-spawn only) — verbatim contents of `tasks/p<phase_number>_impl.md` from the rejected prior attempt. The orchestrator injects this as a fact block so you don't have to re-Read the file yourself (prior re-spawns showed Read getting skipped under pressure). Read what you wrote before; revise the sections `previous_attempt_feedback` flagged; do NOT silently re-emit identical content.
@@ -107,7 +108,11 @@ The `Write` and `Edit` tools may ONLY target paths under `${update_dir}/` (a pat
 
    **Exception**: if your spawning prompt includes a `previous_attempt_feedback` block, idempotency does NOT apply — you have been re-spawned by the reviewer to revise. See `## Receiving reviewer feedback (re-spawn)` below.
 
-1.5. **Read prior reflections (Reflexion-style cross-phase + cross-update memory, v0.9.4 R6).** If `prior_reflections` is non-empty (i.e., not the literal string `(none)`), read every `### <update-slug>/p<n>: <name>` entry (and legacy `### Phase <m>: <name>` entries from pre-v0.9.4 findings). Treat each entry's **Heuristic** line as a checklist item to honor when drafting `## Approach` and `## Files touched`. The Heuristic line is the load-bearing one — Misstep and Root cause exist for context, but the Heuristic is what you act on. The heading's `<update-slug>/` prefix shows provenance: a same-update lesson (matching `basename "$update_dir"`) is usually directly applicable; a cross-update lesson may need translation to this phase's context. If a Heuristic genuinely doesn't apply (different module surface, different capability, different data shape), say so explicitly in your summary line ("honored Heuristic from <update-slug>/p1; <update-slug>/p2's Heuristic doesn't apply because <reason>") — silent ignore wastes the cross-phase memory.
+1.5. **Read update reflections + wiki (cross-phase memory, v0.9.8).** Two fact blocks carry prior wisdom; honor both, but they have different scope:
+
+   **`update_reflections`** (same-update only). If non-`(none)`, read every `### p<n>: <name>` entry in the current update's `## Reflections`. Treat each entry's **Heuristic** line as a checklist item to honor when drafting `## Approach` and `## Files touched`. The Heuristic line is load-bearing — Misstep and Root cause exist for context, but the Heuristic is what you act on. These are lessons from earlier phases of THIS update; almost always directly applicable. If a Heuristic genuinely doesn't apply (different files, different capability, different data shape), say so explicitly in your summary line — silent ignore wastes the cross-phase memory and risks the same RETURN.
+
+   **`wiki`** (project-global). If non-`(none)`, treat every wiki rule visible in the block as non-negotiable engineering law. Wiki rules were promoted via reviewer flag + user accept gate — they represent the project's hardened conventions. Any `## Approach` claim that contradicts a wiki rule is a defect, not a stylistic choice. See `## Wiki injection` for the full honor protocol.
 
 2. **Seed from template via Bash, NOT Edit.** If the file does not exist, copy + substitute the template into the destination. Use the `Bash` tool — do NOT use `Edit` (the template is outside `${update_dir}/`):
 
@@ -204,7 +209,8 @@ Source priority:
 1. `module_prd_path` `## Quality bar` — first source for NFR-driven edges (latency, empty-input behavior, idempotency claims).
 2. `module_prd_path` `## Risks` — first source for adversarial / failure-mode edges (network failure, partial state, race conditions).
 3. The `## Approach` itself — every "after step 2, step 3..." dependency implies a failure mode if step 2 fails partway. Name those.
-4. `prior_reflections` `Heuristic:` lines — if a prior phase's heuristic is "always test against empty inputs", honor it here.
+4. `update_reflections` `Heuristic:` lines — if an earlier phase of this update has a heuristic like "always test against empty inputs", honor it here.
+5. `wiki` rules visible in the injected block — any wiki rule about edge handling, runtime quirks, or testing discipline is non-negotiable.
 
 ### `## Files touched`
 
@@ -279,6 +285,35 @@ Source priority:
 3. The `## Approach` itself — each new function / endpoint / screen named there is verifiable.
 
 Verification is for the user, not for you. Avoid pure unit-test terms; phrase as "a developer running this command sees X". If the phase is internal-only (refactor), the phase-test path command still applies (the test asserts the refactor preserves behavior); the smoke command states the regression-pass expectation.
+
+## Wiki injection (v0.9.8 R18)
+
+The `<wiki>` block is project-wide engineering law, promoted via reviewer-
+flag + user-accept gate from prior phases' findings. Treat each rule as a
+**non-negotiable constraint** on your `## Approach` and `## Files touched`
+— same status as `existing_code_facts` and `spec_facts`. Approach claims
+that contradict a wiki rule are defects, not stylistic choices.
+
+How to read the block:
+
+- `_index.md` is always returned at the top — it lists every wiki rule in
+  the project, one bullet per rule, with an anchor link to the topic file.
+  Read the index first to know what rules exist.
+- Topic files (e.g. `wiki/runtime.md`, `wiki/paths.md`) follow when their
+  filename or rule headings keyword-match this phase. Each topic file has
+  a `# <Topic>` H1 and one `## <rule heading>` per rule plus rule body
+  with rationale + a `**Source**` link back to the originating findings
+  entry.
+- If you suspect a rule applies but the topic file wasn't injected (it
+  didn't keyword-match), `Read docs/super-manus/wiki/<topic>.md` directly.
+  The keyword filter is a budget control, not an authoritative scope.
+
+If a wiki rule genuinely doesn't apply to this phase (different runtime,
+different surface area, different language), say so explicitly in your
+summary line: "honored wiki/runtime.md `Python 3.12 datetime`; wiki/paths.md
+`Verify before write` doesn't apply because this phase makes no file
+writes". **Silent ignore** is treated by the reviewer as a wiki violation
+and triggers RETURN.
 
 ## Source reading — Drift check protocol
 

@@ -147,11 +147,11 @@ grep -qF "/super-manus:impl-all" "$F" \
 # v0.7.4 adds Reflexion-style cross-phase memory: orchestrator synthesizes a
 # Reflection entry at phase close (when the phase had >=1 reviewer RETURN) and
 # the next phase's impl-architect spawn includes ## Reflections as
-# `prior_reflections`.
+# `update_reflections`.
 
-# Architect spawning prompt must include `prior_reflections` input.
-grep -qF "prior_reflections" "$F" \
-  || { echo "FAIL: v0.7.4 must pass prior_reflections to impl-architect (spawning prompt input)"; exit 1; }
+# Architect spawning prompt must include `update_reflections` input.
+grep -qF "update_reflections" "$F" \
+  || { echo "FAIL: v0.7.4 must pass update_reflections to impl-architect (spawning prompt input)"; exit 1; }
 
 # Phase-close step must mention synthesis of ## Reflections (or the section name itself).
 grep -qF "## Reflections" "$F" \
@@ -250,13 +250,13 @@ grep -qF ".pass1_files_touched_p<n>.yml" "$F" \
   || { echo "FAIL: v0.9.4 R5 phase close must delete .pass1_files_touched_p<n>.yml temp artifact"; exit 1; }
 
 # === v0.9.4 R6: cross-update reflection collection + metadata format =====
-# Orchestrator now uses sm_collect_reflections to glob+filter reflections from
+# Orchestrator now uses sm_load_update_reflections to glob+filter reflections from
 # every findings.md in the module. Phase-close synthesis writes the new heading
 # `### <update-slug>/p<n>: <name>` and the <!-- meta: --> metadata block.
 
 # Helper invocation
-grep -qF "sm_collect_reflections" "$F" \
-  || { echo "FAIL: v0.9.4 R6 must invoke sm_collect_reflections helper"; exit 1; }
+grep -qF "sm_load_update_reflections" "$F" \
+  || { echo "FAIL: v0.9.4 R6 must invoke sm_load_update_reflections helper"; exit 1; }
 
 # New heading format
 grep -qE "<update-slug>/p<n>" "$F" \
@@ -274,23 +274,23 @@ done
 grep -qiE "cross-update|every findings.md|glob.*findings|cross update" "$F" \
   || { echo "FAIL: v0.9.4 R6 must describe cross-update reflection injection"; exit 1; }
 
-# === v0.9.6 R12: prior_reflections injection extended to test-writer ========
-# Step 3 (test-writer spawn) gets the SAME prior_reflections fact block as
+# === v0.9.6 R12: update_reflections injection extended to test-writer ========
+# Step 3 (test-writer spawn) gets the SAME update_reflections fact block as
 # architect Pass 2 (Step 1c). Reuse the value; don't recompute.
 
-# Test-writer's Step 3 region (between Step 3 heading and Step 4 heading) must list prior_reflections
+# Test-writer's Step 3 region (between Step 3 heading and Step 4 heading) must list update_reflections
 # Use awk range delimited by next H2 to avoid leaking into other steps.
 step3_body=$(awk '/^## Step 3 — Spawn impl-test-writer/{f=1; next} /^## Step [4-9]|^## End-of-update/{f=0} f' "$F")
-echo "$step3_body" | grep -qF "prior_reflections" \
-  || { echo "FAIL: v0.9.6 R12 must inject prior_reflections to impl-test-writer at Step 3"; exit 1; }
+echo "$step3_body" | grep -qF "update_reflections" \
+  || { echo "FAIL: v0.9.6 R12 must inject update_reflections to impl-test-writer at Step 3"; exit 1; }
 echo "$step3_body" | grep -qiE "test-relevant|fixture realness|mirror-test|edge case coverage|e2e completion" \
   || { echo "FAIL: v0.9.6 R12 spawning prompt must hint at test-relevant Heuristic categories"; exit 1; }
-echo "$step3_body" | grep -qiE "reuse.*architect|same.*sm_collect_reflections|do NOT recompute|already computed" \
-  || { echo "FAIL: v0.9.6 R12 should reuse architect's already-computed prior_reflections (don't double-compute)"; exit 1; }
+echo "$step3_body" | grep -qiE "reuse.*architect|same.*sm_load_update_reflections|do NOT recompute|already computed" \
+  || { echo "FAIL: v0.9.6 R12 should reuse architect's already-computed update_reflections (don't double-compute)"; exit 1; }
 # v0.9.6 R12: shell variable binding makes the contract grep-able (not just prose-asserted).
-# A future regression where someone re-invokes sm_collect_reflections at Step 3 would be a code smell.
-grep -qF '$PRIOR_REFLECTIONS' "$F" \
-  || { echo "FAIL: v0.9.6 R12 must bind sm_collect_reflections result to \$PRIOR_REFLECTIONS so reuse contract is grep-able (not just prose)"; exit 1; }
+# A future regression where someone re-invokes sm_load_update_reflections at Step 3 would be a code smell.
+grep -qF '$UPDATE_REFLECTIONS' "$F" \
+  || { echo "FAIL: v0.9.6 R12 must bind sm_load_update_reflections result to \$UPDATE_REFLECTIONS so reuse contract is grep-able (not just prose)"; exit 1; }
 
 # === v0.9.6 R11: end-of-update gate Pass 3 must EXEMPT acknowledged-soft rows ====
 # R11 logging writes Resolution = "acknowledged-soft: <variant>" rows that preserve
@@ -325,5 +325,96 @@ fi
 # Author cell source must be documented
 grep -qF "git config user.name" "$F" \
   || { echo "FAIL: v0.9.7 R15 — impl.md must document Author cell source ('git config user.name')"; exit 1; }
+
+# === v0.9.8 R17 + R18: wiki injection + same-update findings ==============
+# Orchestrator captures WIKI_BLOCK + UPDATE_REFLECTIONS once per phase and
+# reuses across all 4 spawn types (architect / test-writer / code-writer / reviewer × 3 checkpoints).
+
+# sm_load_update_reflections must be called (replaces v0.9.4 R6's sm_collect_reflections)
+grep -qF "sm_load_update_reflections" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must invoke sm_load_update_reflections helper (renamed from sm_collect_reflections)"; exit 1; }
+
+# Negative regression: legacy helper must not be CALLED any more (renamed).
+# Historical mentions in prose ("originally used by v0.9.4 R6 sm_collect_reflections...")
+# are allowed; only an active shell invocation is the regression.
+grep -qE "sm_collect_reflections\s+\"\\\$|=\\\$\(sm_collect_reflections" "$F" \
+  && { echo "FAIL: v0.9.8 R17 must remove ACTIVE sm_collect_reflections invocations (renamed to sm_load_update_reflections); historical prose mentions are fine"; exit 1; } || true
+
+# sm_load_wiki must be called + bound to WIKI_BLOCK
+grep -qF "sm_load_wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must invoke sm_load_wiki helper"; exit 1; }
+grep -qF "WIKI_BLOCK" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must bind sm_load_wiki result to \$WIKI_BLOCK (reuse contract grep-able, not just prose)"; exit 1; }
+
+# Capture-once / reuse-everywhere discipline must be documented
+grep -qiE "capture once per phase|reuse across all|reused unchanged" "$F" \
+  || { echo "FAIL: v0.9.8 R17/R18 must document capture-once-reuse-everywhere discipline for UPDATE_REFLECTIONS + WIKI_BLOCK"; exit 1; }
+
+# All FOUR spawn types must include the wiki block (architect Pass 2 / test-writer / code-writer / reviewer × 3 checkpoints)
+# Architect Pass 2 (Step 1c): wiki appears in its spawn prompt skeleton
+arch_pass2_body=$(awk '/^### Step 1c — Pass 2 spawn/{f=1; next} /^## Step 2|^### Step 1[d-z]/{f=0} f' "$F")
+echo "$arch_pass2_body" | grep -qF "wiki" \
+  || { echo "FAIL: v0.9.8 R18 — architect Pass 2 (Step 1c) spawn prompt must include <wiki> block"; exit 1; }
+
+# Test-writer (Step 3)
+step3_body=$(awk '/^## Step 3 — Spawn impl-test-writer/{f=1; next} /^## Step [4-9]|^## End-of-update/{f=0} f' "$F")
+echo "$step3_body" | grep -qF "wiki" \
+  || { echo "FAIL: v0.9.8 R18 — test-writer (Step 3) spawn prompt must include <wiki> block"; exit 1; }
+
+# Code-writer (Step 5)
+step5_body=$(awk '/^## Step 5 —/{f=1; next} /^## Step [6-9]|^## End-of-update/{f=0} f' "$F")
+echo "$step5_body" | grep -qF "wiki" \
+  || { echo "FAIL: v0.9.8 R18 — code-writer (Step 5) spawn prompt must include <wiki> block"; exit 1; }
+
+# Reviewer at all 3 checkpoints (Step 2 pre-test / Step 4 pre-code / Step 6 pre-close)
+for step_pair in "Step 2 — Spawn impl-reviewer:Step [3-9]" "Step 4 — Spawn impl-reviewer:Step [5-9]" "Step 6 — Spawn impl-reviewer:Step [7-9]"; do
+  start="${step_pair%:*}"
+  stop="${step_pair#*:}"
+  body=$(awk "/^## ${start}/{f=1; next} /^## ${stop}|^## End-of-update/{f=0} f" "$F")
+  echo "$body" | grep -qF "wiki" \
+    || { echo "FAIL: v0.9.8 R18 — reviewer at '$start' must include <wiki> block in spawn prompt (all 3 checkpoints enforce wiki against writer output)"; exit 1; }
+done
+
+# === v0.9.8 R17: orchestrator promote gate after phase close ==============
+# Step 9 (Phase close) must parse the pre-close reviewer's wiki-candidates: block,
+# run AskUserQuestion per candidate, and on accept write to wiki/<topic>.md +
+# regenerate wiki/_index.md + append to wiki/_log.md.
+
+step9_body=$(awk '/^## Step 9 — Phase close/{f=1; next} /^## Terminal behavior|^## End-of-update/{f=0} f' "$F")
+
+# Promote gate step exists
+echo "$step9_body" | grep -qiE "promote gate|wiki-candidates|wiki promote" \
+  || { echo "FAIL: v0.9.8 R17 — Step 9 must include the wiki promote gate (parse reviewer's wiki-candidates: + AskUserQuestion + write to wiki/)"; exit 1; }
+
+# AskUserQuestion gate is the user-consent layer
+echo "$step9_body" | grep -qF "AskUserQuestion" \
+  || { echo "FAIL: v0.9.8 R17 — promote gate must use AskUserQuestion for user-consent (reviewer-flag + user-accept is the v0.9.8 R17 contract)"; exit 1; }
+
+# Three actions on accept: append to topic file, regenerate _index.md, append to _log.md
+echo "$step9_body" | grep -qF "wiki/<topic>.md" \
+  || { echo "FAIL: v0.9.8 R17 — accept path must append the rule to wiki/<topic>.md"; exit 1; }
+echo "$step9_body" | grep -qF "wiki/_index.md" \
+  || { echo "FAIL: v0.9.8 R17 — accept path must regenerate wiki/_index.md"; exit 1; }
+echo "$step9_body" | grep -qF "wiki/_log.md" \
+  || { echo "FAIL: v0.9.8 R17 — accept path must append a promote entry to wiki/_log.md"; exit 1; }
+
+# Reject path also writes to _log.md (audit)
+echo "$step9_body" | grep -qF "promote-rejected" \
+  || { echo "FAIL: v0.9.8 R17 — reject path must write a promote-rejected entry to wiki/_log.md (audit)"; exit 1; }
+
+# Negative regression: NO source-side findings.md annotation (the v0.9.8 R17 simplification rejected source annotation)
+echo "$step9_body" | grep -qiE "annotate.*findings\.md.*promoted:|promoted:.*findings\.md|source-side annotation" \
+  && { echo "FAIL: v0.9.8 R17 simplification rejected source-side findings.md annotation — Step 9 must NOT annotate findings.md entries with promoted: meta (wiki/_log.md is the sole provenance record)"; exit 1; } || true
+
+# === v0.9.8 R19: drift gate Pass 4 (wiki-lint, non-blocking) ============
+gate4_body=$(awk '/^### Pass 4 — wiki-lint/{f=1; next} /^### |^## /{f=0} f' "$F")
+[ -n "$gate4_body" ] \
+  || { echo "FAIL: v0.9.8 R19 — End-of-update drift gate must have a '### Pass 4 — wiki-lint' subsection"; exit 1; }
+echo "$gate4_body" | grep -qiE "non.blocking|advisory|does NOT fail.close" \
+  || { echo "FAIL: v0.9.8 R19 — Pass 4 must be declared non-blocking / advisory"; exit 1; }
+echo "$gate4_body" | grep -qF "mode=wiki-lint" \
+  || { echo "FAIL: v0.9.8 R19 — Pass 4 must spawn impl-reviewer with mode=wiki-lint"; exit 1; }
+echo "$gate4_body" | grep -qF "wiki/_log.md" \
+  || { echo "FAIL: v0.9.8 R19 — Pass 4 result must be written to wiki/_log.md"; exit 1; }
 
 echo OK

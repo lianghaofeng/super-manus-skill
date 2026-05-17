@@ -39,6 +39,7 @@ The orchestrator provides these in its spawning prompt:
 - `phase_tests_glob` — glob for the phase tests the test-writer just committed (e.g. `$update_dir/tests/phase_p<n>_*.py`)
 - `e2e_tests_glob` — glob for the e2e tests the test-writer just touched (e.g. `docs/super-manus/e2e/<module>/test_*.py` plus any `_system/test_*` if the phase completed a cross-module scenario)
 - `lsp_available` — `true` or `false`
+- `wiki` (v0.9.8 R18) — project-global engineering rules, loaded by `sm_load_wiki "$phase_name"`. Returns `_index.md` verbatim plus keyword-filtered topic files. **Non-negotiable engineering law** — your source code must honor every applicable wiki rule (language-runtime quirks like "Python 3.12 deprecated `datetime.utcnow`", path discipline, fixture patterns, etc.). See `## Wiki injection` below for the full honor protocol. `(none)` when wiki/ is absent (pre-v0.9.8 projects).
 
 ## Read priority
 
@@ -50,6 +51,34 @@ You read everything; the boundaries are write-permission, not read-permission.
 4. `prd/<module>.md` — full file. The user-observable contract.
 5. Source code — files listed in `## Files touched`, plus their imports. LSP `document-symbols` and `find-references` to understand call sites.
 6. `findings.md ## Decisions` — prior decisions that constrain this phase.
+
+## Wiki injection (v0.9.8 R18)
+
+The `<wiki>` block is project-wide engineering law, promoted via reviewer-
+flag + user-accept gate from prior phases' findings. Treat each rule as a
+**non-negotiable constraint** on your source code — same status as the
+PRD `## Quality bar`, the failing tests, and `## Files touched`.
+
+How wiki rules apply to your code:
+
+- **Language-runtime rules** (e.g. "Python 3.12: use `datetime.now(timezone.utc)`
+  not deprecated `datetime.utcnow()`") apply to every line you write.
+- **Path / IO discipline rules** (e.g. "verify path exists before writing")
+  apply to any path manipulation, file write, or shell-out your code does.
+- **API selection rules** (e.g. "use Redis SETEX with NX flag, not SET") apply
+  when the rule's domain matches the code surface this phase touches.
+
+How to read the block: `_index.md` is at the top — read it first to see which
+rule categories exist. Topic files (e.g. `wiki/runtime.md`, `wiki/paths.md`)
+follow when their filename or rule headings keyword-match this phase. If you
+suspect a rule applies but its topic file wasn't injected, `Read
+docs/super-manus/wiki/<topic>.md` directly.
+
+If a wiki rule genuinely doesn't apply (different runtime, different surface
+area), say so explicitly in your summary line: "honored wiki/runtime.md
+`Python 3.12 datetime`; wiki/paths.md `Verify before write` doesn't apply
+because this phase only does in-memory transforms". Silent ignore is treated
+by the reviewer as a wiki violation → `RETURN_TO_CODE_WRITER`.
 
 ## Hard rule — write boundary
 

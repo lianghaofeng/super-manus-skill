@@ -424,13 +424,22 @@ popd >/dev/null
 rm -rf "$R5_TMP"
 trap - EXIT
 
-# v0.9.4 (R6): sm_collect_reflections — globs findings.md across all updates
-# under a module, parses ### entries with their <!-- meta: --> blocks, filters
-# by keyword (phase_name tokens) + optional files_touched overlap, sorts by
-# mtime DESC + retries DESC, returns top K=5 entries with <update-slug>/
-# provenance prefix in heading.
-if ! declare -f sm_collect_reflections >/dev/null 2>&1; then
-  echo "FAIL: hooks/lib.sh must define sm_collect_reflections in v0.9.4 (R6)"; exit 1
+# v0.9.8 (R17 simplification): sm_load_update_reflections — replaces
+# sm_collect_reflections (v0.9.4 R6, retired in v0.9.8). The new function
+# dumps the ## Reflections section of the CURRENT update's findings.md
+# verbatim: no cross-update glob, no keyword filter, no K=5 cap. Cross-
+# update memory now flows exclusively through wiki (sm_load_wiki).
+
+# Negative regression: the old sm_collect_reflections function MUST be
+# removed in v0.9.8 R17 — keeping both functions would create two parallel
+# code paths and contradict the "wiki is the sole cross-update channel"
+# invariant. Renamed, not aliased.
+if declare -f sm_collect_reflections >/dev/null 2>&1; then
+  echo "FAIL: v0.9.8 R17 must remove sm_collect_reflections (renamed to sm_load_update_reflections); cross-update findings glob is retired in favor of the wiki layer"; exit 1
+fi
+
+if ! declare -f sm_load_update_reflections >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_load_update_reflections in v0.9.8 (R17)"; exit 1
 fi
 
 R6_TMP=$(mktemp -d)
@@ -439,181 +448,195 @@ pushd "$R6_TMP" >/dev/null
 
 mkdir -p "docs/super-manus/impl/probe/2026-05-01-foo"
 mkdir -p "docs/super-manus/impl/probe/2026-05-08-bar"
-mkdir -p "docs/super-manus/impl/teach/2026-05-09-baz"
 
-# Case 1: missing module → empty
-got=$(sm_collect_reflections "nope" "anything" || true)
-[ -z "$got" ] || { echo "FAIL: nonexistent module should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+# Case 1: missing update_dir / missing findings.md → empty
+got=$(sm_load_update_reflections "" || true)
+[ -z "$got" ] || { echo "FAIL: empty update_dir should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+got=$(sm_load_update_reflections "/nonexistent/$$" || true)
+[ -z "$got" ] || { echo "FAIL: nonexistent update_dir should give empty, got: '$got'"; popd >/dev/null; exit 1; }
 
-# Case 2: findings exists but no Reflections section → empty
+# Case 2: findings.md present, no ## Reflections section → empty
 cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
 # Findings: foo
 
 ## Decisions
 
 ## Errors
+EOF
+got=$(sm_load_update_reflections "docs/super-manus/impl/probe/2026-05-01-foo" || true)
+[ -z "$got" ] || { echo "FAIL: no ## Reflections section should give empty, got: '$got'"; popd >/dev/null; exit 1; }
 
-## Data points / research
+# Case 3: ## Reflections section present but placeholder body → empty
+cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
+# Findings: foo
 
 ## Reflections
 
 (no reflections yet)
 EOF
-got=$(sm_collect_reflections "probe" "validate jwt" || true)
-[ -z "$got" ] || { echo "FAIL: empty Reflections should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+got=$(sm_load_update_reflections "docs/super-manus/impl/probe/2026-05-01-foo" || true)
+[ -z "$got" ] || { echo "FAIL: placeholder reflection body should give empty, got: '$got'"; popd >/dev/null; exit 1; }
 
-# Case 3: matching reflection via keyword (heading token fallback, no meta)
+# Case 4: populated ## Reflections section → full verbatim dump
 cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
 # Findings: foo
 
 ## Reflections
 
-### Phase 3: validate jwt signature
+### p3: validate jwt signature
 - Misstep: forgot to grep before claiming add
 - Root cause: state-blind under pressure
 - Heuristic: always grep for existing functions before drafting Approach
+
+### p4: refactor handlers
+- Misstep: split signin without keeping back-compat alias
+- Root cause: insufficient review of call sites
+- Heuristic: grep -r for callers before renaming public functions
+
+## Other section that should be excluded
+- this should not appear
 EOF
-# Touch to be older than bar
-touch -t 202504010800 "docs/super-manus/impl/probe/2026-05-01-foo/findings.md"
+got=$(sm_load_update_reflections "docs/super-manus/impl/probe/2026-05-01-foo")
+echo "$got" | grep -qF "p3: validate jwt signature" \
+  || { echo "FAIL: should dump p3 heading; got:"; echo "$got"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "p4: refactor handlers" \
+  || { echo "FAIL: should dump p4 heading; got:"; echo "$got"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "Heuristic: grep -r for callers" \
+  || { echo "FAIL: full body should be dumped; got:"; echo "$got"; popd >/dev/null; exit 1; }
+echo "$got" | grep -qF "this should not appear" \
+  && { echo "FAIL: content after ## Reflections section must NOT be dumped"; popd >/dev/null; exit 1; } || true
 
-got=$(sm_collect_reflections "probe" "validate jwt cookies")
-echo "$got" | grep -qF "2026-05-01-foo/Phase 3" \
-  || { echo "FAIL: should match by keyword and prepend update-slug to legacy heading:"; echo "$got"; popd >/dev/null; exit 1; }
-echo "$got" | grep -qF "Heuristic: always grep" \
-  || { echo "FAIL: body should be included in output"; popd >/dev/null; exit 1; }
-
-# Case 4: matching reflection via meta keywords + files_touched
+# Case 5: NO keyword filtering, NO K=5 cap — same-update-only design has no
+# notion of "relevance scoring". Verify all entries come through even when
+# none match phase-name-like keywords.
 cat > "docs/super-manus/impl/probe/2026-05-08-bar/findings.md" <<'EOF'
 # Findings: bar
 
 ## Reflections
 
-### 2026-05-08-bar/p2: refactor handlers
-<!-- meta:
-  files_touched: [src/auth/handlers.py, src/auth/types.py]
-  keywords: [handlers, refactor, auth]
-  trigger: reviewer-RETURN
-  retries: 1
-  created: 2026-05-08
--->
-- Misstep: split signin without keeping back-compat alias
-- Root cause: insufficient review of call sites
-- Heuristic: grep -r for callers before renaming public functions
+### p1: aaa
+- Misstep: x1
+- Heuristic: y1
+
+### p2: bbb
+- Misstep: x2
+- Heuristic: y2
+
+### p3: ccc
+- Misstep: x3
+- Heuristic: y3
+
+### p4: ddd
+- Misstep: x4
+- Heuristic: y4
+
+### p5: eee
+- Misstep: x5
+- Heuristic: y5
+
+### p6: fff
+- Misstep: x6
+- Heuristic: y6
 EOF
-
-# Match via keyword "handlers" (from meta)
-got=$(sm_collect_reflections "probe" "rewrite handlers")
-echo "$got" | grep -qF "2026-05-08-bar/p2" \
-  || { echo "FAIL: should match via meta keywords; got:"; echo "$got"; popd >/dev/null; exit 1; }
-
-# Match via files_touched overlap (no keyword overlap)
-got=$(sm_collect_reflections "probe" "unrelated phase name" "src/auth/handlers.py")
-echo "$got" | grep -qF "2026-05-08-bar/p2" \
-  || { echo "FAIL: should match via files_touched overlap when keywords miss; got:"; echo "$got"; popd >/dev/null; exit 1; }
-
-# Case 5: cross-update — both updates' entries match, newer (bar) sorts first
-got=$(sm_collect_reflections "probe" "validate handlers jwt refactor")
-first_heading=$(echo "$got" | grep -E "^### " | head -1)
-echo "$first_heading" | grep -qF "2026-05-08-bar" \
-  || { echo "FAIL: newer update (bar) should sort first; first heading: '$first_heading'"; popd >/dev/null; exit 1; }
-
-# Case 6: scope by module — teach module reflection MUST NOT appear in probe query
-cat > "docs/super-manus/impl/teach/2026-05-09-baz/findings.md" <<'EOF'
-# Findings: baz
-
-## Reflections
-
-### 2026-05-09-baz/p1: jwt handlers
-<!-- meta:
-  files_touched: [src/teach/jwt.py]
-  keywords: [jwt, handlers]
-  trigger: reviewer-RETURN
-  retries: 0
-  created: 2026-05-09
--->
-- Misstep: x
-- Root cause: y
-- Heuristic: z
-EOF
-got=$(sm_collect_reflections "probe" "jwt handlers")
-echo "$got" | grep -qF "teach" && { echo "FAIL: teach-module reflection leaked into probe query"; popd >/dev/null; exit 1; } || true
-echo "$got" | grep -qF "probe" \
-  || true  # probe headings don't necessarily contain literal "probe"
-
-# Case 7: top-K=5 cap (add 6+ matching entries, expect ≤5 in output)
-cat > "docs/super-manus/impl/probe/2026-05-01-foo/findings.md" <<'EOF'
-# Findings: foo
-
-## Reflections
-
-### Phase 1: tokenize input
-<!-- meta:
-  files_touched: [src/a.py]
-  keywords: [tokenize]
-  trigger: reviewer-RETURN
-  retries: 1
-  created: 2026-04-01
--->
-- Misstep: m1
-- Root cause: r1
-- Heuristic: h1
-
-### Phase 2: tokenize cache
-<!-- meta:
-  keywords: [tokenize, cache]
-  trigger: reviewer-RETURN
-  retries: 1
--->
-- Misstep: m2
-- Root cause: r2
-- Heuristic: h2
-
-### Phase 3: tokenize edge
-<!-- meta:
-  keywords: [tokenize, edge]
-  trigger: reviewer-RETURN
-  retries: 1
--->
-- Misstep: m3
-- Root cause: r3
-- Heuristic: h3
-
-### Phase 4: tokenize null
-<!-- meta:
-  keywords: [tokenize, null]
-  trigger: reviewer-RETURN
-  retries: 1
--->
-- Misstep: m4
-- Root cause: r4
-- Heuristic: h4
-
-### Phase 5: tokenize unicode
-<!-- meta:
-  keywords: [tokenize, unicode]
-  trigger: reviewer-RETURN
-  retries: 1
--->
-- Misstep: m5
-- Root cause: r5
-- Heuristic: h5
-
-### Phase 6: tokenize whitespace
-<!-- meta:
-  keywords: [tokenize, whitespace]
-  trigger: reviewer-RETURN
-  retries: 1
--->
-- Misstep: m6
-- Root cause: r6
-- Heuristic: h6
-EOF
-got=$(sm_collect_reflections "probe" "tokenize handlers")
+got=$(sm_load_update_reflections "docs/super-manus/impl/probe/2026-05-08-bar")
 count=$(echo "$got" | grep -cE "^### " || echo 0)
-[ "$count" -le 5 ] || { echo "FAIL: top-K cap should limit to ≤5 entries, got $count"; popd >/dev/null; exit 1; }
+[ "$count" = "6" ] || { echo "FAIL: should dump all 6 entries (no K=5 cap in v0.9.8); got $count"; popd >/dev/null; exit 1; }
+
+# Case 6: NO cross-update glob — passing a different update_dir under the
+# same module must NOT see reflections from the other update's findings.
+got=$(sm_load_update_reflections "docs/super-manus/impl/probe/2026-05-01-foo")
+echo "$got" | grep -qF "p1: aaa" && { echo "FAIL: reflections from 2026-05-08-bar must NOT appear when reading 2026-05-01-foo's update_dir (no cross-update glob)"; popd >/dev/null; exit 1; } || true
 
 popd >/dev/null
 rm -rf "$R6_TMP"
+trap - EXIT
+
+# v0.9.8 (R18): sm_load_wiki — loads docs/super-manus/wiki/_index.md verbatim
+# always, plus keyword-filtered topic files (filename basename OR any H2 rule
+# heading shares a token with phase_name). _index.md and _log.md (leading-
+# underscore scaffolding files) MUST be excluded from the topic scan.
+if ! declare -f sm_load_wiki >/dev/null 2>&1; then
+  echo "FAIL: hooks/lib.sh must define sm_load_wiki in v0.9.8 (R18)"; exit 1
+fi
+
+R18_TMP=$(mktemp -d)
+trap 'rm -rf "$R18_TMP"' EXIT
+pushd "$R18_TMP" >/dev/null
+
+# Case 1: empty phase_name → empty
+got=$(sm_load_wiki "" || true)
+[ -z "$got" ] || { echo "FAIL: empty phase_name should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 2: wiki/ dir absent → empty (project pre-v0.9.8)
+got=$(sm_load_wiki "any phase" || true)
+[ -z "$got" ] || { echo "FAIL: missing wiki/ dir should give empty, got: '$got'"; popd >/dev/null; exit 1; }
+
+# Case 3: _index.md only (no topic files yet) → returns index verbatim
+mkdir -p docs/super-manus/wiki
+cat > docs/super-manus/wiki/_index.md <<'EOF'
+# Wiki index
+
+(no topics yet)
+EOF
+cat > docs/super-manus/wiki/_log.md <<'EOF'
+# Wiki log
+EOF
+got=$(sm_load_wiki "scaffold signal module")
+echo "$got" | grep -qF "# Wiki index" \
+  || { echo "FAIL: _index.md should always be returned; got:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Case 4: topic file with FILENAME keyword match → full file returned
+cat > docs/super-manus/wiki/rate-limit.md <<'EOF'
+# Rate limit
+
+## Redis SETEX usage
+
+Use SETEX with 1-minute window for all per-endpoint limiters.
+EOF
+got=$(sm_load_wiki "rate-limit refactor signin")
+echo "$got" | grep -qF "Redis SETEX usage" \
+  || { echo "FAIL: filename match (rate-limit ∩ rate-limit) should include topic file; got:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Case 5: topic file with H2 heading keyword match → full file returned
+cat > docs/super-manus/wiki/runtime.md <<'EOF'
+# Runtime
+
+## Python 3.12 datetime
+
+Use datetime.now(timezone.utc) instead of deprecated datetime.utcnow().
+EOF
+got=$(sm_load_wiki "datetime utility refactor")
+echo "$got" | grep -qF "Python 3.12 datetime" \
+  || { echo "FAIL: H2 heading match (datetime ∩ datetime) should include topic file; got:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Case 6: topic file with no keyword match → NOT included
+got=$(sm_load_wiki "unrelated authentication phase")
+echo "$got" | grep -qF "Redis SETEX usage" \
+  && { echo "FAIL: rate-limit.md should NOT match 'unrelated authentication phase'"; popd >/dev/null; exit 1; } || true
+echo "$got" | grep -qF "Python 3.12 datetime" \
+  && { echo "FAIL: runtime.md should NOT match 'unrelated authentication phase'"; popd >/dev/null; exit 1; } || true
+# _index.md still returned even when no topic matches
+echo "$got" | grep -qF "# Wiki index" \
+  || { echo "FAIL: _index.md must always be returned; got:"; echo "$got"; popd >/dev/null; exit 1; }
+
+# Case 7: scaffolding files (_index.md, _log.md, anything starting with _)
+# MUST NOT be considered topic files in the keyword scan — even if their
+# filename or H2 headings happen to keyword-match.
+cat > docs/super-manus/wiki/_index.md <<'EOF'
+# Wiki index
+
+## rate-limit
+- [Redis SETEX](rate-limit.md#redis-setex-usage)
+EOF
+# _index.md now has "rate-limit" in its H2, but it's a scaffolding file and
+# must NOT be returned a second time via the topic-file loop. Verify by
+# counting how many times the index content appears in the output.
+got=$(sm_load_wiki "rate-limit refactor")
+idx_count=$(echo "$got" | grep -cF "## rate-limit" || true)
+[ "$idx_count" = "1" ] || { echo "FAIL: _index.md must appear exactly once (got $idx_count); leading-underscore scaffolding files must not be re-scanned in the topic loop"; popd >/dev/null; exit 1; }
+
+popd >/dev/null
+rm -rf "$R18_TMP"
 trap - EXIT
 
 echo OK

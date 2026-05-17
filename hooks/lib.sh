@@ -244,105 +244,46 @@ for line in text.splitlines():
 PY
 }
 
-# v0.9.4 (R6): collect cross-update reflections from every findings.md under
-# docs/super-manus/impl/<module>/*/findings.md, filter by keyword match (against
-# phase_name tokens) and optional files_touched overlap, sort by file mtime DESC
-# (newer wins) + retries DESC (high-retry = stronger lesson), return top K=5
-# entries formatted as ### headings with their bodies. The output is injected
-# into the architect spawn as <prior_lessons> fact block.
-#
-# Heading provenance: every returned entry is prefixed with <update-slug>/ so
-# the architect sees which update each lesson came from. Legacy entries (pre-
-# v0.9.4 headings like `### Phase 3: ...`) get the same prefix treatment.
+# v0.9.8 (R17, replaces v0.9.4 R6 sm_collect_reflections): dump the
+# `## Reflections` section of the CURRENT update's findings.md verbatim. No
+# cross-update glob, no keyword filter, no K=5 cap — wiki (sm_load_wiki, R18)
+# is now the sole cross-update memory channel; this helper handles only the
+# narrow "what did earlier phases of THIS update learn?" case.
 #
 # Args:
-#   $1 — module name
-#   $2 — phase_name (tokenized lowercase, alnum split, deduped)
-#   $3 — optional newline-separated files_touched list (Pass 2 filter signal)
-sm_collect_reflections() {
-  local module="${1:-}"
-  local phase_name="${2:-}"
-  local files_list="${3:-}"
-  [ -n "$module" ] && [ -n "$phase_name" ] || return 0
-  MODULE="$module" PHASE_NAME="$phase_name" FILES_LIST="$files_list" python3 - <<'PY'
-import os, re, sys, glob
-
-module = os.environ["MODULE"]
-phase_name = os.environ["PHASE_NAME"]
-files_list = [f for f in os.environ["FILES_LIST"].splitlines() if f.strip()]
-
-phase_tokens = set(re.findall(r"[a-z0-9]+", phase_name.lower()))
-files_set = set(files_list)
-
-pattern = f"docs/super-manus/impl/{module}/*/findings.md"
-findings_files = glob.glob(pattern)
-
-entries = []
-for fpath in findings_files:
-    update_slug = os.path.basename(os.path.dirname(fpath))
-    try:
-        text = open(fpath).read()
-    except Exception:
-        continue
-    section_match = re.search(r"(?ms)^## Reflections\s*$(.*?)(?=^## |\Z)", text)
-    if not section_match:
-        continue
-    section = section_match.group(1)
-    try:
-        mtime = os.path.getmtime(fpath)
-    except OSError:
-        mtime = 0.0
-    entry_re = re.compile(
-        r"^### (.+?)\s*$\n"
-        r"(?:<!-- meta:\s*\n(.*?)\n-->\s*\n)?"
-        r"(.*?)"
-        r"(?=^### |\Z)",
-        re.MULTILINE | re.DOTALL,
-    )
-    for em in entry_re.finditer(section):
-        heading = em.group(1).strip()
-        meta_text = em.group(2) or ""
-        body = (em.group(3) or "").strip()
-        if not body and not heading:
-            continue
-        meta = {}
-        for line in meta_text.splitlines():
-            mm = re.match(r"\s*(\w+):\s*(.*)$", line)
-            if mm:
-                meta[mm.group(1)] = mm.group(2).strip()
-        kw_str = meta.get("keywords", "")
-        kw_tokens = set(re.findall(r"[a-z0-9]+", kw_str.lower())) if kw_str else set()
-        ft_str = meta.get("files_touched", "")
-        ft_paths = set(re.findall(r"[^\s,\[\]]+", ft_str)) if ft_str else set()
-        try:
-            retries = int(meta.get("retries", "0") or "0")
-        except ValueError:
-            retries = 0
-        heading_tokens = set(re.findall(r"[a-z0-9]+", heading.lower()))
-        kw_pool = kw_tokens | heading_tokens
-        keyword_hit = bool(kw_pool & phase_tokens)
-        file_hit = bool(ft_paths & files_set) if files_set else False
-        if not (keyword_hit or file_hit):
-            continue
-        if heading.startswith(f"{update_slug}/"):
-            display_heading = heading
-        else:
-            display_heading = f"{update_slug}/{heading}"
-        entries.append({
-            "mtime": mtime,
-            "retries": retries,
-            "heading": display_heading,
-            "body": body,
-        })
-
-entries.sort(key=lambda e: (-e["mtime"], -e["retries"]))
-
-K = 5
-for e in entries[:K]:
-    print(f"### {e['heading']}")
-    if e["body"]:
-        print(e["body"])
-    print()
+#   $1 — update_dir (e.g. docs/super-manus/impl/signal/2026-05-15-baseline).
+#        The orchestrator already knows this via sm_active_update.
+#
+# Output (stdout):
+#   Empty when findings.md is absent, has no `## Reflections` section, or the
+#   section body is the placeholder "(no reflections yet)". Otherwise: the
+#   verbatim body of `## Reflections` (everything between the heading and the
+#   next H2 / end of file), with surrounding whitespace stripped.
+#
+# Why no filter / no K-cap: the current update's reflections section is small
+# in practice (5-15 phases × 0-3 reflections each = under 20 lines typically),
+# and same-update lessons are almost always directly applicable to the next
+# phase. Filtering throws away signal that's nearly guaranteed relevant; the
+# K-cap was a defense against the cross-update glob's potentially-unbounded
+# input, no longer a concern.
+sm_load_update_reflections() {
+  local update_dir="${1:-}"
+  [ -n "$update_dir" ] || return 0
+  local findings="$update_dir/findings.md"
+  [ -f "$findings" ] || return 0
+  python3 - "$findings" <<'PY'
+import re, sys
+try:
+    text = open(sys.argv[1]).read()
+except Exception:
+    sys.exit(0)
+m = re.search(r"(?ms)^## Reflections\s*$(.*?)(?=^## |\Z)", text)
+if not m:
+    sys.exit(0)
+body = m.group(1).strip()
+if not body or body == "(no reflections yet)":
+    sys.exit(0)
+print(body)
 PY
 }
 
@@ -409,4 +350,73 @@ for pattern in sys.stdin.read().splitlines():
         sys.exit(0)
 sys.exit(1)
 '
+}
+
+# v0.9.8 (R18): load wiki contents for spawn injection. Output is wrapped in
+# <wiki>...</wiki> tags by the orchestrator and injected into impl-architect
+# Pass 2, impl-test-writer, impl-code-writer, and impl-reviewer (all 3
+# checkpoints) spawn prompts. Writers honor wiki as project-global engineering
+# law; reviewer enforces (wiki violation = RETURN_TO_<writer>).
+#
+# _index.md is always returned verbatim (small — one bullet per rule).  Topic
+# files (docs/super-manus/wiki/<topic>.md, excluding the leading-underscore
+# special files) are keyword-filtered: a topic file is included when its
+# filename (basename without .md) shares a token with phase_name, OR any H2
+# rule heading inside it shares a token. Filename match includes the whole
+# file (a `rate-limit.md` topic is clearly relevant when the phase is
+# "rate-limit-refactor", regardless of whether the inner rule headings happen
+# to mention rate-limit themselves).
+#
+# Args:
+#   $1 — phase_name (any string; tokenized lowercase alnum-split internally)
+#
+# Output (stdout):
+#   Empty when docs/super-manus/wiki/ is absent (project pre-dates v0.9.8 or
+#   /super-manus:start has not been re-run after upgrade).
+#   Otherwise: _index.md verbatim, then a blank line, then each matching
+#   topic file verbatim separated by blank lines.
+sm_load_wiki() {
+  local phase_name="${1:-}"
+  [ -n "$phase_name" ] || return 0
+  local wiki_dir="docs/super-manus/wiki"
+  [ -d "$wiki_dir" ] || return 0
+  if [ -f "$wiki_dir/_index.md" ]; then
+    cat "$wiki_dir/_index.md"
+    printf '\n'
+  fi
+  PHASE_NAME="$phase_name" WIKI_DIR="$wiki_dir" python3 - <<'PY'
+import os, re, glob
+
+phase_name = os.environ["PHASE_NAME"]
+wiki_dir = os.environ["WIKI_DIR"]
+
+phase_tokens = set(re.findall(r"[a-z0-9]+", phase_name.lower()))
+if not phase_tokens:
+    raise SystemExit(0)
+
+# Skip _index.md / _log.md — leading underscore = scaffolding files
+topic_files = sorted(
+    f for f in glob.glob(os.path.join(wiki_dir, "*.md"))
+    if not os.path.basename(f).startswith("_")
+)
+
+for fpath in topic_files:
+    try:
+        text = open(fpath).read()
+    except Exception:
+        continue
+    fname_no_ext = os.path.splitext(os.path.basename(fpath))[0]
+    fname_tokens = set(re.findall(r"[a-z0-9]+", fname_no_ext.lower()))
+    matched = bool(fname_tokens & phase_tokens)
+    if not matched:
+        for h in re.findall(r"^##\s+(.+?)\s*$", text, re.MULTILINE):
+            h_tokens = set(re.findall(r"[a-z0-9]+", h.lower()))
+            if h_tokens & phase_tokens:
+                matched = True
+                break
+    if not matched:
+        continue
+    print(text)
+    print()
+PY
 }

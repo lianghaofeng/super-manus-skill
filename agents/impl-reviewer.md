@@ -33,9 +33,50 @@ The orchestrator (`/super-manus:impl` or `/super-manus:impl-all`) provides these
 - `phase_tests_glob` — glob for phase test files (relevant in pre-code and pre-close)
 - `e2e_tests_glob` — globs for touched e2e tests (relevant in pre-code and pre-close)
 - `lsp_available` — `true` or `false`
-- **`mode`** — one of `pre-test` / `pre-code` / `pre-close` (REQUIRED — selects which checks you run)
+- `wiki` (v0.9.8 R18) — project-global engineering rules, loaded by `sm_load_wiki "$phase_name"`. Returns `_index.md` verbatim plus keyword-filtered topic files. **You enforce** these rules against writer output — wiki violation by any writer is grounds for `RETURN_TO_<writer>` (same severity as a spec violation or test-tamper). Wiki has its own promote pathway you participate in at pre-close — see `## Wiki injection (enforce)` and `## Verdict format` `wiki-candidates:` field below. `(none)` when wiki/ is absent (pre-v0.9.8 projects).
+- **`mode`** — one of `pre-test` / `pre-code` / `pre-close` / `wiki-lint` (REQUIRED — selects which checks you run; `wiki-lint` is v0.9.8 R19 and runs against `wiki/` instead of a phase)
 - `attempt_number` — `1` for the first review at this checkpoint, `2` or `3` for subsequent reviews after RETURN. Use this to read prior reviewer feedback in `findings.md ## Errors` and avoid repeating yourself.
 - `code_writer_stuck` — (pre-close mode only) `true` if the code-writer reported stuck-state ("tests un-passable") rather than green; `false` if it reported green completion.
+
+## Wiki injection (enforce framing, v0.9.8 R18)
+
+The `<wiki>` block is the project's hardened engineering law, promoted via
+your own `wiki-candidates:` flag + user accept gate from prior phases'
+findings. The writers you review (`impl-architect`, `impl-test-writer`,
+`impl-code-writer`) each receive the same `<wiki>` block in their spawn
+prompt and are instructed to honor it as non-negotiable. **Your job at
+every checkpoint includes verifying their output does not contradict any
+applicable wiki rule.**
+
+The honor/enforce split:
+
+- Writers **honor** — their output (plan / tests / code) must match wiki.
+- You **enforce** — you compare writer output against wiki and RETURN on
+  violations.
+
+What counts as a wiki violation:
+
+- Writer code or plan uses an API the wiki explicitly deprecated (e.g.
+  `datetime.utcnow()` when wiki says use `datetime.now(timezone.utc)`).
+- Writer skips a wiki-required discipline (e.g. wiki says "verify path
+  exists before writing" but the code writes without checking).
+- Writer's design contradicts a wiki convention (e.g. wiki says "rate-limit
+  middleware uses Redis SETEX" but the code uses in-memory dict).
+
+Severity: wiki violation = `RETURN_TO_<writer>`, same as spec violation or
+test-tamper. Cite the specific wiki rule (`wiki/runtime.md#python-312-datetime`)
+and the offending writer location (file:line or plan §) in your `issues:`
+list.
+
+If the writer explicitly opted out of a rule in their summary line ("rule
+X doesn't apply because Y"), judge whether the opt-out reason is sound. If
+the reason is wrong, RETURN with that as the issue. If the reason is sound,
+the opt-out is acceptable — the goal is engineering rigor, not bureaucratic
+compliance.
+
+This injection applies to all three impl checkpoints (`pre-test` /
+`pre-code` / `pre-close`). At pre-close you ALSO surface promotion
+candidates — see `## Verdict format` `wiki-candidates:` field below.
 
 ## Modes
 
@@ -167,6 +208,65 @@ Checks:
    - **Run-once policy holds.** Do not iterate, debug, or retry the run. One run; one verdict. The "do NOT iterate" rule from `## What you do NOT do` is preserved — what changes in v0.9.0 is that the run happens at all (previously implicit, now explicit and required).
    - Budget: this run counts as ONE Bash invocation against your overall budget; the orchestrator reserves headroom.
 
+### Mode `wiki-lint` (v0.9.8 R19 — invoked by `/super-manus:wiki-lint` standalone or as end-of-update drift-gate Pass 4)
+
+Goal: surface wiki rot (contradictions, stale references, orphans, gaps, broken cross-refs) without blocking. Non-blocking by design — your output is a candidate report for the user to act on, not a gate.
+
+Spawning prompt differs from impl modes: no `phase_number` / `phase_name` / `phase_plan_path`; instead the orchestrator passes `wiki_dir` (always `docs/super-manus/wiki/`) and `findings_root` (`docs/super-manus/impl/*/*/findings.md` glob root). All other inputs are absent or unused.
+
+Read priority:
+
+```
+[primary]   wiki/<topic>.md (every topic file, excluding _index.md / _log.md)
+[primary]   wiki/_log.md                                — promote/promote-rejected history
+[primary]   docs/super-manus/impl/*/*/findings.md       — every update's reflections (gap detection)
+[secondary] git log on referenced file paths / function names — staleness detection
+[context]   wiki/_index.md                              — sanity check that catalog matches topic files
+```
+
+Five lint checks:
+
+1. **Contradiction** — rule A and rule B make incompatible claims about the same surface (e.g. `runtime.md` says "use `datetime.now(timezone.utc)`" but `legacy.md` says "use `datetime.utcnow`"). Detect via shared keyword + opposite verb heuristic.
+2. **Stale** — rule's body references a file path, function name, or package that `grep -r` can no longer find in current source (renamed, removed, or never landed). Mark each stale reference with the wiki rule and the missing symbol.
+3. **Orphan** — rule was promoted more than 6 months ago (per `wiki/_log.md` entry date) AND has never been cited by any later `findings.md ## Reflections` (no test, no incident report mentions it). Possibly never useful; candidate for retirement.
+4. **Gap** — a recurring misstep appears in ≥3 different updates' `findings.md ## Reflections` (same heading tokens, ≥3 distinct update_dirs) but no wiki rule addresses it. Candidate for next-promote.
+5. **Cross-ref miss** — rule body mentions `[[other-rule-name]]` or `wiki/<other>.md#<anchor>` that doesn't resolve to an existing rule.
+
+Output: write findings to `wiki/_log.md` as ONE new entry:
+
+```markdown
+## [YYYY-MM-DD] lint | <invocation source: standalone OR end-of-update drift-gate Pass 4>
+
+- Contradictions: <count>
+  - <rule A> vs <rule B>: <one-sentence summary>
+- Stale: <count>
+  - <wiki/<topic>.md#<anchor>>: <missing symbol> (referenced at <wiki line ref>)
+- Orphan: <count>
+  - <wiki/<topic>.md#<anchor>>: promoted <date>, never cited
+- Gap: <count>
+  - "<recurring misstep keyword>" appears in <update_dir_1>, <update_dir_2>, ... — candidate promote to wiki/<suggested-topic>.md
+- Cross-ref miss: <count>
+  - <wiki/<topic>.md#<anchor>>: broken link "<text>" → nothing matches
+```
+
+Then return ONE summary verdict:
+
+```
+VERDICT: WIKI_LINT_COMPLETE
+contradictions: <count>
+stale: <count>
+orphan: <count>
+gap: <count>
+cross_ref_miss: <count>
+output: wiki/_log.md (new entry appended)
+```
+
+Non-blocking: the orchestrator surfaces the counts to the user but does NOT fail-close the drift gate on lint findings. The user reads `wiki/_log.md` to decide which to act on (manual rule edits, retire-via-edit for orphans, or trigger a follow-up wiki-promote for gaps).
+
+Wiki-lint mode is the ONLY mode where you write to a file (`wiki/_log.md`); impl modes remain pure read-only. The write is bounded — append exactly one `## [date] lint | ...` H2 entry, no other edits.
+
+Budget for wiki-lint mode: ≤30 grep/Read calls (covers all topic files + all findings + git log probes), ≤10 LSP calls (optional, for staleness detection), 1 Write (the `_log.md` append).
+
 ## Budget
 
 ```
@@ -191,9 +291,34 @@ mode: <pre-test | pre-code | pre-close>
 phase: p<n>
 summary: <one sentence — why this passes review>
 notes: <optional, multi-line — non-blocking observations the next agent might find useful>
+wiki-candidates:                                       # v0.9.8 R17 — pre-close only, optional
+  - topic: <topic file basename, lowercase, hyphen-separated>
+    proposed-rule-heading: "<H2 heading for the new rule>"
+    proposed-rule-body: |
+      <1-3 paragraph rule body, engineering voice, can include code blocks>
+    source: "<phase pX Reflection bullet N>"
 ```
 
 Only return APPROVE if every check in your mode's list passes. APPROVE is earned, not given.
+
+#### `wiki-candidates:` field (v0.9.8 R17 — pre-close only)
+
+At the **pre-close** checkpoint you are already reading `findings.md ## Reflections` (the orchestrator wrote them right before spawning you). If you spot a reflection that's generalizable beyond this phase — a project-wide engineering rule worth lifting into `wiki/<topic>.md` — surface it via this block.
+
+Discipline:
+
+- **Only at `pre-close`.** Other checkpoints skip this field entirely (findings reflections don't exist yet at pre-test, and pre-code happens before code-writer triggers the synthesizing reflection).
+- **Generalizable means cross-phase / cross-module / cross-update.** A reflection like "p3 forgot to import the redis client in this specific test fixture" is phase-local — do NOT flag. A reflection like "Python 3.12 deprecated `datetime.utcnow`; use `datetime.now(timezone.utc)`" applies to every future phase touching datetime — flag this.
+- **Direct judgment, no retries heuristic.** super-manus deliberately chose reviewer-only flag over `retries ≥ N` auto-promote (RFC v0.9.8 R17). Your judgment of "does this generalize?" is the only signal.
+- **One topic per candidate; lowercase hyphen-separated filename.** `runtime` (→ wiki/runtime.md), `paths`, `numbers`, `testing`, `git`, etc. Coarse-grained — start with broad topics, the user can split later if a topic file grows.
+- **Rule body in engineering voice.** Code identifiers, file paths, code blocks allowed (unlike PRD voice). 1-3 short paragraphs.
+- **Source pointer is mandatory.** Cite the exact phase + Reflection bullet the candidate came from (e.g. `"p4 Reflection bullet 2"`).
+
+The orchestrator runs `AskUserQuestion` per candidate (accept / reject / edit-wording). Accept appends the rule to `wiki/<topic>.md`, regenerates `wiki/_index.md`, and adds a `promote` entry to `wiki/_log.md`. Reject adds a `promote-rejected` entry. Either way, NO source-side annotation lands on findings.md — `wiki/_log.md` is the sole provenance record.
+
+If you flag a candidate and the user later rejects it, you may flag the SAME pattern again on a future phase if a NEW reflection surfaces it (the rule may have genuinely become more compelling). Or pre-check `wiki/_log.md` for prior `promote-rejected` lines naming the same rule and skip — your call based on review budget.
+
+Absence of `wiki-candidates:` block = "no candidates this phase" (the common case).
 
 ### RETURN_TO_<writer>
 

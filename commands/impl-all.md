@@ -115,17 +115,20 @@ The loop stops in one of six ways:
 
 In cases 2–6, the loop stops at the current phase. The user resolves and re-runs `/super-manus:impl` (one more phase) or `/super-manus:impl-all` (continue the loop) — both are safe.
 
-## End-of-update drift gate (BLOCKING — 3-pass)
+## End-of-update drift gate (BLOCKING for Pass 1-3; NON-BLOCKING for Pass 4 — v0.9.8 R19)
 
-When all phases are `closed`, run the same 3-pass gate as `/super-manus:impl`:
+When all phases are `closed`, run the same 4-pass gate as `/super-manus:impl`:
 
 - **Pass 1** — refresh drift from this update's commits vs PRD `## What users get` / `## Quality bar` / `## Out of scope` (rows go to `## PRD drift`); ALSO check `<module>.spec.md` exists for every module touched (missing → row to `## Spec drift`, v0.9.5 R7 + R10).
 - **Pass 2** — e2e coverage check: every touched `## What users get` capability has `e2e/<module>/test_<capability>.{ext}` that exists AND passes; every completed `## Demo` scenario has `e2e/_system/test_<scenario>.{ext}` that exists AND passes. Missing or red → `pending` row in `## PRD drift`.
-- **Pass 3** — pending == 0 check on `drift_log.md` rows for this module across BOTH H2 sections (`## PRD drift` AND `## Spec drift`). If total pending > 0 → BLOCKED, print rows grouped by section, do NOT flip to stable, STOP. If total pending == 0 → flip `iterating` → `stable` in `roadmap.md`. Update done.
+- **Pass 3** — pending == 0 check on `drift_log.md` rows for this module across BOTH H2 sections (`## PRD drift` AND `## Spec drift`). If total pending > 0 → BLOCKED, print rows grouped by section, do NOT flip to stable, STOP. If total pending == 0 → continue to Pass 4 (Pass 3 is the LAST blocking check; the next step is advisory).
+- **Pass 4** (v0.9.8 R19, NON-BLOCKING) — `/super-manus:wiki-lint` wiki health pass. Spawn `impl-reviewer` with `mode=wiki-lint` and let it run the five checks (contradiction / stale / orphan / gap / cross-ref miss) against `docs/super-manus/wiki/` + every `docs/super-manus/impl/*/*/findings.md`. The reviewer writes findings to `wiki/_log.md` as one `## [<today>] lint | end-of-update drift gate` entry and returns a `WIKI_LINT_COMPLETE` verdict with counts. This pass does **NOT fail-close the gate** even if it finds contradictions or stale rules — it's advisory only. Surface the counts in the final user-facing summary so the user can decide whether to act (manual edits / wiki-promote / wiki-archive). Skip Pass 4 if `docs/super-manus/wiki/` is absent (pre-v0.9.8 project).
 
-The gate is BLOCKING and HARD. There is no soft-pass. Resolution paths: `/super-manus:prd-update` (PRD-drift rows), `/super-manus:spec-update` (spec-drift rows including content edits) or `/super-manus:reverse-prd-spec <module> spec` (missing spec.md row), manual `reverted` edit + `findings.md ## Decisions` entry, or write missing e2e + re-run.
+After Pass 3 succeeds AND Pass 4 completes (regardless of Pass 4 counts), flip the module's row in `docs/super-manus/roadmap.md` from `iterating` to `stable` — the same roadmap update `/super-manus:impl` performs. Pass 4's counts are reported alongside but never block the roadmap flip.
 
-The full gate spec lives in [/super-manus:impl](impl.md) under "End-of-update drift gate (BLOCKING — 3-pass in v0.5)" — this command runs the same gate verbatim. Do NOT inline the full spec here.
+Pass 1-3 are BLOCKING and HARD. Pass 4 is NON-BLOCKING — wiki rot is a long-term failure mode the user should see but not be auto-blocked by during a milestone close. Resolution paths for Pass 1-3: `/super-manus:prd-update` (PRD-drift rows), `/super-manus:spec-update` (spec-drift rows including content edits) or `/super-manus:reverse-prd-spec <module> spec` (missing spec.md row), manual `reverted` edit + `findings.md ## Decisions` entry, or write missing e2e + re-run. Resolution path for Pass 4: read `wiki/_log.md` for the lint entry, then manually act on any findings (or run `/super-manus:wiki-lint` again later for the same scan as a standalone command).
+
+The full gate spec lives in [/super-manus:impl](impl.md) under "End-of-update drift gate" — this command runs the same gate verbatim. Do NOT inline the full spec here.
 
 ## Tell the user
 

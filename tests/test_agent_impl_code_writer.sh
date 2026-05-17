@@ -89,4 +89,28 @@ grep -qiE "spec.md.*back-channel|back-channel.*spec|long-lived target|target sta
 grep -qF "/super-manus:spec-update" "$F" \
   || { echo "FAIL: v0.9.5 R7 must redirect spec changes to /super-manus:spec-update (not in-phase edits)"; exit 1; }
 
+# === v0.9.8 R18: wiki injection (honor framing) ==========================
+# Code-writer spawn includes a <wiki> fact block; source code must honor
+# every applicable wiki rule (language-runtime quirks, path discipline,
+# API selection rules, etc.).
+
+# wiki input documented
+grep -qF "wiki" "$F" || { echo "FAIL: v0.9.8 R18 must document the wiki input"; exit 1; }
+grep -qF "sm_load_wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must reference sm_load_wiki helper"; exit 1; }
+
+# Non-negotiable framing
+grep -qiE "non-negotiable.*wiki|wiki.*non-negotiable|engineering law" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare wiki rules as non-negotiable engineering law"; exit 1; }
+
+# ## Wiki injection section heading exists
+grep -qiE "^## Wiki injection" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare a '## Wiki injection' section"; exit 1; }
+
+# Honor protocol: explicit opt-out (no silent ignore) + reviewer enforces via RETURN
+grep -qiE "silent ignore.*wiki|doesn.t apply.*wiki|honored wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must require explicit opt-out when a wiki rule doesn't apply (no silent ignore)"; exit 1; }
+grep -qiE "RETURN_TO_CODE_WRITER|wiki violation.*RETURN|RETURN.*wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must call out that wiki violation triggers RETURN_TO_CODE_WRITER from reviewer"; exit 1; }
+
 echo OK

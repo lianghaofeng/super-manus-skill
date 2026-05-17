@@ -105,33 +105,63 @@ grep -qiF "phase tests" "$F" || { echo "FAIL: return summary must mention 'phase
 grep -qiF "e2e" "$F" || { echo "FAIL: return summary must mention e2e"; exit 1; }
 grep -qiE "red|currently red|failing" "$F" || { echo "FAIL: return summary must mention 'red' (or failing) state"; exit 1; }
 
-# === v0.9.6 R12: cross-update reflections injection for test-writer =========
-# v0.9.4 R6 introduced prior_reflections injection for architect only.
-# v0.9.6 R12 extends the same mechanism to test-writer — same data source
-# (sm_collect_reflections), different reading lens (test-relevant Heuristics).
-# Test-writer's recurring failure modes (vacuous tests, inline-dict fixtures,
-# mirror-test reflex, missed e2e) are exactly the patterns Reflexion catches.
+# === v0.9.8 R17 + R18: update_reflections (same-update) + wiki injection ===
+# v0.9.4 R6 introduced cross-update prior_reflections for architect.
+# v0.9.6 R12 extended it to test-writer.
+# v0.9.8 R17 simplified BOTH to same-update only (no cross-update glob, no
+# keyword filter, no K=5 cap). Cross-update memory now flows through wiki.
+# v0.9.8 R18 adds a separate <wiki> fact block for project-global rules.
 
-# Input documented
-grep -qF "prior_reflections" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must document prior_reflections input"; exit 1; }
+# Input documented (renamed from prior_reflections)
+grep -qF "update_reflections" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must document update_reflections input (renamed from prior_reflections)"; exit 1; }
 # Heuristic line is load-bearing
 grep -qF "Heuristic" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must reference Heuristic line as the load-bearing element"; exit 1; }
-# Cross-update nature
-grep -qiE "cross-update|every.*findings|other update|across update" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must describe prior_reflections as cross-update (not just same-update)"; exit 1; }
+  || { echo "FAIL: must reference Heuristic line as the load-bearing element of update_reflections"; exit 1; }
+# Same-update scope (v0.9.8 R17 simplification)
+grep -qiE "same.update|current update.*findings|no cross.update glob" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must describe update_reflections as same-update only"; exit 1; }
+# Reference the new loader function
+grep -qF "sm_load_update_reflections" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must reference sm_load_update_reflections (the new loader)"; exit 1; }
 # Test-writer-specific reading lens — at least one of the four pattern categories
 grep -qiE "fixture realness|real-data fixture|inline.dict|mirror.test|edge case coverage|e2e completion" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must enumerate test-relevant Heuristic categories (fixture realness / mirror-test / edge case / e2e completion)"; exit 1; }
-# Procedure section exists
-grep -qiE "^## Honor prior_reflections|## Honor.*prior_reflections" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must declare a '## Honor prior_reflections' procedure section"; exit 1; }
-# Provenance handling — same-update vs cross-update applicability
-grep -qiE "provenance|same-update|<update-slug>|may need translation" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must teach the test-writer to read update-slug provenance"; exit 1; }
+  || { echo "FAIL: must enumerate test-relevant Heuristic categories (fixture realness / mirror-test / edge case / e2e completion)"; exit 1; }
+# Procedure section exists (renamed)
+grep -qiE "^## Honor update_reflections|## Honor.*update_reflections" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must declare a '## Honor update_reflections' procedure section (renamed from '## Honor prior_reflections')"; exit 1; }
 # Disregard-explicitly clause (silent ignore is the failure mode)
 grep -qiE "explicit.*justify|silent ignore|disregard.*explicit|honored Heuristic.*doesn.t apply" "$F" \
-  || { echo "FAIL: v0.9.6 R12 must require explicit justification when a Heuristic doesn't apply (no silent ignore)"; exit 1; }
+  || { echo "FAIL: must require explicit justification when a Heuristic doesn't apply (no silent ignore)"; exit 1; }
+# Wiki cross-reference — test-writer must know cross-update wisdom lives in wiki now
+grep -qiE "wiki.{0,40}cross.update|cross.update.{0,40}wiki|exclusively through the wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must explain wiki is the new cross-update memory channel"; exit 1; }
+
+# Negative regressions: legacy names must be gone from the Inputs list
+grep -qE "^\s*-\s*\`?prior_reflections\`?\s+\(" "$F" \
+  && { echo "FAIL: v0.9.8 R17 must remove the legacy 'prior_reflections' input declaration (renamed to update_reflections)"; exit 1; } || true
+grep -qF "sm_collect_reflections" "$F" \
+  && { echo "FAIL: v0.9.8 R17 must remove sm_collect_reflections references (renamed to sm_load_update_reflections)"; exit 1; } || true
+
+# === v0.9.8 R18: wiki injection ==========================================
+# Test-writer spawn includes a <wiki> fact block; test code must honor every
+# applicable wiki rule (language-runtime quirks, fixture discipline, etc.).
+
+# wiki input documented
+grep -qF "wiki" "$F" || { echo "FAIL: v0.9.8 R18 must document the wiki input"; exit 1; }
+grep -qF "sm_load_wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must reference sm_load_wiki helper"; exit 1; }
+
+# Non-negotiable framing
+grep -qiE "non-negotiable.*wiki|wiki.*non-negotiable|engineering law" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare wiki rules as non-negotiable engineering law"; exit 1; }
+
+# ## Wiki injection section heading exists
+grep -qiE "^## Wiki injection" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare a '## Wiki injection' section"; exit 1; }
+
+# Honor protocol: explicit opt-out (no silent ignore)
+grep -qiE "silent ignore.*wiki|doesn.t apply.*wiki|honored wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must require explicit opt-out when a wiki rule doesn't apply (no silent ignore)"; exit 1; }
 
 echo OK

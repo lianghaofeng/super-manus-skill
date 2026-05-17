@@ -9,7 +9,11 @@ set -euo pipefail
 #     │   └── _index.md          (seeded from templates/prd_index.md)
 #     ├── impl/                  (empty; populated by /super-manus:brainstorm + /super-manus:sync)
 #     ├── roadmap.md             (seeded from templates/roadmap.md)
-#     └── drift_log.md           (seeded from templates/drift_log.md; v0.9.5 R10 — renamed from prd_drift.md, two H2 sections: ## PRD drift / ## Spec drift)
+#     ├── drift_log.md           (seeded from templates/drift_log.md; v0.9.5 R10 — renamed from prd_drift.md, two H2 sections: ## PRD drift / ## Spec drift)
+#     └── wiki/                  (v0.9.8 R16 — project-global engineering rules; cross-update memory channel)
+#         ├── _index.md          (LLM-maintained catalog; seeded from templates/wiki_index.md)
+#         └── _log.md            (append-only event log; seeded from templates/wiki_log.md)
+#                                (topic files wiki/<topic>.md are NOT seeded — first promote creates them on demand)
 #
 # Per-module PRD files (prd/<module>.md) and per-module engineering reference
 # files (prd/<module>.spec.md, v0.9.5 R7 — sibling to PRD), plus the four-file
@@ -137,6 +141,21 @@ open(target_path, "w").write("\n".join(out) + "\n")
 PY
   mv "$legacy" "$base/prd_drift.md.legacy-pre-v0.9.5"
 fi
+
+# v0.9.8 R16 wiki skeleton — runs on both fresh and idempotent paths so
+# projects upgrading to v0.9.8 get the layer without waiting for the first
+# phase-close promote. Topic files (wiki/<topic>.md) are NOT seeded; they're
+# created on demand by the /super-manus:impl phase-close promote gate when
+# the user accepts a reviewer-flagged wiki candidate. Only _index.md and
+# _log.md skeletons are seeded.
+mkdir -p "$base/wiki"
+for f in _index.md _log.md; do
+  if [ ! -f "$base/wiki/$f" ]; then
+    src="$ROOT/templates/wiki${f%.md}.md"
+    [ -f "$src" ] || { echo "sm-start: wiki template missing: $src" >&2; exit 1; }
+    cp "$src" "$base/wiki/$f"
+  fi
+done
 
 # Idempotent short-circuit: already enabled. Still seed any missing per-module
 # <module>.spec.md siblings (v0.9.5 R7 — required-mode requirement). On a re-run

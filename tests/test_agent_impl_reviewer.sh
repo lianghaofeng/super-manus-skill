@@ -175,4 +175,86 @@ awk '/^### Mode `pre-close`/,/^## Budget/' "$F" | grep -qiE "Run .{0,30}ONCE|one
 grep -qiE "phase.test.{0,10}runs|e2e.test runs|phase.test / e2e" "$F" \
   || { echo "FAIL: v0.9.0 budget table must list the per-phase-test / per-e2e run allowance"; exit 1; }
 
+# === v0.9.8 R18: wiki injection (enforce framing — distinct from writers) ====
+# Reviewer at all three impl checkpoints receives <wiki> in spawn prompt and
+# enforces it against writer output. Wiki violation = RETURN_TO_<writer>.
+
+# wiki input documented
+grep -qF "wiki" "$F" || { echo "FAIL: v0.9.8 R18 must document the wiki input"; exit 1; }
+grep -qF "sm_load_wiki" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must reference sm_load_wiki helper"; exit 1; }
+
+# ## Wiki injection section heading exists with enforce framing (distinct from
+# the writers' honor framing — reviewer is the enforcement gate)
+grep -qiE "^## Wiki injection.*enforce|^## Wiki injection \(enforce" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare a '## Wiki injection (enforce framing)' section, distinct from writers' honor framing"; exit 1; }
+
+# Enforce semantics: wiki violation → RETURN_TO_<writer>
+grep -qiE "wiki violation.{0,30}RETURN|RETURN.{0,40}wiki|violation.{0,40}RETURN_TO_" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must declare that wiki violation by any writer triggers RETURN_TO_<writer>"; exit 1; }
+
+# Severity equivalence with spec violation / test-tamper
+grep -qiE "same.severity.{0,20}spec|same.{0,5}as.{0,10}spec|spec violation.*test.tamper|test.tamper.*spec violation" "$F" \
+  || { echo "FAIL: v0.9.8 R18 must equate wiki violation severity with spec violation / test-tamper"; exit 1; }
+
+# === v0.9.8 R17: wiki-candidates verdict field (pre-close only) ============
+# Reviewer at pre-close optionally surfaces wiki-candidate rules from the
+# current phase's findings reflections. Orchestrator then runs the promote
+# gate via AskUserQuestion.
+
+# wiki-candidates field documented in verdict format
+grep -qF "wiki-candidates:" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must document the wiki-candidates: verdict field in APPROVE format"; exit 1; }
+
+# Pre-close only restriction
+grep -qiE "pre-close only|only at .{0,5}pre-close|wiki-candidates.{0,40}pre-close" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must restrict wiki-candidates: emission to pre-close checkpoint only"; exit 1; }
+
+# Generalizable criterion (the judgment call reviewer makes)
+grep -qiE "generalizable|cross.module|cross.phase.{0,5}cross.module" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must require reviewer to flag only generalizable lessons (not phase-local)"; exit 1; }
+
+# Required fields per candidate: topic + heading + body + source
+grep -qF "proposed-rule-heading" "$F" \
+  || { echo "FAIL: v0.9.8 R17 wiki-candidate schema must include proposed-rule-heading field"; exit 1; }
+grep -qF "proposed-rule-body" "$F" \
+  || { echo "FAIL: v0.9.8 R17 wiki-candidate schema must include proposed-rule-body field"; exit 1; }
+grep -qF "source:" "$F" \
+  || { echo "FAIL: v0.9.8 R17 wiki-candidate schema must include source: pointer back to findings"; exit 1; }
+
+# Reviewer-only funnel (rejected retries heuristic from RFC)
+grep -qiE "reviewer.only|direct judgment|no retries heuristic" "$F" \
+  || { echo "FAIL: v0.9.8 R17 must call out reviewer-only flagging (no retries ≥ N auto-promote)"; exit 1; }
+
+# === v0.9.8 R19: wiki-lint mode ============================================
+# /super-manus:wiki-lint command spawns this same agent with mode=wiki-lint.
+# Scans wiki/ + findings/ for contradictions / stale / orphan / gap / cross-ref miss.
+# Output: appends one entry to wiki/_log.md. Non-blocking.
+
+# wiki-lint mode listed alongside the three impl modes
+grep -qiE "pre-close.*wiki-lint|wiki-lint.*pre-close|mode.{0,20}wiki-lint" "$F" \
+  || { echo "FAIL: v0.9.8 R19 must list 'wiki-lint' as a valid mode alongside pre-test / pre-code / pre-close"; exit 1; }
+
+# Wiki-lint mode section heading exists
+grep -qiE "^### Mode .wiki-lint" "$F" \
+  || { echo "FAIL: v0.9.8 R19 must declare a '### Mode `wiki-lint`' section"; exit 1; }
+
+# Five lint checks enumerated
+for check in "Contradiction" "Stale" "Orphan" "Gap" "Cross-ref miss"; do
+  grep -qiE "$check" "$F" \
+    || { echo "FAIL: v0.9.8 R19 wiki-lint mode must document the '$check' check"; exit 1; }
+done
+
+# Output sink is wiki/_log.md (append-only one entry)
+grep -qF "wiki/_log.md" "$F" \
+  || { echo "FAIL: v0.9.8 R19 wiki-lint must declare wiki/_log.md as the output sink"; exit 1; }
+
+# Non-blocking nature called out
+grep -qiE "non.blocking|does NOT fail.close|advisory" "$F" \
+  || { echo "FAIL: v0.9.8 R19 wiki-lint must be declared non-blocking (does NOT fail-close the drift gate)"; exit 1; }
+
+# Verdict format for wiki-lint mode (distinct from APPROVE/RETURN/ESCALATE)
+grep -qF "WIKI_LINT_COMPLETE" "$F" \
+  || { echo "FAIL: v0.9.8 R19 wiki-lint must return a WIKI_LINT_COMPLETE verdict (distinct from impl-mode verdicts)"; exit 1; }
+
 echo OK
