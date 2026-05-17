@@ -2,6 +2,24 @@
 
 > 🌐 **语言**: [English](README.md) · **简体中文**
 
+> **v0.9.8 发布说明 —— 工程 wiki 层**（v0.9.7 的纯加层；一个 helper 重命名；drift gate 加第 4 道非阻塞 pass）：
+>
+> 这一版的动机是**给跨模块的工程经验找一个真正的家**。v0.9.4 R6 已经通过 `sm_collect_reflections` 做了跨 update 的反思记忆，但 scope 锁在单模块——模块 A 学到的教训（比如 "Python 3.12 弃用了 `datetime.utcnow`"）传不到模块 B 下个 phase 的架构师手里。Dogfooding 时发现 orchestrator 手动从兄弟模块捞 findings 注入当作 workaround。v0.9.8 把这条通道做成一等公民：项目级 `wiki/` 层 + reviewer flag ingest + 4 spawn point 注入 + on-demand lint。
+>
+> - **新增** `docs/super-manus/wiki/` 目录（项目级，与 `prd/` 同级）。LLM 维护的 `_index.md` 目录 + append-only `_log.md` 事件账本 + 按需创建的 `<topic>.md` 主题文件（首次 promote 时创建，**不种**——每个项目自己积累）。`/super-manus:start` 种空骨架（幂等——已有项目重跑也能补上）。
+> - **新增** reviewer `wiki-candidates:` verdict 字段（仅 pre-close）+ orchestrator promote gate（每个候选过一次 `AskUserQuestion`；accept 时 append 到 `wiki/<topic>.md` + 重生成 `_index.md` + 写 `_log.md` 一条 `promote`）。**reviewer-only funnel + 用户 gate** 是设计选择——自动 promote 被显式否定（wiki bloat 是长期失败模式）。
+> - **新增** wiki 注入到 4 个 spawn 点（architect Pass 2 / test-writer / code-writer / reviewer × 3 个 checkpoint）。Writer 们 honor wiki rule；reviewer enforce（任何 writer 违反 wiki = `RETURN_TO_<writer>`，与 spec 违反同等级）。每个 phase 只 `sm_load_wiki` 一次绑定为 `$WIKI_BLOCK`，下面所有 spawn 复用同一份内容。
+> - **新增** `/super-manus:wiki-lint` 命令 + drift gate **Pass 4**（`impl-reviewer` 走新模式 `mode=wiki-lint`）。五项扫描：contradiction / stale / orphan / gap / cross-ref miss。每次扫描在 `wiki/_log.md` 写一条 `## [date] lint | ...`。**非阻塞**——把 wiki 健康情况告知用户但不挡里程碑收尾。
+> - **简化** 跨 phase 反思的传递机制。`sm_collect_reflections`（v0.9.4 R6）退役，换成简单的 `sm_load_update_reflections` —— **仅当前 update**，无跨 update glob、无 keyword 过滤、无 K=5 截断。Spawn prompt 里的 `<prior_reflections>` 块改名 `<update_reflections>`。**跨 update 记忆现在只走 wiki**；不够通用进不了 wiki 的模块本地经验在 update 边界自然淡化（同问题踩 2-3 次后自我矫正）。Per-phase token 预算副作用是稍稍降低。
+>
+> **这版没解决什么**（诚实标出天花板）：
+> - **不种 starter wiki rule** —— 项目从空 `wiki/` 起步。第一次 promote 才创 topic 文件，不附带 opinionated 的 runtime / paths / testing 脚手架。（拒因：装作知道每个项目都需要哪些规则。）
+> - **基于 `retries ≥ N` 启发式的自动 promote** —— 显式否定。reviewer-flag-only 是唯一 ingest 路径。代价不对称：bloat 是失败模式，false-negative 下次 phase 还能补救。
+> - **reviewer 再次 flag 用户已 reject 的同条候选** —— orchestrator **不**预查 `wiki/_log.md` 历史的 `promote-rejected` 行就再问一遍用户。延后处理——先不加预查，等 dogfooding 真的暴露疲劳再加。
+> - **`/super-manus:wiki-promote` 手动命令** —— 没有"不等 phase 失败直接 promote 这条规则"的命令。延后到 v0.9.9——经 phase findings + reviewer flag 的自然路径已覆盖常见场景。临时需求可以手编 `wiki/<topic>.md`。
+>
+> 完整设计见 `docs/design-v0.9.8.md`。
+
 > **v0.9.7 发布说明 —— 多人协作基线**（v0.9.6 的纯加层，一次 schema 迁移自动处理）：
 >
 > 这一版的动机是**让 2-10 人小团队顺畅协作**：现状是个人 / 双人项目跑得很顺，但只要第二个开发开始往同一仓库提 PR，`drift_log.md` 和 `roadmap.md` 末尾就会反复撞行；跨模块改动也没有自动指派 reviewer 的机制。v0.9.7 用最小代价（git 原生 `merge=union` + 一份 CODEOWNERS 模板 + drift_log 增列）把这些摩擦点抹掉，让 3-10 人团队能舒服共用一个 super-manus 项目。
@@ -83,7 +101,7 @@ flowchart TD
 
 | 命令 | 什么时候跑 | 做什么 |
 |---|---|---|
-| `/super-manus:start` | 项目开头一次 | 建 `docs/super-manus/prd/`、`impl/`、`roadmap.md`、`drift_log.md`（v0.9.5 R10 从 `prd_drift.md` 重命名；`e2e/` 由 `impl-test-writer` 第一次写 e2e 时懒创建）。在 pre-v0.9.5 老项目上重跑会自动迁移 legacy `prd_drift.md` + 补齐缺失的 `<module>.spec.md` 同级文件。 |
+| `/super-manus:start` | 项目开头一次 | 建 `docs/super-manus/prd/`、`impl/`、`roadmap.md`、`drift_log.md`（v0.9.5 R10 从 `prd_drift.md` 重命名）、`wiki/_index.md` + `wiki/_log.md`（v0.9.8 R16——topic 文件首次 promote 时按需创建；`e2e/` 由 `impl-test-writer` 第一次写 e2e 时懒创建）。在 pre-v0.9.5 / pre-v0.9.8 老项目上重跑会自动：迁移 legacy `prd_drift.md`、补齐缺失的 `<module>.spec.md` 同级文件、补齐缺失的 `wiki/` 骨架——幂等。 |
 | `/super-manus:brainstorm` | 新项目 | 6 题 PM 访谈 → 写 `prd/_index.md` + 各模块 `prd/<module>.md` 雏形（v0.9.5 R7：以及对应的空白 `prd/<module>.spec.md` 工程参考雏形）。 |
 | `/super-manus:reverse-prd-spec` | 现有项目还没 PRD/spec | 读代码（runtime-first 模块发现），写 `prd/_index.md`（含 Mermaid 架构图）+ 各模块 PRD stub 和/或 `<module>.spec.md` 工程参考。Scope 交互选（`both | prd | spec`）。v0.9.5 R9 从 `/super-manus:reverse-prd` 重命名；agent 重命名为 `reverse-architect`。 |
 | `/super-manus:prd-update <module>` | 加新能力 / 解决 PRD drift | 对单份 `prd/<module>.md` 做 5 选 1 结构化编辑：**add / tighten / split / demote / exclude**。模式（前向迭代 vs drift 吸收）从 `drift_log.md ## PRD drift` 自动判定。 |
@@ -94,6 +112,7 @@ flowchart TD
 | `/super-manus:drive` | "下一步干啥？" | 读全状态，从 brainstorm / sync / prd-update / impl 中选一个，公布决定 + 理由，执行。 |
 | `/super-manus:catchup` | 新 session | 把 PRD 总览 + 当前 update 的 task_plan 重新注入上下文。 |
 | `/super-manus:log` | 手动 checkpoint | 立刻往当前 update 的 `progress.md` 追加一条 session log。 |
+| `/super-manus:wiki-lint` (v0.9.8 R19) | on-demand wiki 体检 | 把 `impl-reviewer` spawn 成 `mode=wiki-lint`，扫 `docs/super-manus/wiki/`，找 contradiction / stale / orphan / gap / 断链。在 `wiki/_log.md` 写一条 `## [date] lint | standalone`。**非阻塞**——只报告，不挡任何流程。同一份扫描也作为 end-of-update drift gate 的 Pass 4 自动跑；这条命令是给 off-milestone 用（月度维护 / 大改 PRD 后体检 / 发布前 audit）。 |
 
 ### `/super-manus:prd-update` 的 5 种编辑
 
@@ -334,7 +353,7 @@ super-manus 的核心铁律：**agent 永远不会静默更新 PRD 或 spec**。
 | `/super-manus:prd-update`（Tighten / Demote / Split） | 收紧/降级/拆分后的 bullet vs 现有代码（写之前的验证） |
 | `/super-manus:impl`（进入 phase 时） | phase 的 `## Objective` vs PRD `## What users get` / `## Quality bar` / `## Out of scope` |
 | `/super-manus:drive` | PRD + roadmap + 最近 commit 消息提示（轻量 pre-action sweep） |
-| End-of-update gate（3 pass） | Pass 1 refresh from commits / Pass 2 e2e 覆盖 / Pass 3 `pending` 必须为 0 |
+| End-of-update gate（4 pass —— v0.9.8 R19） | Pass 1 commits 刷漂移 + missing-spec / Pass 2 e2e 覆盖 / Pass 3 `pending` 必须为 0（阻塞）/ Pass 4 wiki-lint（**非阻塞**——把 wiki 健康度告知用户，永不挡里程碑收尾） |
 
 ### 检测机制
 
@@ -408,7 +427,7 @@ super-manus 不依赖任何别的 workflow 插件。执行层是内置的：
 
 README 围绕 **LLM Wiki + PRD 驱动开发** 框架重新定位。结构映射（代码 → `reverse-prd` → `prd/` + `findings.md` → `sync`/`impl` → close → 归档）在 v0.8.3 就已经完整——v0.8.4 把这个闭环显式化，加了 `## 它是什么` 一节配 Mermaid 循环图，hero 改成两个模式的融合定位。
 
-**评估并放弃**：单独加一个 `docs/super-manus/wiki/` 目录。LLM Wiki 的所有原语——pages（`prd/<module>.md`）、index（`roadmap.md`）、log（`progress.md ## Session log`）、append-only 知识（每个 update 的 `findings.md` 保留在 `impl/` 时间序列里）——已经被现有文件覆盖。新加目录会让同一份状态有两个真相，多源问题。详见 [docs/design-v0.8.4.md](docs/design-v0.8.4.md)。
+**v0.9.8 R16 翻案**：v0.8.4 评估并放弃过 `docs/super-manus/wiki/`，理由是现有文件（`prd/<module>.md`、`roadmap.md`、`progress.md`、`findings.md`）覆盖了 LLM Wiki 原语。v0.9.8 翻这个案——dogfooding 暴露真实缺口：**跨模块的工程经验没有家**。模块作用域的 `findings.md` 带不动 "Python 3.12 datetime API" 这类规则从一个模块的反思传到另一个模块下个 phase 的架构师。PRD/spec 回答"这个模块做什么"，wiki 回答"我们在这项目里怎么写代码"。两层互补（PRD/spec 单模块，wiki 项目全局），不是重复。详见 [docs/design-v0.9.8.md](docs/design-v0.9.8.md) 含影响新设计的 LLM Wiki 长文阅读笔记。
 
 零代码 / schema / agent / hook / 模板 / 测试改动。纯文档 + 定位。
 

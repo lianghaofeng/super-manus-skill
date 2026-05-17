@@ -2,6 +2,24 @@
 
 > 🌐 **Languages**: **English** · [简体中文](README.zh-CN.md)
 
+> **v0.9.8 release notes — engineering wiki layer** (additive on top of v0.9.7; one helper rename; one drift-gate pass added, non-blocking):
+>
+> The driver for this release is **giving cross-module engineering wisdom a real home**. v0.9.4 R6 already had cross-update reflection memory via `sm_collect_reflections`, but it was scoped to one module — a lesson learned in module A (e.g. "Python 3.12 deprecated `datetime.utcnow`") couldn't reach module B's architect on its next phase. Dogfooding showed orchestrators manually re-injecting reflections from sibling modules as a workaround. v0.9.8 makes the channel first-class: project-global `wiki/` layer, reviewer-flagged ingest, four-spawn injection, on-demand lint.
+>
+> - **NEW** `docs/super-manus/wiki/` directory (project-global, sibling to `prd/`). LLM-maintained `_index.md` catalog + append-only `_log.md` event ledger + on-demand `<topic>.md` topic files (created at first promote, NOT seeded — projects accumulate their own). Seeded by `/super-manus:start` (idempotent — re-running on an existing project picks up the skeleton).
+> - **NEW** reviewer `wiki-candidates:` verdict field (pre-close only) + orchestrator promote gate (`AskUserQuestion` per candidate; accept appends to `wiki/<topic>.md` + regenerates `_index.md` + records a `promote` line in `_log.md`). Reviewer-only funnel + user-gate ingest by design — auto-promote was deliberately rejected (wiki bloat is the long-term failure mode).
+> - **NEW** wiki injection at 4 spawn points (architect Pass 2 / test-writer / code-writer / reviewer × 3 checkpoints). Writers honor wiki rules; reviewer enforces (wiki violation by any writer = `RETURN_TO_<writer>`, same severity as a spec violation). Captured once per phase via `sm_load_wiki` and reused unchanged across every spawn.
+> - **NEW** `/super-manus:wiki-lint` command + drift-gate **Pass 4** (`impl-reviewer` in new `mode=wiki-lint`). Five checks: contradiction / stale / orphan / gap / cross-ref miss. Writes findings to `wiki/_log.md` as one `## [date] lint | ...` entry. **Non-blocking** — surfaces wiki health to the user without gating the milestone close.
+> - **SIMPLIFIED** cross-update reflection plumbing. `sm_collect_reflections` (v0.9.4 R6) retired; replaced by `sm_load_update_reflections` — same-update only, no cross-update glob, no keyword filter, no K=5 cap. The `<prior_reflections>` spawn-prompt block is renamed `<update_reflections>`. **Cross-update memory now flows exclusively through wiki**; module-local lore that doesn't graduate to wiki is allowed to fade at update boundaries (self-correcting on 2nd-3rd repetition). Token budget per phase shrinks slightly as a side effect.
+>
+> **What this release does NOT solve** (be honest about the ceiling):
+> - **Wiki seeding with starter rules** — projects start with empty `wiki/`. Topic files are created by the first promote; no opinionated runtime / paths / testing scaffolds are seeded. (Rejected: pretends to know what every project needs.)
+> - **Auto-promote based on `retries ≥ N` heuristic** — explicitly rejected. Reviewer-flag-only is the entire ingest path. Asymmetric cost: bloat is the failure mode, false-negative is recoverable on the next phase.
+> - **Reviewer re-flagging the same rejected candidate** — orchestrator does not pre-check `wiki/_log.md` for prior `promote-rejected` lines before re-asking the user. Deferred — try without first; add pre-check only if dogfooding shows fatigue.
+> - **Manual `/super-manus:wiki-promote` command** — there's no command for "promote this rule directly without waiting for a phase to fail". Deferred to v0.9.9 — natural ingest path through phase findings + reviewer flag covers the common case. Hand-editing `wiki/<topic>.md` directly works for off-flow needs.
+>
+> See `docs/design-v0.9.8.md` for the full design.
+
 > **v0.9.7 release notes — multi-author baseline** (additive on top of v0.9.6; one schema migration, auto-handled):
 >
 > The driver for this release is **making super-manus comfortable for 2-10 person teams**: solo / pair projects already work well, but as soon as a second developer starts opening PRs against the same repo, `drift_log.md` and `roadmap.md` collide at EOF on every parallel commit, and cross-module changes lack auto-routing to the right reviewers. v0.9.7 closes those gaps with the lightest possible moves (git-native `merge=union` + a CODEOWNERS template + one new drift_log column) so 3-10 person teams can share one super-manus project without the cumulative merge-friction tax.
@@ -83,7 +101,7 @@ The daily loop is small: write a PRD once, then iterate by editing PRD bullets a
 
 | Command | When to run | What it does |
 |---|---|---|
-| `/super-manus:start` | once per project | Seeds `docs/super-manus/prd/`, `impl/`, `roadmap.md`, `drift_log.md` (v0.9.5 R10 — renamed from `prd_drift.md`; `e2e/` is created lazily by `impl-test-writer` when the first capability ships). On re-run against an existing pre-v0.9.5 project, auto-migrates legacy `prd_drift.md` and seeds missing per-module `<module>.spec.md` siblings. |
+| `/super-manus:start` | once per project | Seeds `docs/super-manus/prd/`, `impl/`, `roadmap.md`, `drift_log.md` (v0.9.5 R10 — renamed from `prd_drift.md`), `wiki/_index.md` + `wiki/_log.md` (v0.9.8 R16 — topic files created on demand at first promote; `e2e/` is created lazily by `impl-test-writer` when the first capability ships). On re-run against an existing pre-v0.9.5 / pre-v0.9.8 project, auto-migrates legacy `prd_drift.md`, seeds missing per-module `<module>.spec.md` siblings, AND seeds the missing `wiki/` skeleton — idempotent. |
 | `/super-manus:brainstorm` | new project | 6-question PM interview → writes `prd/_index.md` + per-module `prd/<module>.md` stubs (and v0.9.5 R7: matching `prd/<module>.spec.md` siblings, blank engineering reference). |
 | `/super-manus:reverse-prd-spec` | existing project, no PRD/spec yet | Reads code (runtime-first module discovery), writes `prd/_index.md` (with Mermaid arch diagram) + module stubs AND/OR per-module `<module>.spec.md` engineering references. Pick scope interactively (`both | prd | spec`). Renamed from `/super-manus:reverse-prd` in v0.9.5 R9; agent renamed to `reverse-architect`. |
 | `/super-manus:prd-update <module>` | adding a capability OR resolving PRD drift | Structured 5-option edit on one `prd/<module>.md`: **add / tighten / split / demote / exclude**. Mode (forward iteration vs drift absorption) is auto-detected from `drift_log.md ## PRD drift`. |
@@ -94,6 +112,7 @@ The daily loop is small: write a PRD once, then iterate by editing PRD bullets a
 | `/super-manus:drive` | "what next?" | Reads everything, picks one of the above, announces decision + reason, executes. |
 | `/super-manus:catchup` | new session | Re-injects PRD overview + active update's task_plan into context. |
 | `/super-manus:log` | manual checkpoint | Append a session log entry to the active update's `progress.md` now. |
+| `/super-manus:wiki-lint` (v0.9.8 R19) | on-demand wiki health check | Spawns `impl-reviewer` in `mode=wiki-lint` to scan `docs/super-manus/wiki/` for contradictions / stale references / orphans / gaps / broken cross-refs. Writes one `## [date] lint | standalone` entry to `wiki/_log.md`. **Non-blocking** — surfaces health counts; never gates anything. Same scan also runs automatically as Pass 4 of the end-of-update drift gate; this command exists for off-milestone use (monthly maintenance, post-PRD-edit sanity check, pre-release audit). |
 
 ### `/super-manus:prd-update` — the five edit options
 
@@ -337,7 +356,7 @@ Not a daemon — it runs on six command paths (anchored in [skills/using-sm/SKIL
 | `/super-manus:prd-update` (Tighten / Demote / Split) | The narrowed/demoted/split bullet vs current code (verification before write) |
 | `/super-manus:impl` (phase entry) | The phase's `## Objective` vs PRD `## What users get` / `## Quality bar` / `## Out of scope` |
 | `/super-manus:drive` | PRD + roadmap + recent commit-message hints (lightweight pre-action sweep) |
-| End-of-update gate (3 passes) | Pass 1 refresh from commits / Pass 2 e2e coverage / Pass 3 `pending` count must be 0 |
+| End-of-update gate (4 passes — v0.9.8 R19) | Pass 1 refresh from commits + missing-spec / Pass 2 e2e coverage / Pass 3 `pending` count must be 0 (BLOCKING) / Pass 4 wiki-lint (NON-BLOCKING — surfaces health counts to user, never gates the milestone close) |
 
 ### How detection works
 
@@ -411,7 +430,7 @@ The plugin manifest at `.claude-plugin/plugin.json` is the canonical version sou
 
 README repositioned around the **LLM Wiki + PRD-driven development** framing. The structural mapping (codebase → `reverse-prd` → `prd/` + `findings.md` → `sync`/`impl` → close → archive) was already complete in v0.8.3 — v0.8.4 makes the loop explicit, adds a `## What it is` section with a Mermaid cycle diagram, and rewrites the hero around the two-pattern fusion.
 
-**Considered and rejected**: a separate `docs/super-manus/wiki/` directory. The LLM Wiki primitives — pages (`prd/<module>.md`), index (`roadmap.md`), log (`progress.md ## Session log`), append-only knowledge (per-update `findings.md` files preserved across the `impl/` time series) — are already covered by existing files. Adding a new directory would duplicate state and create multi-source-of-truth risk. See [docs/design-v0.8.4.md](docs/design-v0.8.4.md).
+**Reversed in v0.9.8 R16**: v0.8.4 considered and rejected a separate `docs/super-manus/wiki/` directory, arguing existing files (`prd/<module>.md`, `roadmap.md`, `progress.md`, `findings.md`) covered the LLM Wiki primitives. v0.9.8 reverses that decision after dogfooding showed a real gap: **cross-module engineering rules had no home**. Module-scoped `findings.md` cannot carry "Python 3.12 datetime API" rules from one module's lessons to another module's next architect. PRD/spec answer "what THIS module does"; wiki answers "how WE write code in this project". The two layers are complementary (PRD/spec is per-module, wiki is project-global), not duplicative. See [docs/design-v0.9.8.md](docs/design-v0.9.8.md) for the new design + the LLM Wiki essay reading that informed it.
 
 No code, schema, agent, hook, template, or test changes. Pure documentation + positioning.
 
